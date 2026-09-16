@@ -2,9 +2,8 @@ name: Daily Prediction
 
 on:
   workflow_dispatch:
-  # schedule will be enabled after production cutover
-  # schedule:
-  #   - cron: '0 21 * * *'
+  schedule:
+    - cron: '0 21 * * *'
 
 permissions:
   contents: read
