@@ -2,7 +2,7 @@ name: Control
 
 on:
   workflow_dispatch:
-  # Enable after the first manual production publish succeeds.
+  # schedule will be enabled after production cutover
   # schedule:
   #   - cron: '0 23,4,16,19 * * *'
 
@@ -11,23 +11,19 @@ permissions:
 
 jobs:
   seed-production-data:
-    name: Seed current production data
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout current published data
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           repository: sukrutureli/fathertahmin
           ref: main
           path: published
-      - name: Upload football data seed
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
           name: football-control-seed
           path: published/futbol/data/
           if-no-files-found: error
-      - name: Upload basketball data seed
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
           name: basketball-control-seed
           path: published/basketbol/data/
@@ -49,13 +45,14 @@ jobs:
           cache: maven
           cache-dependency-path: football/pom.xml
       - run: apt-get update && apt-get install -y maven
-      - name: Restore current football data
-        uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v4
         with:
           name: football-control-seed
           path: football/public/data
       - name: Run football CONTROL
         working-directory: football
+        env:
+          GITHUB_TOKEN: ${{ secrets.ADMIN_USER }}
         run: mvn clean compile exec:java -Dexec.args="kontrol"
       - uses: actions/upload-artifact@v4
         with:
@@ -79,13 +76,14 @@ jobs:
           cache: maven
           cache-dependency-path: basketball/pom.xml
       - run: apt-get update && apt-get install -y maven
-      - name: Restore current basketball data
-        uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v4
         with:
           name: basketball-control-seed
           path: basketball/public/data
       - name: Run basketball CONTROL
         working-directory: basketball
+        env:
+          GITHUB_TOKEN: ${{ secrets.ADMIN_USER }}
         run: mvn clean compile exec:java -Dexec.args="kontrol"
       - uses: actions/upload-artifact@v4
         with:
@@ -98,41 +96,30 @@ jobs:
     needs: [football-control, basketball-control]
     runs-on: ubuntu-latest
     steps:
-      - name: Download football CONTROL output
-        uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v4
         with:
           name: football-control-public
-          path: publish/futbol
-      - name: Download basketball CONTROL output
-        uses: actions/download-artifact@v4
+          path: publish/football-root
+      - uses: actions/download-artifact@v4
         with:
           name: basketball-control-public
-          path: publish/basketbol
+          path: publish/basketball-root
       - name: Publish atomically to fathertahmin
         env:
           TOKEN: ${{ secrets.ADMIN_USER }}
         run: |
-          if [ -z "$TOKEN" ]; then
-            echo "ADMIN_USER secret is missing in tahmin-platform."
-            exit 1
-          fi
-
+          test -n "$TOKEN" || { echo "ADMIN_USER secret is missing."; exit 1; }
           git clone "https://x-access-token:${TOKEN}@github.com/sukrutureli/fathertahmin.git" target-repo
-          cp -r publish/futbol/* target-repo/futbol/
-          cp -r publish/basketbol/* target-repo/basketbol/
+          cp -r publish/football-root/* target-repo/
+          cp -r publish/basketball-root/* target-repo/
 
           cd target-repo
           git config user.name "Şükrü Türeli"
           git config user.email "sukrutureli@gmail.com"
           git add futbol basketbol
-
           if git diff --cached --quiet; then
             echo "No CONTROL changes to publish."
             exit 0
           fi
-
           git commit -m "📦 [TAHMIN-PLATFORM] CONTROL update ($(date +'%Y-%m-%d %H:%M'))"
           git push origin main
-
-# fathertahmin keeps Telegram delivery; one combined commit prevents football
-# and basketball CONTROL jobs from racing each other while publishing.
