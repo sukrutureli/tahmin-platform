@@ -1,0 +1,15 @@
+name: Cleanup
+
+on:
+  workflow_dispatch:
+
+jobs:
+  migration-note:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          echo "Cleanup is intentionally not active in tahmin-platform yet."
+          echo "The current fathertahmin cleanup remains production owner during parity testing."
+
+# This placeholder makes the target workflow layout explicit without creating
+# duplicate cleanup writes while the old production pipeline is still active.
