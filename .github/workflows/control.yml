@@ -8,8 +8,32 @@ permissions:
   contents: read
 
 jobs:
+  seed-production-data:
+    name: Seed current production data
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout current published data
+        uses: actions/checkout@v4
+        with:
+          repository: sukrutureli/fathertahmin
+          ref: main
+          path: published
+      - name: Upload football data seed
+        uses: actions/upload-artifact@v4
+        with:
+          name: football-control-seed
+          path: published/futbol/data/
+          if-no-files-found: error
+      - name: Upload basketball data seed
+        uses: actions/upload-artifact@v4
+        with:
+          name: basketball-control-seed
+          path: published/basketbol/data/
+          if-no-files-found: error
+
   football-control:
     name: Football CONTROL
+    needs: seed-production-data
     runs-on: ubuntu-latest
     container:
       image: selenium/standalone-chrome:4.14.1-20231025
@@ -23,6 +47,11 @@ jobs:
           cache: maven
           cache-dependency-path: football/pom.xml
       - run: apt-get update && apt-get install -y maven
+      - name: Restore current football data
+        uses: actions/download-artifact@v4
+        with:
+          name: football-control-seed
+          path: football/public/data
       - name: Run football CONTROL
         working-directory: football
         run: mvn clean compile exec:java -Dexec.args="kontrol"
@@ -34,6 +63,7 @@ jobs:
 
   basketball-control:
     name: Basketball CONTROL
+    needs: seed-production-data
     runs-on: ubuntu-latest
     container:
       image: selenium/standalone-chrome:4.14.1-20231025
@@ -47,6 +77,11 @@ jobs:
           cache: maven
           cache-dependency-path: basketball/pom.xml
       - run: apt-get update && apt-get install -y maven
+      - name: Restore current basketball data
+        uses: actions/download-artifact@v4
+        with:
+          name: basketball-control-seed
+          path: basketball/public/data
       - name: Run basketball CONTROL
         working-directory: basketball
         run: mvn clean compile exec:java -Dexec.args="kontrol"
