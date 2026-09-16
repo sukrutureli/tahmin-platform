@@ -2,9 +2,8 @@ name: Control
 
 on:
   workflow_dispatch:
-  # schedule will be enabled after production cutover
-  # schedule:
-  #   - cron: '0 23,4,16,19 * * *'
+  schedule:
+    - cron: '0 23,4,16,19 * * *'
 
 permissions:
   contents: read
@@ -110,14 +109,9 @@ jobs:
         run: |
           test -n "$TOKEN" || { echo "ADMIN_USER secret is missing."; exit 1; }
           git clone "https://x-access-token:${TOKEN}@github.com/sukrutureli/fathertahmin.git" target-repo
-
-          # public/ contains futbol/ or basketbol/. Copy those folders to repo root.
           cp -r publish/football-root/* target-repo/
           cp -r publish/basketball-root/* target-repo/
-
-          # Remove directories accidentally created by the first central publish.
           rm -rf target-repo/futbol/futbol target-repo/basketbol/basketbol
-
           cd target-repo
           git config user.name "Şükrü Türeli"
           git config user.email "sukrutureli@gmail.com"
