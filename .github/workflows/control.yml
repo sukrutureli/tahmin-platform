@@ -110,13 +110,18 @@ jobs:
         run: |
           test -n "$TOKEN" || { echo "ADMIN_USER secret is missing."; exit 1; }
           git clone "https://x-access-token:${TOKEN}@github.com/sukrutureli/fathertahmin.git" target-repo
+
+          # public/ contains futbol/ or basketbol/. Copy those folders to repo root.
           cp -r publish/football-root/* target-repo/
           cp -r publish/basketball-root/* target-repo/
+
+          # Remove directories accidentally created by the first central publish.
+          rm -rf target-repo/futbol/futbol target-repo/basketbol/basketbol
 
           cd target-repo
           git config user.name "Şükrü Türeli"
           git config user.email "sukrutureli@gmail.com"
-          git add futbol basketbol
+          git add -A futbol basketbol
           if git diff --cached --quiet; then
             echo "No CONTROL changes to publish."
             exit 0
