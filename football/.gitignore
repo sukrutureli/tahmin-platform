@@ -1,0 +1,60 @@
+# -------------------------
+# Java / Maven / Eclipse .gitignore
+# -------------------------
+
+# Compiled class files
+*.class
+*.log
+
+# Maven build directory
+target/
+build/
+out/
+
+# Eclipse specific files
+.classpath
+.project
+.settings/
+.apt_generated/
+.factorypath
+.springBeans
+.recommenders/
+
+# IntelliJ IDEA (Eğer bir gün IDEA kullanırsan)
+.idea/
+*.iml
+*.iws
+
+# VS Code (bazı kullanıcılar için)
+.vscode/
+
+# OS-specific files
+.DS_Store
+Thumbs.db
+
+# Backup / temp files
+*.bak
+*.tmp
+*.swp
+~$*
+
+# Maven wrapper files (isteğe bağlı tutmak istersen aşağıyı yorum satırına al)
+.mvn/
+mvnw
+mvnw.cmd
+
+# Logs
+logs/
+*.log
+!src/main/resources/log4j2.xml  # log config hariç
+
+# GitHub Actions artifacts
+*.zip
+*.tar
+*.gz
+*.tgz
+*.7z
+
+# Generated HTML/JSON if auto-created by scraper
+public/
+data/
