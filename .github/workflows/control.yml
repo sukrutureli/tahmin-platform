@@ -2,7 +2,9 @@ name: Control
 
 on:
   workflow_dispatch:
-  # Production schedules intentionally remain in the old repos until parity is verified.
+  # Enable after the first manual production publish succeeds.
+  # schedule:
+  #   - cron: '0 23,4,16,19 * * *'
 
 permissions:
   contents: read
@@ -91,22 +93,46 @@ jobs:
           path: basketball/public/
           if-no-files-found: error
 
-  parity-output:
-    name: Collect CONTROL parity output
+  publish:
+    name: Publish CONTROL updates
     needs: [football-control, basketball-control]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/download-artifact@v4
+      - name: Download football CONTROL output
+        uses: actions/download-artifact@v4
         with:
           name: football-control-public
-          path: parity/futbol
-      - uses: actions/download-artifact@v4
+          path: publish/futbol
+      - name: Download basketball CONTROL output
+        uses: actions/download-artifact@v4
         with:
           name: basketball-control-public
-          path: parity/basketbol
-      - uses: actions/upload-artifact@v4
-        with:
-          name: tahmin-platform-control-parity-output
-          path: parity/
+          path: publish/basketbol
+      - name: Publish atomically to fathertahmin
+        env:
+          TOKEN: ${{ secrets.ADMIN_USER }}
+        run: |
+          if [ -z "$TOKEN" ]; then
+            echo "ADMIN_USER secret is missing in tahmin-platform."
+            exit 1
+          fi
 
-# No publish/Telegram side effects during migration testing.
+          git clone "https://x-access-token:${TOKEN}@github.com/sukrutureli/fathertahmin.git" target-repo
+          cp -r publish/futbol/* target-repo/futbol/
+          cp -r publish/basketbol/* target-repo/basketbol/
+
+          cd target-repo
+          git config user.name "Şükrü Türeli"
+          git config user.email "sukrutureli@gmail.com"
+          git add futbol basketbol
+
+          if git diff --cached --quiet; then
+            echo "No CONTROL changes to publish."
+            exit 0
+          fi
+
+          git commit -m "📦 [TAHMIN-PLATFORM] CONTROL update ($(date +'%Y-%m-%d %H:%M'))"
+          git push origin main
+
+# fathertahmin keeps Telegram delivery; one combined commit prevents football
+# and basketball CONTROL jobs from racing each other while publishing.
