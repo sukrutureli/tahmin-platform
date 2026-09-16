@@ -1,0 +1,119 @@
+name: Daily Prediction
+
+on:
+  workflow_dispatch:
+  # Keep disabled during migration/parity testing. Enable the schedule only after
+  # the imported projects are verified against the current production repos.
+  # schedule:
+  #   - cron: '0 21 * * *'
+
+permissions:
+  contents: read
+
+jobs:
+  scrape:
+    name: Scrape source data
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: scraper
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: scraper/requirements.txt
+      - run: pip install -r requirements.txt
+      - run: python -m src.nesine_scraper.cli
+      - name: Upload scraper output
+        uses: actions/upload-artifact@v4
+        with:
+          name: scraper-output
+          path: scraper/output/
+          if-no-files-found: error
+
+  football:
+    name: Football prediction
+    needs: scrape
+    runs-on: ubuntu-latest
+    container:
+      image: selenium/standalone-chrome:4.14.1-20231025
+      options: --user root --shm-size=4gb
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+          cache-dependency-path: football/pom.xml
+      - name: Install Maven
+        run: apt-get update && apt-get install -y maven
+      - name: Download scraper output
+        uses: actions/download-artifact@v4
+        with:
+          name: scraper-output
+          path: scraper/output
+      - name: Run football
+        working-directory: football
+        run: mvn clean compile exec:java -Dexec.args="futbol"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: football-public
+          path: football/public/
+          if-no-files-found: error
+
+  basketball:
+    name: Basketball prediction
+    needs: scrape
+    runs-on: ubuntu-latest
+    container:
+      image: selenium/standalone-chrome:4.14.1-20231025
+      options: --user root --shm-size=4gb
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+          cache-dependency-path: basketball/pom.xml
+      - name: Install Maven
+        run: apt-get update && apt-get install -y maven
+      - name: Download scraper output
+        uses: actions/download-artifact@v4
+        with:
+          name: scraper-output
+          path: scraper/output
+      - name: Run basketball
+        working-directory: basketball
+        run: mvn clean compile exec:java -Dexec.args="basketbol"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: basketball-public
+          path: basketball/public/
+          if-no-files-found: error
+
+  parity-output:
+    name: Collect parity output
+    needs: [football, basketball]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: football-public
+          path: parity/futbol
+      - uses: actions/download-artifact@v4
+        with:
+          name: basketball-public
+          path: parity/basketbol
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tahmin-platform-parity-output
+          path: parity/
+          if-no-files-found: error
+
+# Intentionally no fathertahmin push and no Telegram send yet.
+# During v1 migration the old production workflows stay active; this workflow
+# produces artifacts for side-by-side parity checks only.
