@@ -11,11 +11,15 @@ import com.basketbol.model.RealScores;
 
 import java.time.*;
 import java.util.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class ControlScraper {
     private WebDriver driver;
     private WebDriverWait wait;
     private List<RealScores> results;
+
+    private static final Pattern FINISHED_SCORE_PATTERN = Pattern.compile("(\\d+)\\s*MS\\s*(\\d+)");
 
     public ControlScraper() {
         setupDriver();
@@ -31,7 +35,9 @@ public class ControlScraper {
         wait = new WebDriverWait(driver, Duration.ofSeconds(15));
     }
 
-    // Futboldaki CONTROL ile aynı yaklaşım: MatchInfo'daki her maçın p1 detail sayfasından skoru oku.
+    // MatchInfo'daki her maçın p1 detail sayfasından skoru oku.
+    // Basketbol p1 scoreboard'unda skorlar ayrı football CSS class'larında olmayabiliyor;
+    // bitmiş maç formatı scoreboard text içinde "homeScore MS awayScore" olarak geliyor.
     public Map<String, String> fetchFinishedScoresFromDetails(List<RealScores> rsList, List<MatchInfo> matches) {
         Map<String, String> scores = new HashMap<>();
         if (rsList != null && !rsList.isEmpty()) results.addAll(rsList);
@@ -62,15 +68,17 @@ public class ControlScraper {
                     continue;
                 }
 
-                String homeScore = safeText(scoreboard.findElement(By.cssSelector(".broadage-home-team-score")), driver);
-                String awayScore = safeText(scoreboard.findElement(By.cssSelector(".broadage-away-team-score")), driver);
-                if (!homeScore.matches("\\d+") || !awayScore.matches("\\d+")) {
-                    System.out.println("⚠️ Geçersiz basket skor: " + matchName + " | " + homeScore + "-" + awayScore);
+                Matcher scoreMatcher = FINISHED_SCORE_PATTERN.matcher(scoreboardText);
+                if (!scoreMatcher.find()) {
+                    System.out.println("⚠️ Basket MS bulundu ama skor parse edilemedi: " + matchName + " | " + scoreboardText);
                     continue;
                 }
 
+                String homeScore = scoreMatcher.group(1);
+                String awayScore = scoreMatcher.group(2);
                 String score = homeScore + "-" + awayScore;
                 scores.put(matchName, score);
+
                 String[] teams = matchName.split(" - ", 2);
                 if (teams.length == 2) upsertRealScore(teams[0].trim(), teams[1].trim(), score);
                 System.out.println("✅ BASKET DETAIL " + matchName + " → " + score);
