@@ -44,11 +44,21 @@ jobs:
           java-version: '17'
           cache: maven
           cache-dependency-path: football/pom.xml
-      - run: apt-get update && apt-get install -y maven
+      - run: apt-get update && apt-get install -y maven python3
       - uses: actions/download-artifact@v4
         with:
           name: scraper-output
           path: scraper/output
+      - name: Serve same-run scraper output
+        run: |
+          test -f scraper/output/latest.json || { echo "scraper/output/latest.json is missing"; exit 1; }
+          python3 -m http.server 8765 --bind 127.0.0.1 --directory scraper/output >/tmp/scraper-http.log 2>&1 &
+          echo $! > /tmp/scraper-http.pid
+          sleep 1
+          curl --fail --silent http://127.0.0.1:8765/latest.json >/dev/null
+          sed -i 's#https://sukrutureli.github.io/Scraper/output/latest.json#http://127.0.0.1:8765/latest.json#' football/src/main/java/com/example/scraper/MatchScraper.java
+          grep -q 'http://127.0.0.1:8765/latest.json' football/src/main/java/com/example/scraper/MatchScraper.java
+          echo "Football Daily source: same-run scraper/output/latest.json"
       - working-directory: football
         run: mvn clean compile exec:java -Dexec.args="futbol"
       - uses: actions/upload-artifact@v4
@@ -71,11 +81,21 @@ jobs:
           java-version: '17'
           cache: maven
           cache-dependency-path: basketball/pom.xml
-      - run: apt-get update && apt-get install -y maven
+      - run: apt-get update && apt-get install -y maven python3
       - uses: actions/download-artifact@v4
         with:
           name: scraper-output
           path: scraper/output
+      - name: Serve same-run scraper output
+        run: |
+          test -f scraper/output/latestBasketbol.json || { echo "scraper/output/latestBasketbol.json is missing"; exit 1; }
+          python3 -m http.server 8765 --bind 127.0.0.1 --directory scraper/output >/tmp/scraper-http.log 2>&1 &
+          echo $! > /tmp/scraper-http.pid
+          sleep 1
+          curl --fail --silent http://127.0.0.1:8765/latestBasketbol.json >/dev/null
+          sed -i 's#https://sukrutureli.github.io/Scraper/output/latestBasketbol.json#http://127.0.0.1:8765/latestBasketbol.json#' basketball/src/main/java/com/basketbol/scraper/BasketballScraper.java
+          grep -q 'http://127.0.0.1:8765/latestBasketbol.json' basketball/src/main/java/com/basketbol/scraper/BasketballScraper.java
+          echo "Basketball Daily source: same-run scraper/output/latestBasketbol.json"
       - working-directory: basketball
         run: mvn clean compile exec:java -Dexec.args="basketbol"
       - uses: actions/upload-artifact@v4
