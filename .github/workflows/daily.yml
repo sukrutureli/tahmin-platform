@@ -11,7 +11,6 @@ permissions:
 
 jobs:
   scrape:
-    name: Scrape source data
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -32,7 +31,6 @@ jobs:
           if-no-files-found: error
 
   football:
-    name: Football prediction
     needs: scrape
     runs-on: ubuntu-latest
     container:
@@ -51,8 +49,7 @@ jobs:
         with:
           name: scraper-output
           path: scraper/output
-      - name: Run football
-        working-directory: football
+      - working-directory: football
         run: mvn clean compile exec:java -Dexec.args="futbol"
       - uses: actions/upload-artifact@v4
         with:
@@ -61,7 +58,6 @@ jobs:
           if-no-files-found: error
 
   basketball:
-    name: Basketball prediction
     needs: scrape
     runs-on: ubuntu-latest
     container:
@@ -80,8 +76,7 @@ jobs:
         with:
           name: scraper-output
           path: scraper/output
-      - name: Run basketball
-        working-directory: basketball
+      - working-directory: basketball
         run: mvn clean compile exec:java -Dexec.args="basketbol"
       - uses: actions/upload-artifact@v4
         with:
@@ -90,7 +85,6 @@ jobs:
           if-no-files-found: error
 
   publish:
-    name: Publish football and basketball
     needs: [football, basketball]
     runs-on: ubuntu-latest
     steps:
@@ -102,25 +96,18 @@ jobs:
         with:
           name: basketball-public
           path: publish/basketball-root
-      - name: Publish atomically to fathertahmin
-        env:
+      - env:
           TOKEN: ${{ secrets.ADMIN_USER }}
         run: |
           test -n "$TOKEN" || { echo "ADMIN_USER secret is missing."; exit 1; }
           git clone "https://x-access-token:${TOKEN}@github.com/sukrutureli/fathertahmin.git" target-repo
-
-          # Each project's public directory already contains its sport folder.
-          # Copy to repository root exactly like the old workflows did.
+          rm -rf target-repo/futbol/futbol target-repo/basketbol/basketbol
           cp -r publish/football-root/* target-repo/
           cp -r publish/basketball-root/* target-repo/
-
           cd target-repo
           git config user.name "Şükrü Türeli"
           git config user.email "sukrutureli@gmail.com"
-          git add futbol basketbol
-          if git diff --cached --quiet; then
-            echo "No changes to publish."
-            exit 0
-          fi
+          git add -A futbol basketbol
+          if git diff --cached --quiet; then exit 0; fi
           git commit -m "📦 [TAHMIN-PLATFORM] Daily update ($(date +'%Y-%m-%d %H:%M'))"
           git push origin main
