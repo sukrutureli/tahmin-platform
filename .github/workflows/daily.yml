@@ -2,8 +2,8 @@ name: Daily Prediction
 
 on:
   workflow_dispatch:
-  # Keep disabled during migration/parity testing. Enable the schedule only after
-  # the imported projects are verified against the current production repos.
+  # Enable only after ADMIN_USER is added to this repository and the first
+  # manual production publish succeeds.
   # schedule:
   #   - cron: '0 21 * * *'
 
@@ -95,25 +95,46 @@ jobs:
           path: basketball/public/
           if-no-files-found: error
 
-  parity-output:
-    name: Collect parity output
+  publish:
+    name: Publish football and basketball
     needs: [football, basketball]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/download-artifact@v4
+      - name: Download football output
+        uses: actions/download-artifact@v4
         with:
           name: football-public
-          path: parity/futbol
-      - uses: actions/download-artifact@v4
+          path: publish/futbol
+      - name: Download basketball output
+        uses: actions/download-artifact@v4
         with:
           name: basketball-public
-          path: parity/basketbol
-      - uses: actions/upload-artifact@v4
-        with:
-          name: tahmin-platform-parity-output
-          path: parity/
-          if-no-files-found: error
+          path: publish/basketbol
+      - name: Publish atomically to fathertahmin
+        env:
+          TOKEN: ${{ secrets.ADMIN_USER }}
+        run: |
+          if [ -z "$TOKEN" ]; then
+            echo "ADMIN_USER secret is missing in tahmin-platform."
+            exit 1
+          fi
 
-# Intentionally no fathertahmin push and no Telegram send yet.
-# During v1 migration the old production workflows stay active; this workflow
-# produces artifacts for side-by-side parity checks only.
+          git clone "https://x-access-token:${TOKEN}@github.com/sukrutureli/fathertahmin.git" target-repo
+          cp -r publish/futbol/* target-repo/futbol/
+          cp -r publish/basketbol/* target-repo/basketbol/
+
+          cd target-repo
+          git config user.name "Şükrü Türeli"
+          git config user.email "sukrutureli@gmail.com"
+          git add futbol basketbol
+
+          if git diff --cached --quiet; then
+            echo "No changes to publish."
+            exit 0
+          fi
+
+          git commit -m "📦 [TAHMIN-PLATFORM] Daily update ($(date +'%Y-%m-%d %H:%M'))"
+          git push origin main
+
+# Telegram remains owned by fathertahmin: its existing push workflow sends
+# futbol/futbol.html and/or basketbol/basketbol.html after this single publish.
