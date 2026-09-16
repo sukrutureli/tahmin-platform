@@ -1,0 +1,97 @@
+name: Import source projects
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout platform
+        uses: actions/checkout@v4
+        with:
+          path: platform
+          fetch-depth: 0
+
+      - name: Checkout football baseline
+        uses: actions/checkout@v4
+        with:
+          repository: sukrutureli/futboltahmin
+          ref: codex-improvements
+          path: source-football
+
+      - name: Checkout basketball baseline
+        uses: actions/checkout@v4
+        with:
+          repository: sukrutureli/basketboltahmin
+          ref: ortaklama
+          path: source-basketball
+
+      - name: Checkout scraper baseline
+        uses: actions/checkout@v4
+        with:
+          repository: sukrutureli/Scraper
+          ref: main
+          path: source-scraper
+
+      - name: Copy projects without refactoring
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf platform/football platform/basketball platform/scraper
+          mkdir -p platform/football platform/basketball platform/scraper
+
+          rsync -a --delete \
+            --exclude='.git/' \
+            --exclude='.github/' \
+            --exclude='public/' \
+            source-football/ platform/football/
+
+          rsync -a --delete \
+            --exclude='.git/' \
+            --exclude='.github/' \
+            --exclude='public/' \
+            source-basketball/ platform/basketball/
+
+          rsync -a --delete \
+            --exclude='.git/' \
+            --exclude='.github/' \
+            --exclude='output/' \
+            source-scraper/ platform/scraper/
+
+      - name: Record exact imported revisions
+        shell: bash
+        run: |
+          set -euo pipefail
+          FOOTBALL_SHA=$(git -C source-football rev-parse HEAD)
+          BASKETBALL_SHA=$(git -C source-basketball rev-parse HEAD)
+          SCRAPER_SHA=$(git -C source-scraper rev-parse HEAD)
+          cat > platform/IMPORT_BASELINES.md <<EOF
+          # Imported source revisions
+
+          This file records the exact source revisions used by the one-time import workflow.
+
+          - football: sukrutureli/futboltahmin @ codex-improvements — ${FOOTBALL_SHA}
+          - basketball: sukrutureli/basketboltahmin @ ortaklama — ${BASKETBALL_SHA}
+          - scraper: sukrutureli/Scraper @ main — ${SCRAPER_SHA}
+
+          Generated `public/` and scraper `output/` data are intentionally not imported.
+          EOF
+
+      - name: Commit imported projects
+        working-directory: platform
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add football basketball scraper IMPORT_BASELINES.md
+          if git diff --cached --quiet; then
+            echo "No import changes to commit."
+            exit 0
+          fi
+          git commit -m "Import football, basketball and scraper sources"
+          git push origin HEAD:main
