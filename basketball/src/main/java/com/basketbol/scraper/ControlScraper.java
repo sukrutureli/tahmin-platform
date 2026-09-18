@@ -19,7 +19,8 @@ public class ControlScraper {
     private WebDriverWait wait;
     private List<RealScores> results;
 
-    private static final Pattern FINISHED_SCORE_PATTERN = Pattern.compile("(\\d+)\\s*MS\\s*(\\d+)");
+    private static final Pattern REGULAR_SCORE_PATTERN = Pattern.compile("(\\d+)\\s*MS\\s*(\\d+)");
+    private static final Pattern OVERTIME_SCORE_PATTERN = Pattern.compile("(\\d+)\\s*UZ\\s*(\\d+)");
 
     public ControlScraper() {
         setupDriver();
@@ -63,14 +64,17 @@ public class ControlScraper {
                 String scoreboardText = safeText(scoreboard, driver);
                 System.out.println("📋 BASKET SCOREBOARD: " + matchName + " | " + scoreboardText);
 
-                if (scoreboardText == null || !scoreboardText.contains("MS")) {
+                if (scoreboardText == null || (!scoreboardText.contains("MS") && !scoreboardText.contains("UZ"))) {
                     System.out.println("⏳ Basket maç henüz bitmemiş: " + matchName);
                     continue;
                 }
 
-                Matcher scoreMatcher = FINISHED_SCORE_PATTERN.matcher(scoreboardText);
+                // Basketbol bahisleri uzatma dahil nihai skorla sonuçlandığı için UZ varsa onu tercih et.
+                Matcher scoreMatcher = scoreboardText.contains("UZ")
+                        ? OVERTIME_SCORE_PATTERN.matcher(scoreboardText)
+                        : REGULAR_SCORE_PATTERN.matcher(scoreboardText);
                 if (!scoreMatcher.find()) {
-                    System.out.println("⚠️ Basket MS bulundu ama skor parse edilemedi: " + matchName + " | " + scoreboardText);
+                    System.out.println("⚠️ Basket MS/UZ bulundu ama skor parse edilemedi: " + matchName + " | " + scoreboardText);
                     continue;
                 }
 
