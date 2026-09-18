@@ -53,8 +53,8 @@ public class LastPredictionManager {
 			if (!tempLastPrediction.getPredictions().isEmpty()) {
 				lastPrediction.add(tempLastPrediction);
 
-				String homeTeam = tempLastPrediction.getName().split("-")[0].trim();
-				String awayTeam = tempLastPrediction.getName().split("-")[1].trim();
+				String homeTeam = tempLastPrediction.getName().split(" - ", 2)[0].trim();
+				String awayTeam = tempLastPrediction.getName().split(" - ", 2)[1].trim();
 				PredictionData tempPredictionData = new PredictionData(homeTeam, awayTeam,
 						tempLastPrediction.getPredictions());
 				predictionData.add(tempPredictionData);
