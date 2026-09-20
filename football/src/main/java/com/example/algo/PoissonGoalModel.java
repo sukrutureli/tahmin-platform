@@ -47,7 +47,8 @@ public class PoissonGoalModel implements BettingAlgorithm {
 			double[] pA = MathUtils.poissonDist(lambdaA, maxG);
 
 			double pHome = 0, pDraw = 0, pAway = 0;
-			double pOver25 = 0, pBttsYes = 0;
+			double pOver25 = calculateOver25(lambdaH + lambdaA);
+			double pBttsYes = 0;
 			double bestP = -1;
 			String bestScore = "";
 
@@ -61,8 +62,6 @@ public class PoissonGoalModel implements BettingAlgorithm {
 					else
 						pAway += pij;
 
-					if (i + j >= 3)
-						pOver25 += pij;
 					if (i > 0 && j > 0)
 						pBttsYes += pij;
 
@@ -95,6 +94,12 @@ public class PoissonGoalModel implements BettingAlgorithm {
 
 	private double safeDiv(double a, double b) {
 		return (b == 0) ? 0 : a / b;
+	}
+
+	private double calculateOver25(double totalLambda) {
+		double p0To2 = Math.exp(-totalLambda)
+				* (1.0 + totalLambda + (totalLambda * totalLambda / 2.0));
+		return safeProb(1.0 - p0To2);
 	}
 
 	private double safeProb(double v) {
