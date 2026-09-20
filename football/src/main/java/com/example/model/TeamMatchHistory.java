@@ -371,9 +371,9 @@ public class TeamMatchHistory {
 		int winCount = 0;
 
 		for (int i = 0; i < macResult.size(); i++) {
-			if (macResult.get(i).getHomeTeam().contains(teamName) && macResult.get(i).getResult() == "H") {
+			if (macResult.get(i).getHomeTeam().contains(teamName) && "H".equals(macResult.get(i).getResult())) {
 				winCount++;
-			} else if (macResult.get(i).getAwayTeam().contains(teamName) && macResult.get(i).getResult() == "A") {
+			} else if (macResult.get(i).getAwayTeam().contains(teamName) && "A".equals(macResult.get(i).getResult())) {
 				winCount++;
 			}
 		}
@@ -385,11 +385,11 @@ public class TeamMatchHistory {
 		int points = 0;
 
 		for (int i = 0; i < macResult.size(); i++) {
-			if (macResult.get(i).getHomeTeam().contains(teamName) && macResult.get(i).getResult() == "H") {
+			if (macResult.get(i).getHomeTeam().contains(teamName) && "H".equals(macResult.get(i).getResult())) {
 				points += 3;
-			} else if (macResult.get(i).getAwayTeam().contains(teamName) && macResult.get(i).getResult() == "A") {
+			} else if (macResult.get(i).getAwayTeam().contains(teamName) && "A".equals(macResult.get(i).getResult())) {
 				points += 3;
-			} else if (macResult.get(i).getResult() == "D") {
+			} else if ("D".equals(macResult.get(i).getResult())) {
 				points += 1;
 			}
 		}
