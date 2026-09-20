@@ -48,7 +48,7 @@ public class PoissonGoalModel implements BettingAlgorithm {
 
 			double pHome = 0, pDraw = 0, pAway = 0;
 			double pOver25 = calculateOver25(lambdaH + lambdaA);
-			double pBttsYes = 0;
+			double pBttsYes = calculateBtts(lambdaH, lambdaA);
 			double bestP = -1;
 			String bestScore = "";
 
@@ -62,8 +62,6 @@ public class PoissonGoalModel implements BettingAlgorithm {
 					else
 						pAway += pij;
 
-					if (i > 0 && j > 0)
-						pBttsYes += pij;
 
 					if (pij > bestP) {
 						bestP = pij;
@@ -78,7 +76,7 @@ public class PoissonGoalModel implements BettingAlgorithm {
 			double confidence = Math.round(maxRes * 100.0) / 100.0;
 
 			return new PredictionResult(name(), match.getHomeTeam(), match.getAwayTeam(), safeProb(pHome),
-					safeProb(pDraw), safeProb(pAway), safeProb(pOver25), safeProb(pBttsYes), pick, confidence,
+					safeProb(pDraw), safeProb(pAway), safeBinary(pOver25), safeBinary(pBttsYes), pick, confidence,
 					bestScore);
 
 		} catch (Exception e) {
@@ -99,11 +97,21 @@ public class PoissonGoalModel implements BettingAlgorithm {
 	private double calculateOver25(double totalLambda) {
 		double p0To2 = Math.exp(-totalLambda)
 				* (1.0 + totalLambda + (totalLambda * totalLambda / 2.0));
-		return safeProb(1.0 - p0To2);
+		return safeBinary(1.0 - p0To2);
+	}
+
+	private double calculateBtts(double lambdaH, double lambdaA) {
+		double homeScores = 1.0 - Math.exp(-lambdaH);
+		double awayScores = 1.0 - Math.exp(-lambdaA);
+		return safeBinary(homeScores * awayScores);
 	}
 
 	private double safeProb(double v) {
 		return Double.isFinite(v) ? Math.min(0.99, Math.max(0.01, v)) : 0.33;
+	}
+
+	private double safeBinary(double v) {
+		return Double.isFinite(v) ? Math.min(0.99, Math.max(0.01, v)) : 0.50;
 	}
 
 	private PredictionResult neutralResult(Match m) {
