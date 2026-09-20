@@ -14,7 +14,7 @@ import java.util.Optional;
 import com.example.algo.BettingAlgorithm;
 import com.example.algo.EnsembleModel;
 import com.example.algo.FormMomentumModel;
-import com.example.algo.PoissonGoalModel;
+import com.example.algo.EvidenceWeightedModel;
 import com.example.algo.SimpleHeuristicModel;
 import com.example.model.Match;
 import com.example.model.MatchInfo;
@@ -80,10 +80,10 @@ public class Application {
 				if ((i + 1) % 20 == 0) System.out.println("İşlendi: " + (i + 1) + "/" + matches.size());
 			}
 
-			BettingAlgorithm poisson = new PoissonGoalModel();
+			BettingAlgorithm evidence = new EvidenceWeightedModel();
 			BettingAlgorithm heur = new SimpleHeuristicModel();
 			BettingAlgorithm formMomentum = new FormMomentumModel();
-			EnsembleModel ensemble = new EnsembleModel(List.of(poisson, heur, formMomentum));
+			EnsembleModel ensemble = new EnsembleModel(List.of(evidence, heur, formMomentum));
 			for (Match m : matchStats) results.add(ensemble.predict(m, Optional.ofNullable(m.getOdds())));
 			System.out.println("Aktif model: " + ensemble.name());
 			System.out.println("MATCHES SIZE = " + matches.size());
