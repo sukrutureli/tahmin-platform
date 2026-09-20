@@ -34,14 +34,14 @@ public class EnsembleModel implements BettingAlgorithm {
             double msWeight = model.weight()[0];
             double goalWeight = model.weight()[1];
             if (msWeight > 0) {
-                pH += msWeight * safe(result.getpHome());
-                pD += msWeight * safe(result.getpDraw());
-                pA += msWeight * safe(result.getpAway());
+                pH += msWeight * safeThreeWay(result.getpHome());
+                pD += msWeight * safeThreeWay(result.getpDraw());
+                pA += msWeight * safeThreeWay(result.getpAway());
                 totalMsWeight += msWeight;
             }
             if (goalWeight > 0) {
-                pO += goalWeight * safe(result.getpOver25());
-                pB += goalWeight * safe(result.getpBttsYes());
+                pO += goalWeight * safeBinary(result.getpOver25());
+                pB += goalWeight * safeBinary(result.getpBttsYes());
                 totalGoalWeight += goalWeight;
             }
             // A scoreline is an illustration of the goal model, not independent evidence.
@@ -91,11 +91,17 @@ public class EnsembleModel implements BettingAlgorithm {
         }
         finalConf = Math.round(finalConf * 100.0) / 100.0;
         return new PredictionResult(name(), match.getHomeTeam(), match.getAwayTeam(),
-                safe(pH), safe(pD), safe(pA), safe(pO), safe(pB), finalPick, finalConf, bestScore);
+                safeThreeWay(pH), safeThreeWay(pD), safeThreeWay(pA),
+                safeBinary(pO), safeBinary(pB), finalPick, finalConf, bestScore);
     }
 
-    private double safe(Double value) {
+    private double safeThreeWay(Double value) {
         if (value == null || !Double.isFinite(value) || value < 0 || value > 1) return 0.33;
+        return value;
+    }
+
+    private double safeBinary(Double value) {
+        if (value == null || !Double.isFinite(value) || value < 0 || value > 1) return 0.50;
         return value;
     }
 }
