@@ -278,20 +278,26 @@ public class TeamMatchHistory {
 			}
 		}
 
+		double observedRate;
 		if (isInfoEnough()) {
-			double result = (ustRekabet / rekabetGecmisi.size()) * 0.1;
-			result += ((ustSonH / sonMaclarHome.size()) * 0.45);
-			result += ((ustSonA / sonMaclarAway.size()) * 0.45);
-
-			return result;
+			observedRate = (ustRekabet / rekabetGecmisi.size()) * 0.1;
+			observedRate += ((ustSonH / sonMaclarHome.size()) * 0.45);
+			observedRate += ((ustSonA / sonMaclarAway.size()) * 0.45);
 		} else if (isInfoEnoughWithoutRekabet()) {
-			double result = ((ustSonH / sonMaclarHome.size()) * 0.5);
-			result += ((ustSonA / sonMaclarAway.size()) * 0.5);
-
-			return result;
+			observedRate = ((ustSonH / sonMaclarHome.size()) * 0.5);
+			observedRate += ((ustSonA / sonMaclarAway.size()) * 0.5);
 		} else {
-			return (ustRekabet + ustSonH + ustSonA) / getTotalMatches();
+			int totalMatches = getTotalMatches();
+			observedRate = totalMatches == 0 ? 0.5 : (ustRekabet + ustSonH + ustSonA) / totalMatches;
 		}
+
+		return smoothRate(observedRate, getTotalMatches());
+	}
+
+	private double smoothRate(double observedRate, int sampleSize) {
+		final double priorMatches = 4.0;
+		final double priorRate = 0.5;
+		return (observedRate * sampleSize + priorMatches * priorRate) / (sampleSize + priorMatches);
 	}
 
 	public double getAlt() {
