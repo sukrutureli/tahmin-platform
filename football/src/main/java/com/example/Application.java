@@ -18,6 +18,7 @@ import com.example.algo.EvidenceWeightedModel;
 import com.example.algo.SimpleHeuristicModel;
 import com.example.model.Match;
 import com.example.model.MatchInfo;
+import com.example.model.LastPrediction;
 import com.example.model.PredictionData;
 import com.example.model.PredictionResult;
 import com.example.model.RealScores;
@@ -34,10 +35,11 @@ public class Application {
 	public static void main(String[] args) throws IOException {
 		ZoneId istanbulZone = ZoneId.of("Europe/Istanbul");
 		String mode = args.length > 0 ? args[0].toLowerCase() : "futbol";
+		String requestedDate = args.length > 1 ? args[1] : null;
 		System.out.println("Çalışma modu: " + mode.toUpperCase());
 		switch (mode) {
 			case "futbol": runFutbolPrediction(); break;
-			case "kontrol": runKontrol(); break;
+			case "kontrol": runKontrol(resolveControlDate(requestedDate)); break;
 			default:
 				System.out.println("⚠️ Geçersiz argüman: " + mode);
 				System.out.println("Kullanım: java -jar prediction.jar [futbol | kontrol]");
@@ -105,37 +107,50 @@ public class Application {
 		} finally { if (scraper != null) scraper.close(); }
 	}
 
-	private static void runKontrol() throws IOException {
+	private static void runKontrol(String controlDate) throws IOException {
 		ControlScraper scraper = null;
 		MatchHistoryManager historyManager = new MatchHistoryManager();
-		List<MatchInfo> matches = JsonReader.readFromGithub("futbol", "MatchInfo", JsonReader.getToday(), MatchInfo.class);
-		List<Match> matchStats = JsonReader.readFromGithub("futbol", "Match", JsonReader.getToday(), Match.class);
+		List<MatchInfo> matches = JsonReader.readFromGithub("futbol", "MatchInfo", controlDate, MatchInfo.class);
+		List<Match> matchStats = JsonReader.readFromGithub("futbol", "Match", controlDate, Match.class);
 		ZoneId istanbulZone = ZoneId.of("Europe/Istanbul");
-		List<PredictionResult> results = JsonReader.readFromGithub("futbol", "PredictionResult", JsonReader.getToday(), PredictionResult.class);
-		List<TeamMatchHistory> teamHistoryList = JsonReader.readFromGithub("futbol", "TeamMatchHistory", JsonReader.getToday(), TeamMatchHistory.class);
-		List<RealScores> rsList = JsonReader.readFromGithub("futbol", "RealScores", JsonReader.getToday(), RealScores.class);
-		List<PredictionData> predictionData = JsonReader.readFromGithub("futbol", "PredictionData", JsonReader.getToday(), PredictionData.class);
+		List<PredictionResult> results = JsonReader.readFromGithub("futbol", "PredictionResult", controlDate, PredictionResult.class);
+		List<TeamMatchHistory> teamHistoryList = JsonReader.readFromGithub("futbol", "TeamMatchHistory", controlDate, TeamMatchHistory.class);
+		List<RealScores> rsList = JsonReader.readFromGithub("futbol", "RealScores", controlDate, RealScores.class);
+		List<PredictionData> predictionData = JsonReader.readFromGithub("futbol", "PredictionData", controlDate, PredictionData.class);
+		List<LastPrediction> savedPredictions = JsonReader.readFromGithub("futbol", "LastPrediction", controlDate, LastPrediction.class);
 		try {
+			if (matches.isEmpty() || predictionData.isEmpty() || savedPredictions.isEmpty()) {
+				throw new IllegalStateException("Kontrol dosyaları eksik: " + controlDate);
+			}
 			System.out.println("Zaman: " + LocalDateTime.now(istanbulZone));
+			System.out.println("Kontrol tarihi: " + controlDate);
 			scraper = new ControlScraper();
 
 			// Tahmin verilen maçların kendi Nesine detail URL'lerini kullan.
 			// Böylece canlı skor sayfasındaki farklı/kısaltılmış takım isimlerine bağımlı değiliz.
 			Map<String, String> updatedScores = scraper.fetchFinishedScoresFromDetails(rsList, matches, predictionData);
-			List<PredictionData> predictions = PredictionUpdater.updateFromGithub(updatedScores, "PredictionData-");
+			List<PredictionData> predictions = PredictionUpdater.update(predictionData, updatedScores,
+					"PredictionData-", controlDate);
 
 			for (int i = 0; i < matches.size(); i++) {
 				if (i < teamHistoryList.size()) historyManager.addTeamHistory(teamHistoryList.get(i));
 				else { MatchInfo match = matches.get(i); historyManager.addTeamHistory(new TeamMatchHistory(match.getName(), "-", "-", match.getDetailUrl())); }
 			}
-			LastPredictionManager lastPredictionManager = new LastPredictionManager(historyManager, results, matches);
-			lastPredictionManager.fillPredictions();
-			CombinedHtmlReportGenerator.generateCombinedHtml(lastPredictionManager.getLastPrediction(), matches, historyManager, matchStats, results, predictions, "futbol.html", getStringDay(true), scraper.getResults());
+			CombinedHtmlReportGenerator.generateCombinedHtml(savedPredictions, matches, historyManager, matchStats, results,
+					predictions, "futbol.html", controlDate, scraper.getResults());
 			System.out.println("futbol.html oluşturuldu.");
-			JsonStorage.save("futbol", "RealScores", JsonReader.getToday(), scraper.getResults());
+			JsonStorage.save("futbol", "RealScores", controlDate, scraper.getResults());
 		} catch (Exception e) {
 			System.out.println("GENEL HATA: " + e.getMessage()); e.printStackTrace();
 		} finally { if (scraper != null) scraper.close(); }
+	}
+
+	private static String resolveControlDate(String requestedDate) {
+		if (requestedDate == null || requestedDate.isBlank()) {
+			return JsonReader.getToday();
+		}
+		LocalDate.parse(requestedDate, DateTimeFormatter.ISO_LOCAL_DATE);
+		return requestedDate;
 	}
 
 	public static String getStringDay(boolean minusDay) {

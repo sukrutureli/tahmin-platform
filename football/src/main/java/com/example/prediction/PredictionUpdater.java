@@ -17,44 +17,8 @@ public class PredictionUpdater {
 	 * GitHub Pages üzerindeki JSON'u indirir, skorları günceller, güncel
 	 * versiyonunu "data/2025-10-16-updated.json" olarak kaydeder.
 	 */
-	public static List<PredictionData> updateFromGithub(Map<String, String> updatedScores, String prefix) throws IOException {
-		String day;
-		LocalTime now = LocalTime.now(ZoneId.of("Europe/Istanbul"));
-		if (now.isAfter(LocalTime.MIDNIGHT) && now.isBefore(LocalTime.of(6, 0))) {
-			day = LocalDate.now(ZoneId.of("Europe/Istanbul")).minusDays(1)
-					.format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
-		} else {
-			day = LocalDate.now(ZoneId.of("Europe/Istanbul")).format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
-		}
-
-		// 🔹 Private repo'dan dosya URL'si (raw)
-		String url = "https://raw.githubusercontent.com/sukrutureli/fathertahmin/main/futbol/data/" + prefix + day + ".json";
-		System.out.println("📥 JSON indiriliyor: " + url);
-
-		// 🔹 GitHub Personal Access Token (örneğin env değişkeninden)
-		String token = System.getenv("GITHUB_TOKEN"); // veya sabit test için: "ghp_XXXXXXXXXXXX"
-
-		if (token == null || token.isEmpty()) {
-			throw new RuntimeException("❌ GITHUB_TOKEN environment variable not set!");
-		}
-
-		// 🔹 Token ile HTTP isteği yap
-		HttpURLConnection conn = (HttpURLConnection) new URL(url).openConnection();
-		conn.setRequestMethod("GET");
-		conn.setRequestProperty("Authorization", "token " + token);
-		conn.setRequestProperty("Accept", "application/vnd.github.v3.raw");
-
-		int status = conn.getResponseCode();
-		if (status != 200) {
-			throw new IOException("GitHub dosya indirme hatası: HTTP " + status);
-		}
-
-		// 🔹 JSON parse et
-		List<PredictionData> predictions;
-		try (InputStream in = conn.getInputStream()) {
-			predictions = mapper.readerForListOf(PredictionData.class).readValue(in);
-		}
-
+	public static List<PredictionData> update(List<PredictionData> predictions,
+			Map<String, String> updatedScores, String prefix, String day) throws IOException {
 		// 🔹 Güncelleme işlemleri...
 		for (PredictionData p : predictions) {
 			String home = p.getHomeTeam();

@@ -134,9 +134,7 @@ public class CombinedHtmlReportGenerator {
 
 		for (int i = 0; i < sublistPredictions.size(); i++) {
 			LastPrediction p = sublistPredictions.get(i);
-			PredictionData d = (sublistPredictionData != null && i < sublistPredictionData.size())
-					? sublistPredictionData.get(i)
-					: null;
+			PredictionData d = findPredictionData(sublistPredictionData, p);
 
 			String mbsClass = "match-mbs-" + p.getMbs();
 			String actualScore = (d != null && d.getScore() != null) ? d.getScore() : "-";
@@ -175,9 +173,8 @@ public class CombinedHtmlReportGenerator {
 		int pending = 0;
 
 		for (int i = 0; i < sublistPredictions.size(); i++) {
-			PredictionData d = (sublistPredictionData != null && i < sublistPredictionData.size())
-					? sublistPredictionData.get(i)
-					: null;
+			LastPrediction p = sublistPredictions.get(i);
+			PredictionData d = findPredictionData(sublistPredictionData, p);
 
 			if (d != null && d.getStatuses() != null) {
 				for (String pick : sublistPredictions.get(i).getPredictions()) {
@@ -413,6 +410,18 @@ public class CombinedHtmlReportGenerator {
 			return new String[]{name, "-"};
 		}
 		return new String[]{parts[0], parts[1]};
+	}
+
+	private static PredictionData findPredictionData(List<PredictionData> predictionData,
+			LastPrediction prediction) {
+		if (predictionData == null || prediction == null) return null;
+		String[] teams = splitMatchName(prediction.getName());
+		for (PredictionData data : predictionData) {
+			if (teams[0].equals(data.getHomeTeam()) && teams[1].equals(data.getAwayTeam())) {
+				return data;
+			}
+		}
+		return null;
 	}
 
 	private static String getRealScore(List<RealScores> rsList, String home, String away) {
