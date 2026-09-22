@@ -95,11 +95,13 @@ public class Application {
     private static void runKontrol() throws IOException {
         ControlScraper scraper = null;
         MatchHistoryManager historyManager = new MatchHistoryManager();
-        List<MatchInfo> matches = JsonReader.readFromGithub("basketbol", "MatchInfo", JsonReader.getToday(), MatchInfo.class);
-        List<Match> matchStats = JsonReader.readFromGithub("basketbol", "Match", JsonReader.getToday(), Match.class);
-        List<PredictionResult> results = JsonReader.readFromGithub("basketbol", "PredictionResult", JsonReader.getToday(), PredictionResult.class);
-        List<TeamMatchHistory> teamHistoryList = JsonReader.readFromGithub("basketbol", "TeamMatchHistory", JsonReader.getToday(), TeamMatchHistory.class);
-        List<RealScores> rsList = JsonReader.readFromGithub("basketbol", "RealScores", JsonReader.getToday(), RealScores.class);
+        // Use one date for all basketball control inputs, output and HTML heading.
+        String controlDate = JsonReader.getToday();
+        List<MatchInfo> matches = JsonReader.readFromGithub("basketbol", "MatchInfo", controlDate, MatchInfo.class);
+        List<Match> matchStats = JsonReader.readFromGithub("basketbol", "Match", controlDate, Match.class);
+        List<PredictionResult> results = JsonReader.readFromGithub("basketbol", "PredictionResult", controlDate, PredictionResult.class);
+        List<TeamMatchHistory> teamHistoryList = JsonReader.readFromGithub("basketbol", "TeamMatchHistory", controlDate, TeamMatchHistory.class);
+        List<RealScores> rsList = JsonReader.readFromGithub("basketbol", "RealScores", controlDate, RealScores.class);
         ZoneId istanbulZone = ZoneId.of("Europe/Istanbul");
 
         try {
@@ -120,8 +122,8 @@ public class Application {
             LastPredictionManager lastPredictionManager = new LastPredictionManager(historyManager, results, matches);
             lastPredictionManager.fillPredictions();
             CombinedHtmlReportGenerator.generateCombinedHtml(lastPredictionManager.getLastPrediction(), matches,
-                    historyManager, matchStats, results, predictions, "basketbol.html", getStringDay(true), scraper.getResults());
-            JsonStorage.save("basketbol", "RealScores", JsonReader.getToday(), scraper.getResults());
+                    historyManager, matchStats, results, predictions, "basketbol.html", controlDate, scraper.getResults());
+            JsonStorage.save("basketbol", "RealScores", controlDate, scraper.getResults());
         } catch (Exception e) {
             System.out.println("GENEL HATA: " + e.getMessage());
             e.printStackTrace();
