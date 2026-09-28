@@ -87,14 +87,29 @@ jobs:
           path: scraper/output
       - name: Serve same-run scraper output
         run: |
-          test -f scraper/output/latestBasketbol.json || { echo "scraper/output/latestBasketbol.json is missing"; exit 1; }
+          files=(scraper/output/basketbol-????-??-??.json)
+          test ${#files[@]} -eq 1 && test -f "${files[0]}" || { echo "Expected one dated basketball JSON from this run"; exit 1; }
+          source_file="${files[0]}"
+          json_file="${source_file##*/}"
+          BASKETBALL_FILE="$source_file" python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          path = Path(os.environ["BASKETBALL_FILE"])
+          date = path.stem.removeprefix("basketbol-")
+          rows = json.loads(path.read_text(encoding="utf-8"))
+          if not isinstance(rows, list) or not rows or any(row.get("date") != date for row in rows):
+              raise SystemExit(f"Basketball JSON is empty or contains dates other than {date}: {path}")
+          print(f"Validated {len(rows)} basketball matches for {date}")
+          PY
           python3 -m http.server 8765 --bind 127.0.0.1 --directory scraper/output >/tmp/scraper-http.log 2>&1 &
           echo $! > /tmp/scraper-http.pid
           sleep 1
-          curl --fail --silent http://127.0.0.1:8765/latestBasketbol.json >/dev/null
-          sed -i 's#https://sukrutureli.github.io/Scraper/output/latestBasketbol.json#http://127.0.0.1:8765/latestBasketbol.json#' basketball/src/main/java/com/basketbol/scraper/BasketballScraper.java
-          grep -q 'http://127.0.0.1:8765/latestBasketbol.json' basketball/src/main/java/com/basketbol/scraper/BasketballScraper.java
-          echo "Basketball Daily source: same-run scraper/output/latestBasketbol.json"
+          curl --fail --silent "http://127.0.0.1:8765/$json_file" >/dev/null
+          sed -i "s#https://sukrutureli.github.io/Scraper/output/latestBasketbol.json#http://127.0.0.1:8765/$json_file#" basketball/src/main/java/com/basketbol/scraper/BasketballScraper.java
+          grep -Fq "http://127.0.0.1:8765/$json_file" basketball/src/main/java/com/basketbol/scraper/BasketballScraper.java
+          echo "Basketball Daily source: same-run $source_file"
       - working-directory: basketball
         run: mvn clean compile exec:java -Dexec.args="basketbol"
       - uses: actions/upload-artifact@v4
