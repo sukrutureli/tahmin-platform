@@ -29,6 +29,7 @@ import com.example.prediction.PredictionUpdater;
 import com.example.report.CombinedHtmlReportGenerator;
 import com.example.scraper.ControlScraper;
 import com.example.scraper.MatchScraper;
+import com.example.scraper.HistoryApiClient;
 
 public class Application {
 
@@ -72,7 +73,7 @@ public class Application {
 						if (url != null && url.startsWith("http")) teamHistory = scraper.scrapeTeamHistory(match.getDetailUrl(), match.getName());
 						else System.out.println("⚠️ Geçersiz URL: " + url);
 
-					} catch (Exception e) { System.out.println("Geçmiş çekme hatası: " + e.getMessage()); }
+					} catch (Exception e) { if (e instanceof HistoryApiClient.RateLimitException) throw e; System.out.println("Geçmiş çekme hatası: " + e.getMessage()); }
 				}
 				if (teamHistory == null) teamHistory = new TeamMatchHistory(match.getName(), "-", "-", match.getDetailUrl());
 				historyManager.addTeamHistory(teamHistory);
@@ -102,7 +103,7 @@ public class Application {
 			JsonStorage.save("futbol", "Match", getStringDay(false), matchStats);
 			JsonStorage.save("futbol", "PredictionResult", getStringDay(false), results);
 		} catch (Exception e) {
-			System.out.println("GENEL HATA: " + e.getMessage()); e.printStackTrace();
+			System.out.println("GENEL HATA: " + e.getMessage()); e.printStackTrace(); if (e instanceof HistoryApiClient.RateLimitException) throw (HistoryApiClient.RateLimitException) e;
 		} finally { if (scraper != null) scraper.close(); }
 	}
 
