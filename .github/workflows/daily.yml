@@ -28,3 +28,15 @@ jobs:
       - name: Record XHR and Fetch endpoint shapes
         working-directory: football
         run: mvn -q clean compile exec:java
+      - name: Save public API examples for field mapping
+        run: |
+          mkdir -p api-samples
+          for id in 3166383 3226161; do
+            curl -fsS --connect-timeout 10 --max-time 20 "https://apistats.nesine.com/api/v3/HeadToHead/$id/Header" -o "api-samples/$id-header.json"
+            curl -fsS --connect-timeout 10 --max-time 20 "https://apistats.nesine.com/api/v3/HeadToHead/$id/Summary?competitionHistoryCount=10" -o "api-samples/$id-summary.json"
+          done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: public-api-examples
+          path: api-samples/*.json
+          retention-days: 1
