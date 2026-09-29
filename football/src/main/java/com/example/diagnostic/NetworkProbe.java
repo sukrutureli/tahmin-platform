@@ -80,6 +80,9 @@ public final class NetworkProbe {
                         List<String> keys = new ArrayList<>();
                         parsed.fieldNames().forEachRemaining(keys::add);
                         System.out.println("JSON top-level keys: " + keys);
+                        if (url.startsWith("https://apistats.nesine.com/")) {
+                            describe(parsed.path("d"), "d", 0);
+                        }
                     } else if (parsed.isArray()) {
                         System.out.println("JSON array length: " + parsed.size());
                     }
@@ -89,6 +92,21 @@ public final class NetworkProbe {
             }
         } finally {
             driver.quit();
+        }
+    }
+
+    private static void describe(JsonNode node, String path, int depth) {
+        if (depth > 4 || node.isMissingNode() || node.isNull()) return;
+        if (node.isObject()) {
+            List<String> keys = new ArrayList<>();
+            node.fieldNames().forEachRemaining(keys::add);
+            System.out.println("SHAPE " + path + " object keys=" + keys);
+            for (String key : keys) describe(node.path(key), path + "." + key, depth + 1);
+        } else if (node.isArray()) {
+            System.out.println("SHAPE " + path + " array length=" + node.size());
+            if (!node.isEmpty()) describe(node.get(0), path + "[0]", depth + 1);
+        } else {
+            System.out.println("SHAPE " + path + " " + node.getNodeType());
         }
     }
 
