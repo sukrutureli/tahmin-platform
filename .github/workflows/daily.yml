@@ -87,9 +87,9 @@ jobs:
           path: scraper/output
       - name: Serve same-run scraper output
         run: |
-          files=(scraper/output/basketbol-????-??-??.json)
-          test ${#files[@]} -eq 1 && test -f "${files[0]}" || { echo "Expected one dated basketball JSON from this run"; exit 1; }
-          source_file="${files[0]}"
+          set -- scraper/output/basketbol-????-??-??.json
+          test "$#" -eq 1 && test -f "$1" || { echo "Expected one dated basketball JSON from this run"; exit 1; }
+          source_file="$1"
           json_file="${source_file##*/}"
           BASKETBALL_FILE="$source_file" python3 - <<'PY'
           import json
