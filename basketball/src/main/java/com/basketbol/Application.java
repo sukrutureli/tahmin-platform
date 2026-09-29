@@ -59,8 +59,7 @@ public class Application {
                             historyManager.addTeamHistory(teamHistory);
                             matchStats.add(teamHistory.createStats(match));
                         }
-                        Thread.sleep(1500);
-                        if ((i + 1) % 5 == 0) System.gc();
+
                     } catch (Exception e) {
                         System.out.println("Geçmiş çekme hatası: " + e.getMessage());
                     }
