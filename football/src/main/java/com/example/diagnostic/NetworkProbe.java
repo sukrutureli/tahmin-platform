@@ -93,10 +93,11 @@ public final class NetworkProbe {
         } finally {
             driver.quit();
         }
+        for (String matchId : List.of("3166383", "1961924")) {
         for (String suffix : List.of("Header", "Summary?competitionHistoryCount=10", "Fixture")) {
             String version = suffix.startsWith("Fixture") ? "v4" : "v3";
             URI endpoint = URI.create("https://apistats.nesine.com/api/" + version
-                    + "/HeadToHead/3166383/" + suffix);
+                    + "/HeadToHead/" + matchId + "/" + suffix);
             java.net.HttpURLConnection connection = (java.net.HttpURLConnection) endpoint.toURL().openConnection();
             connection.setConnectTimeout(10000);
             connection.setReadTimeout(15000);
@@ -107,12 +108,16 @@ public final class NetworkProbe {
                 if (status == 200) {
                     try (java.io.InputStream input = connection.getInputStream()) {
                         JsonNode parsed = JSON.readTree(input);
-                        System.out.println("DIRECT data present=" + !parsed.path("d").isMissingNode());
+                        JsonNode data = parsed.path("d");
+                        System.out.println("DIRECT data present=" + !data.isMissingNode()
+                                + " header SID=" + data.path("SID").asText("-")
+                                + " summary keys=" + (data.isObject() ? data.size() : 0));
                     }
                 }
             } finally {
                 connection.disconnect();
             }
+        }
         }
     }
 
