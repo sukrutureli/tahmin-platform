@@ -1,6 +1,7 @@
 package com.basketbol;
 
 import com.basketbol.scraper.BasketballScraper;
+import com.basketbol.scraper.HistoryApiClient;
 import com.basketbol.scraper.ControlScraper;
 import com.basketbol.algorithm.*;
 import com.basketbol.html.CombinedHtmlReportGenerator;
@@ -61,6 +62,7 @@ public class Application {
                         }
 
                     } catch (Exception e) {
+                        if (e instanceof HistoryApiClient.RateLimitException) throw e;
                         System.out.println("Geçmiş çekme hatası: " + e.getMessage());
                     }
                 }
@@ -86,6 +88,7 @@ public class Application {
         } catch (Exception e) {
             System.out.println("GENEL HATA: " + e.getMessage());
             e.printStackTrace();
+            if (e instanceof HistoryApiClient.RateLimitException) throw (HistoryApiClient.RateLimitException) e;
         } finally {
             if (scraper != null) scraper.close();
         }
