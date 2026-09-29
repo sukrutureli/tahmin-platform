@@ -97,7 +97,7 @@ jobs:
           from pathlib import Path
 
           path = Path(os.environ["BASKETBALL_FILE"])
-          date = path.stem.removeprefix("basketbol-")
+          date = path.stem[len("basketbol-"):]
           rows = json.loads(path.read_text(encoding="utf-8"))
           if not isinstance(rows, list) or not rows or any(row.get("date") != date for row in rows):
               raise SystemExit(f"Basketball JSON is empty or contains dates other than {date}: {path}")
