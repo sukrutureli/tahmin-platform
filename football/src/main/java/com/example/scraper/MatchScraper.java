@@ -376,98 +376,93 @@ private int asInt(Object value, int defaultValue) {
     // GEÇMİŞ MAÇLAR
     // =============================================================
     public TeamMatchHistory scrapeTeamHistory(String detailUrl, String name) {
-        if (detailUrl == null || !detailUrl.startsWith("http"))
+        String id = HistoryApiClient.matchId(detailUrl);
+        if (id == null) {
+            System.out.println("⚠️ Geçersiz istatistik URL: " + detailUrl);
             return null;
-
-        String[] teams = extractTeamsFromHeader(detailUrl);
-        String home = teams[0];
-        String away = teams[1];
-        String title = teams[2];
-
-        TeamMatchHistory th = new TeamMatchHistory(title, home, away, detailUrl);
-        try {
-            String summaryUrl = detailUrl + "/ozet";
-            driver.get(summaryUrl);
-            PageWaitUtils.safeWaitForLoad(driver, 15);
-            Thread.sleep(1000);
-
-            try {
-                List<WebElement> rows = driver.findElements(By.cssSelector("div[data-test-id='CompitionHistoryTableItem']"));
-                System.out.println("🔹 Rekabet geçmişi satır sayısı: " + rows.size());
-
-                for (WebElement r : rows) {
-                    try {
-                        String date = safeText(r,
-                                "[data-test-id='CompitionTableItemSeason'], [data-test-id='TableBodyDate']");
-                        String league = safeText(r,
-                                "[data-test-id='CompitionTableItemLeague'], [data-test-id='TableBodyTournament']");
-                        String homeTeam = extractTeamName(r.findElement(By.cssSelector("div[data-test-id='HomeTeam']")));
-                        String awayTeam = extractTeamName(r.findElement(By.cssSelector("div[data-test-id='AwayTeam']")));
-                        String score = extractScore(r);
-                        int[] sc = parseScore(score);
-
-                        th.addRekabetGecmisiMatch(new MatchResult(homeTeam, awayTeam, sc[0], sc[1], date, league,
-                                "rekabet-gecmisi", summaryUrl));
-                    } catch (Exception ex) {
-                        System.out.println("⚠️ Rekabet satırı hatası: " + ex.getMessage());
-                    }
-                }
-            } catch (Exception e) {
-                System.out.println("extractCompetitionHistoryResults hata: " + e.getMessage());
-            }
-
-            try {
-                List<WebElement> tables = driver.findElements(By.cssSelector("div[data-test-id^='LastMatchesTable']"));
-                for (int idx = 0; idx < tables.size(); idx++) {
-                    WebElement table = tables.get(idx);
-                    int currentSide = 0;
-                    try {
-                        WebElement titleEl = table.findElement(By.cssSelector("h3, [data-test-id='LastMatchesTableTitle']"));
-                        String titleText = titleEl.getText().toLowerCase(Locale.ROOT);
-                        if (titleText.contains("ev") || titleText.contains("home"))
-                            currentSide = 1;
-                        else if (titleText.contains("deplasman") || titleText.contains("away"))
-                            currentSide = 2;
-                    } catch (Exception e) {
-                        currentSide = (idx == 0) ? 1 : 2;
-                    }
-
-                    List<WebElement> rows = table.findElements(By.cssSelector("tbody tr"));
-                    for (WebElement r : rows) {
-                        try {
-                            String league = "-";
-                            String date = "-";
-                            try {
-                                WebElement leagueTd = r.findElement(By.cssSelector("td[data-test-id='TableBodyLeague']"));
-                                List<WebElement> spans = leagueTd.findElements(By.tagName("span"));
-                                if (spans.size() >= 1) league = spans.get(0).getText().trim();
-                                if (spans.size() >= 2) date = spans.get(1).getText().trim();
-                            } catch (Exception ignore) {
-                            }
-
-                            String homeTeam = extractTeamName(r.findElement(By.cssSelector("div[data-test-id='HomeTeam']")));
-                            String awayTeam = extractTeamName(r.findElement(By.cssSelector("div[data-test-id='AwayTeam']")));
-                            String score = extractScore(r);
-                            int[] sc = parseScore(score);
-
-                            th.addSonMacMatch(new MatchResult(homeTeam, awayTeam, sc[0], sc[1], date, league,
-                                    "son-maclari", summaryUrl), currentSide);
-
-                        } catch (Exception ex) {
-                            System.out.println("⚠️ Satır hatası: " + ex.getMessage());
-                        }
-                    }
-                }
-            } catch (Exception e) {
-                System.out.println("extractMatchResults hata: " + e.getMessage());
-            }
-
-            System.out.println("✅ " + title + " için geçmiş verisi: " + th.getRekabetGecmisi().size() + " rekabet, "
-                    + th.getSonMaclarHome().size() + "+" + th.getSonMaclarAway().size() + " son maç");
-        } catch (Exception e) {
-            System.out.println("⚠️ Geçmiş verisi hatası: " + e.getMessage());
         }
-        return th;
+        try {
+            com.fasterxml.jackson.databind.JsonNode header = HistoryApiClient.get(id, "Header");
+            if (header.path("SID").asInt(-1) != 1) {
+                throw new java.io.IOException("Unexpected sport for match " + id);
+            }
+            String home = teamName(header.path("HT").path(0));
+            String away = teamName(header.path("AT").path(0));
+            if (home.equals("-") || away.equals("-")) {
+                throw new java.io.IOException("Team names missing for match " + id);
+            }
+            TeamMatchHistory history = new TeamMatchHistory(home + " - " + away, home, away, detailUrl);
+            com.fasterxml.jackson.databind.JsonNode summary = HistoryApiClient.get(id, "Summary");
+            String summaryUrl = detailUrl.replaceAll("/+$", "") + "/ozet";
+            appendHistory(history, selectGroup(summary.path("SCH"), 3), "rekabet-gecmisi", 0, summaryUrl);
+            com.fasterxml.jackson.databind.JsonNode last = selectGroup(summary.path("SLM"), 5);
+            if (last.path("TMS").isArray()) {
+                com.fasterxml.jackson.databind.JsonNode teams = last.path("TMS");
+                if (teams.size() > 0) appendMatches(history, teams.get(0).path("ML"), "son-maclari", 1, summaryUrl);
+                if (teams.size() > 1) appendMatches(history, teams.get(1).path("ML"), "son-maclari", 2, summaryUrl);
+            }
+            System.out.println("✅ " + home + " - " + away + ": "
+                    + history.getRekabetGecmisi().size() + " rekabet, "
+                    + history.getSonMaclarHome().size() + "+" + history.getSonMaclarAway().size() + " son maç (HTTP)");
+            return history;
+        } catch (Exception e) {
+            System.out.println("⚠️ " + id + " geçmiş API hatası: " + e.getMessage());
+            if (e instanceof InterruptedException) Thread.currentThread().interrupt();
+            return null;
+        }
+    }
+
+    private com.fasterxml.jackson.databind.JsonNode selectGroup(com.fasterxml.jackson.databind.JsonNode group, int type) {
+        for (com.fasterxml.jackson.databind.JsonNode league : group.path("ML")) {
+            for (com.fasterxml.jackson.databind.JsonNode item : league.path("TT")) {
+                if (item.path("FT").asInt(-1) == type) return item;
+            }
+        }
+        return com.fasterxml.jackson.databind.node.MissingNode.getInstance();
+    }
+
+    private void appendHistory(TeamMatchHistory history, com.fasterxml.jackson.databind.JsonNode group,
+            String type, int side, String summaryUrl) {
+        for (com.fasterxml.jackson.databind.JsonNode team : group.path("TMS")) {
+            appendMatches(history, team.path("ML"), type, side, summaryUrl);
+        }
+    }
+
+    private void appendMatches(TeamMatchHistory history, com.fasterxml.jackson.databind.JsonNode matches,
+            String type, int side, String summaryUrl) {
+        for (com.fasterxml.jackson.databind.JsonNode row : matches) {
+            int[] score = finalScore(row.path("SC"));
+            if (score == null) continue;
+            String homeTeam = teamName(row.path("HT"));
+            String awayTeam = teamName(row.path("AT"));
+            if (homeTeam.equals("-") || awayTeam.equals("-")) continue;
+            String date = row.path("POFMD").asText("-");
+            String league = row.path("LG").path("N").asText("-");
+            MatchResult match = new MatchResult(homeTeam, awayTeam, score[0], score[1], date, league, type, summaryUrl);
+            if (side == 0) history.addRekabetGecmisiMatch(match);
+            else history.addSonMacMatch(match, side);
+        }
+    }
+
+    private String teamName(com.fasterxml.jackson.databind.JsonNode team) {
+        String value = team.path("N").asText("").trim();
+        if (value.isEmpty()) value = team.path("NS").asText("").trim();
+        return value.isEmpty() ? "-" : value;
+    }
+
+    private int[] finalScore(com.fasterxml.jackson.databind.JsonNode scores) {
+        int[] result = null;
+        int latest = -1;
+        for (com.fasterxml.jackson.databind.JsonNode score : scores) {
+            int order = score.path("OBI").asInt(-1);
+            // Football final: 99; basketball regulation: 45, overtime final: 1000.
+            if ((order == 99 || order == 45 || order == 1000) && order > latest
+                    && score.path("HTS").canConvertToInt() && score.path("ATS").canConvertToInt()) {
+                result = new int[] {score.path("HTS").asInt(), score.path("ATS").asInt()};
+                latest = order;
+            }
+        }
+        return result;
     }
 
     private String extractScore(WebElement row) {
@@ -545,7 +540,7 @@ private int asInt(Object value, int defaultValue) {
 
     public void close() {
         try {
-            driver.quit();
+            if (driver != null) driver.quit();
         } catch (Exception ignore) {
         }
     }
