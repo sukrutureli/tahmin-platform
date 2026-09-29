@@ -2,9 +2,6 @@ name: History API smoke
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - diagnose/nesine-history-network
 
 permissions:
   contents: read
