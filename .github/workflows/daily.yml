@@ -33,9 +33,6 @@ jobs:
   football:
     needs: scrape
     runs-on: ubuntu-latest
-    container:
-      image: selenium/standalone-chrome:4.14.1-20231025
-      options: --user root --shm-size=4gb
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -44,7 +41,6 @@ jobs:
           java-version: '17'
           cache: maven
           cache-dependency-path: football/pom.xml
-      - run: apt-get update && apt-get install -y maven python3
       - uses: actions/download-artifact@v4
         with:
           name: scraper-output
@@ -70,9 +66,6 @@ jobs:
   basketball:
     needs: scrape
     runs-on: ubuntu-latest
-    container:
-      image: selenium/standalone-chrome:4.14.1-20231025
-      options: --user root --shm-size=4gb
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -81,7 +74,6 @@ jobs:
           java-version: '17'
           cache: maven
           cache-dependency-path: basketball/pom.xml
-      - run: apt-get update && apt-get install -y maven python3
       - uses: actions/download-artifact@v4
         with:
           name: scraper-output
