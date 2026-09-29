@@ -93,10 +93,31 @@ public final class NetworkProbe {
         } finally {
             driver.quit();
         }
+        for (String suffix : List.of("Header", "Summary?competitionHistoryCount=10", "Fixture")) {
+            String version = suffix.startsWith("Fixture") ? "v4" : "v3";
+            URI endpoint = URI.create("https://apistats.nesine.com/api/" + version
+                    + "/HeadToHead/3166383/" + suffix);
+            java.net.HttpURLConnection connection = (java.net.HttpURLConnection) endpoint.toURL().openConnection();
+            connection.setConnectTimeout(10000);
+            connection.setReadTimeout(15000);
+            connection.setRequestProperty("Accept", "application/json");
+            try {
+                int status = connection.getResponseCode();
+                System.out.println("DIRECT HTTP " + status + " " + safeUrl(endpoint.toString()));
+                if (status == 200) {
+                    try (java.io.InputStream input = connection.getInputStream()) {
+                        JsonNode parsed = JSON.readTree(input);
+                        System.out.println("DIRECT data present=" + !parsed.path("d").isMissingNode());
+                    }
+                }
+            } finally {
+                connection.disconnect();
+            }
+        }
     }
 
     private static void describe(JsonNode node, String path, int depth) {
-        if (depth > 4 || node.isMissingNode() || node.isNull()) return;
+        if (depth > 7 || node.isMissingNode() || node.isNull()) return;
         if (node.isObject()) {
             List<String> keys = new ArrayList<>();
             node.fieldNames().forEachRemaining(keys::add);
