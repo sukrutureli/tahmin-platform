@@ -73,7 +73,7 @@ public class Application {
 						if (url != null && url.startsWith("http")) teamHistory = scraper.scrapeTeamHistory(match.getDetailUrl(), match.getName());
 						else System.out.println("⚠️ Geçersiz URL: " + url);
 
-					} catch (Exception e) { if (e instanceof HistoryApiClient.RateLimitException) throw e; System.out.println("Geçmiş çekme hatası: " + e.getMessage()); }
+					} catch (Exception e) { if (e instanceof HistoryApiClient.RateLimitException) throw (HistoryApiClient.RateLimitException) e; System.out.println("Geçmiş çekme hatası: " + e.getMessage()); }
 				}
 				if (teamHistory == null) teamHistory = new TeamMatchHistory(match.getName(), "-", "-", match.getDetailUrl());
 				historyManager.addTeamHistory(teamHistory);
