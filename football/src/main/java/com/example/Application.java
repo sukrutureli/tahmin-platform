@@ -71,8 +71,7 @@ public class Application {
 						String url = match.getDetailUrl();
 						if (url != null && url.startsWith("http")) teamHistory = scraper.scrapeTeamHistory(match.getDetailUrl(), match.getName());
 						else System.out.println("⚠️ Geçersiz URL: " + url);
-						Thread.sleep(1500);
-						if ((i + 1) % 5 == 0) System.gc();
+
 					} catch (Exception e) { System.out.println("Geçmiş çekme hatası: " + e.getMessage()); }
 				}
 				if (teamHistory == null) teamHistory = new TeamMatchHistory(match.getName(), "-", "-", match.getDetailUrl());
