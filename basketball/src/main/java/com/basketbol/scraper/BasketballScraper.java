@@ -325,6 +325,7 @@ private double asDouble(Object value) {
         } catch (Exception e) {
             System.out.println("⚠️ " + id + " geçmiş API hatası: " + e.getMessage());
             if (e instanceof InterruptedException) Thread.currentThread().interrupt();
+            if (e instanceof HistoryApiClient.RateLimitException) throw (HistoryApiClient.RateLimitException) e;
             return null;
         }
     }
