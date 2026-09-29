@@ -93,7 +93,7 @@ public final class NetworkProbe {
         } finally {
             driver.quit();
         }
-        for (String matchId : List.of("3166383", "1961924")) {
+        for (String matchId : List.of("3166383", "3226161")) {
         for (String suffix : List.of("Header", "Summary?competitionHistoryCount=10", "Fixture")) {
             String version = suffix.startsWith("Fixture") ? "v4" : "v3";
             URI endpoint = URI.create("https://apistats.nesine.com/api/" + version
