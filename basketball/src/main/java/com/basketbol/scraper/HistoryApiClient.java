@@ -10,11 +10,15 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /** Small, paced client for Nesine's public match statistics API. */
-final class HistoryApiClient {
+public final class HistoryApiClient {
+    public static final class RateLimitException extends IllegalStateException {
+        public RateLimitException(String message) { super(message); }
+    }
     private static final ObjectMapper JSON = new ObjectMapper();
     private static final Pattern MATCH_ID = Pattern.compile("^/(?:p1/)?([0-9]+)(?:/.*)?$");
     private static final long MIN_INTERVAL_MS = 500;
     private static long nextRequestAt;
+    private static volatile long blockedUntil;
 
     private HistoryApiClient() {}
 
@@ -32,6 +36,9 @@ final class HistoryApiClient {
 
     static JsonNode get(String id, String resource) throws IOException, InterruptedException {
         if (!id.matches("[0-9]+")) throw new IOException("Invalid match id");
+        if (System.currentTimeMillis() < blockedUntil) {
+            throw new RateLimitException("Stats API cooldown in effect");
+        }
         String version = "Fixture".equals(resource) ? "v4" : "v3";
         String path = "Summary".equals(resource) ? "Summary?competitionHistoryCount=10" : resource;
         URI uri = URI.create("https://apistats.nesine.com/api/" + version
@@ -56,9 +63,17 @@ final class HistoryApiClient {
                         return data;
                     }
                 }
-                if ((status == 429 || status == 502 || status == 503 || status == 504) && attempt < 2) {
+                if (status == 429) {
                     long retryMs = Math.max(1000L << attempt, retryAfterMs(connection.getHeaderField("Retry-After")));
-                    Thread.sleep(Math.min(retryMs, 30000));
+                    if (attempt < 2 && retryMs <= 30000) {
+                        Thread.sleep(retryMs);
+                        continue;
+                    }
+                    blockedUntil = System.currentTimeMillis() + Math.max(120000, retryMs);
+                    throw new RateLimitException("Stats API rate limit reached; stopping match requests");
+                }
+                if ((status == 502 || status == 503 || status == 504) && attempt < 2) {
+                    Thread.sleep(1000L << attempt);
                     continue;
                 }
                 throw new IOException("Stats API " + resource + " returned HTTP " + status + " for match " + id);
@@ -79,6 +94,12 @@ final class HistoryApiClient {
     private static long retryAfterMs(String header) {
         if (header == null) return 0;
         try { return Math.max(0, Long.parseLong(header.trim()) * 1000L); }
-        catch (NumberFormatException ignored) { return 0; }
+        catch (NumberFormatException ignored) {
+            try {
+                java.time.Instant retryAt = java.time.ZonedDateTime.parse(
+                        header, java.time.format.DateTimeFormatter.RFC_1123_DATE_TIME).toInstant();
+                return Math.max(0, java.time.Duration.between(java.time.Instant.now(), retryAt).toMillis());
+            } catch (Exception invalid) { return 0; }
+        }
     }
 }
