@@ -62,7 +62,7 @@ public class Application {
                         }
 
                     } catch (Exception e) {
-                        if (e instanceof HistoryApiClient.RateLimitException) throw e;
+                        if (e instanceof HistoryApiClient.RateLimitException) throw (HistoryApiClient.RateLimitException) e;
                         System.out.println("Geçmiş çekme hatası: " + e.getMessage());
                     }
                 }
