@@ -3,8 +3,6 @@ package com.example.scraper;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.IOException;
-import java.io.InputStream;
-import java.net.HttpURLConnection;
 import java.net.URI;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
@@ -88,31 +86,34 @@ public final class ResultApiClient {
         return matcher.group(1);
     }
 
+    private static final java.net.http.HttpClient HTTP = java.net.http.HttpClient.newBuilder()
+            .connectTimeout(Duration.ofSeconds(10))
+            .followRedirects(java.net.http.HttpClient.Redirect.NORMAL)
+            .build();
+
     private static String request(URI uri, String account) throws IOException, InterruptedException {
         if (System.currentTimeMillis() < blockedUntil) {
             throw new HistoryApiClient.RateLimitException("Scoreboard API cooldown in effect");
         }
         for (int attempt = 0; attempt < 3; attempt++) {
             pace();
-            HttpURLConnection connection = (HttpURLConnection) uri.toURL().openConnection();
-            connection.setConnectTimeout(10000);
-            connection.setReadTimeout(15000);
-            connection.setRequestProperty("Accept", account == null ? "*/*" : "application/json");
-            connection.setRequestProperty("User-Agent", "Mozilla/5.0");
-            connection.setRequestProperty("Referer", "https://istatistik.nesine.com/");
+            java.net.http.HttpRequest.Builder builder = java.net.http.HttpRequest.newBuilder(uri)
+                    .timeout(Duration.ofSeconds(15))
+                    .header("Accept", account == null ? "*/*" : "application/json")
+                    .header("User-Agent", "Mozilla/5.0")
+                    .header("Referer", "https://istatistik.nesine.com/");
             if (account != null) {
-                connection.setRequestProperty("x-brdg", account);
-                connection.setRequestProperty("Origin", "https://istatistik.nesine.com");
+                builder.header("x-brdg", account).header("Origin", "https://istatistik.nesine.com")
+                        .header("Content-Type", "application/json");
             }
             try {
-                int status = connection.getResponseCode();
-                if (status == 200) {
-                    try (InputStream input = connection.getInputStream()) {
-                        return new String(input.readAllBytes(), StandardCharsets.UTF_8);
-                    }
-                }
+                java.net.http.HttpResponse<String> response = HTTP.send(builder.GET().build(),
+                        java.net.http.HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+                int status = response.statusCode();
+                if (status == 200) return response.body();
                 if (status == 429) {
-                    long delay = Math.max(1000L << attempt, retryAfter(connection.getHeaderField("Retry-After")));
+                    long delay = Math.max(1000L << attempt,
+                            retryAfter(response.headers().firstValue("Retry-After").orElse(null)));
                     if (attempt < 2 && delay <= 30000) {
                         Thread.sleep(delay);
                         continue;
@@ -125,11 +126,9 @@ public final class ResultApiClient {
                     continue;
                 }
                 throw new IOException("Scoreboard returned HTTP " + status + " from " + uri.getHost());
-            } catch (java.net.SocketTimeoutException | java.net.ConnectException ex) {
+            } catch (java.net.http.HttpTimeoutException | java.net.ConnectException ex) {
                 if (attempt == 2) throw ex;
                 Thread.sleep(1000L << attempt);
-            } finally {
-                connection.disconnect();
             }
         }
         throw new IOException("Scoreboard request failed");
