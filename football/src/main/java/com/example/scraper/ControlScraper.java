@@ -14,13 +14,44 @@ import java.time.*;
 import java.util.*;
 
 public class ControlScraper {
+    public Map<String, String> fetchFinishedScoresFromDetails(List<RealScores> rsList, List<MatchInfo> matches, List<PredictionData> predictions) {
+        Map<String, String> scores = new HashMap<>();
+        if (rsList != null && !rsList.isEmpty()) results.addAll(rsList);
+        if (matches == null) return scores;
+        ResultApiClient client = new ResultApiClient();
+        for (MatchInfo match : matches) {
+            if (match == null || match.getName() == null || !match.hasDetailUrl()) continue;
+            String name = match.getName().trim();
+            try {
+                String score = client.finishedScore(match.getDetailUrl(), 1);
+                if (score == null) {
+                    System.out.println("⏳ HTTP maç henüz bitmemiş: " + name);
+                    continue;
+                }
+                scores.put(name, score);
+                String[] teams = name.split(" - ", 2);
+                if (teams.length == 2) upsertRealScore(teams[0].trim(), teams[1].trim(), score);
+                System.out.println("✅ HTTP CONTROL " + name + " → " + score);
+            } catch (HistoryApiClient.RateLimitException ex) {
+                throw ex;
+            } catch (InterruptedException ex) {
+                Thread.currentThread().interrupt();
+                throw new IllegalStateException("HTTP control interrupted", ex);
+            } catch (java.io.IOException ex) {
+                System.out.println("⚠️ HTTP skor alınamadı: " + name + " | " + ex.getMessage());
+            }
+        }
+        System.out.println("HTTP bitmiş toplam maç: " + scores.size());
+        return scores;
+    }
+
+
 
 	private WebDriver driver;
 	private WebDriverWait wait;
 	private List<RealScores> results;
 
 	public ControlScraper() {
-		setupDriver();
 		results = new ArrayList<RealScores>();
 	}
 
@@ -36,8 +67,9 @@ public class ControlScraper {
 
 	// PredictionData sadece mevcut çağrı uyumluluğu için parametre olarak duruyor.
 	// Skor kontrolü artık yalnızca kupondaki maçlarda değil, MatchInfo içindeki TÜM maçlarda yapılır.
-	public Map<String, String> fetchFinishedScoresFromDetails(List<RealScores> rsList,
+	public Map<String, String> fetchFinishedScoresFromDetailsSelenium(List<RealScores> rsList,
 			List<MatchInfo> matches, List<PredictionData> predictions) {
+        if (driver == null) setupDriver();
 		Map<String, String> scores = new HashMap<>();
 		if (rsList != null && !rsList.isEmpty()) results.addAll(rsList);
 		if (matches == null) return scores;
@@ -116,6 +148,7 @@ public class ControlScraper {
 
 	// Eski canlı skor yöntemi fallback/test amacıyla korunuyor.
 	public Map<String, String> fetchFinishedScores(List<RealScores> rsList) {
+        if (driver == null) setupDriver();
 		Map<String, String> scores = new HashMap<>();
 		if (rsList != null && !rsList.isEmpty()) results.addAll(rsList);
 		try {
@@ -172,7 +205,7 @@ public class ControlScraper {
 		} catch (Exception e) { System.out.println("⚠️ Dün sekmesine geçilemedi: " + e.getMessage()); }
 	}
 
-	public void close() { try { driver.quit(); } catch (Exception ignore) {} }
+	public void close() { try { if (driver != null) driver.quit(); } catch (Exception ignore) {} }
 
 	private String safeText(WebElement el, WebDriver driver) {
 		try {
