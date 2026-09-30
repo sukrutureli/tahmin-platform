@@ -7,6 +7,13 @@ on:
         description: 'Date of saved MatchInfo and RealScores to compare (YYYY-MM-DD)'
         required: true
         type: string
+  push:
+    branches:
+      - feature/http-result-control
+
+concurrency:
+  group: http-result-control-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -39,7 +46,7 @@ jobs:
           cache-dependency-path: ${{ matrix.module }}/pom.xml
       - name: Validate comparison date
         env:
-          CONTROL_DATE: ${{ github.event.inputs.control_date }}
+          CONTROL_DATE: ${{ github.event.inputs.control_date || '2026-09-29' }}
         run: |
           python3 - <<'PY'
           import datetime, os
@@ -52,7 +59,7 @@ jobs:
         run: >-
           mvn clean compile exec:java
           -Dexec.mainClass=${{ matrix.package }}.scraper.ResultApiSmoke
-          -Dexec.args="../published/${{ matrix.sport }}/data/MatchInfo-${{ github.event.inputs.control_date }}.json ../published/${{ matrix.sport }}/data/RealScores-${{ github.event.inputs.control_date }}.json"
+          -Dexec.args="../published/${{ matrix.sport }}/data/MatchInfo-${{ github.event.inputs.control_date || '2026-09-29' }}.json ../published/${{ matrix.sport }}/data/RealScores-${{ github.event.inputs.control_date || '2026-09-29' }}.json"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
