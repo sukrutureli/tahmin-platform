@@ -36,7 +36,7 @@ public class MatchScraper {
         "https://sukrutureli.github.io/Scraper/output/latest.json";
 
     public MatchScraper() {
-        setupDriver();
+        // HTTP prediction flow does not initialize a browser.
     }
 
     // =============================================================
@@ -163,6 +163,7 @@ private int asInt(Object value, int defaultValue) {
     // GÜNLÜK MAÇLARI ÇEK
     // =============================================================
     public List<MatchInfo> fetchMatchesSelenium() {
+        if (driver == null) setupDriver();
         List<MatchInfo> list = new ArrayList<>();
         try {
             String date = LocalDate.now(ZoneId.of("Europe/Istanbul"))
