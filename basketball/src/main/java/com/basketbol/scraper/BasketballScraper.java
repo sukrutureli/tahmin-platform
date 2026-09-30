@@ -33,8 +33,8 @@ public class BasketballScraper {
         "https://sukrutureli.github.io/Scraper/output/latestBasketbol.json";
 
 	public BasketballScraper() {
-		setupDriver();
-	}
+        // HTTP prediction flow does not initialize a browser.
+    }
 
 	private void setupDriver() {
 		System.setProperty("webdriver.chrome.driver", "/usr/bin/chromedriver");
@@ -156,6 +156,7 @@ private double asDouble(Object value) {
 	// GÜNLÜK MAÇLAR
 	// =============================================================
 	public List<MatchInfo> fetchMatchesSelenium() {
+        if (driver == null) setupDriver();
 		List<MatchInfo> list = new ArrayList<>();
 		try {
 			String date = LocalDate.now(ZoneId.of("Europe/Istanbul")).format(DateTimeFormatter.ofPattern("dd.MM.yyyy"));
@@ -293,139 +294,97 @@ private double asDouble(Object value) {
 	// GEÇMİŞ MAÇLAR (REKABET + SON MAÇLAR)
 	// =============================================================
 	public TeamMatchHistory scrapeTeamHistory(String detailUrl, String name, Odds odds) {
-		if (detailUrl == null || !detailUrl.startsWith("http"))
-			return null;
+        String id = HistoryApiClient.matchId(detailUrl);
+        if (id == null) {
+            System.out.println("⚠️ Geçersiz istatistik URL: " + detailUrl);
+            return null;
+        }
+        try {
+            com.fasterxml.jackson.databind.JsonNode header = HistoryApiClient.get(id, "Header");
+            if (header.path("SID").asInt(-1) != 2) {
+                throw new java.io.IOException("Unexpected sport for match " + id);
+            }
+            String home = teamName(header.path("HT").path(0));
+            String away = teamName(header.path("AT").path(0));
+            if (home.equals("-") || away.equals("-")) {
+                throw new java.io.IOException("Team names missing for match " + id);
+            }
+            TeamMatchHistory history = new TeamMatchHistory(home + " - " + away, home, away, detailUrl, odds);
+            com.fasterxml.jackson.databind.JsonNode summary = HistoryApiClient.get(id, "Summary");
+            String summaryUrl = detailUrl.replaceAll("/+$", "") + "/ozet";
+            appendHistory(history, selectGroup(summary.path("SCH"), 1), "rekabet-gecmisi", 0, summaryUrl);
+            com.fasterxml.jackson.databind.JsonNode last = selectGroup(summary.path("SLM"), 5);
+            if (last.path("TMS").isArray()) {
+                com.fasterxml.jackson.databind.JsonNode teams = last.path("TMS");
+                if (teams.size() > 0) appendMatches(history, teams.get(0).path("ML"), "son-maclari", 1, summaryUrl);
+                if (teams.size() > 1) appendMatches(history, teams.get(1).path("ML"), "son-maclari", 2, summaryUrl);
+            }
+            System.out.println("✅ " + home + " - " + away + ": "
+                    + history.getRekabetGecmisi().size() + " rekabet, "
+                    + history.getSonMaclarHome().size() + "+" + history.getSonMaclarAway().size() + " son maç (HTTP)");
+            return history;
+        } catch (Exception e) {
+            System.out.println("⚠️ " + id + " geçmiş API hatası: " + e.getMessage());
+            if (e instanceof InterruptedException) Thread.currentThread().interrupt();
+            if (e instanceof HistoryApiClient.RateLimitException) throw (HistoryApiClient.RateLimitException) e;
+            return null;
+        }
+    }
 
-		String[] teams = extractTeamsFromHeader(detailUrl);
-		String home = teams[0];
-		String away = teams[1];
-		String title = teams[2];
+    private com.fasterxml.jackson.databind.JsonNode selectGroup(com.fasterxml.jackson.databind.JsonNode group, int type) {
+        for (com.fasterxml.jackson.databind.JsonNode league : group.path("ML")) {
+            for (com.fasterxml.jackson.databind.JsonNode item : league.path("TT")) {
+                if (item.path("FT").asInt(-1) == type) return item;
+            }
+        }
+        return com.fasterxml.jackson.databind.node.MissingNode.getInstance();
+    }
 
-		TeamMatchHistory th = new TeamMatchHistory(title, home, away, detailUrl, odds);
-		try {
-			String summaryUrl = detailUrl + "/ozet";
-			driver.get(summaryUrl);
-			PageWaitUtils.safeWaitForLoad(driver, 15);
-			Thread.sleep(1000);
+    private void appendHistory(TeamMatchHistory history, com.fasterxml.jackson.databind.JsonNode group,
+            String type, int side, String summaryUrl) {
+        for (com.fasterxml.jackson.databind.JsonNode team : group.path("TMS")) {
+            appendMatches(history, team.path("ML"), type, side, summaryUrl);
+        }
+    }
 
-			// --- REKABET GEÇMİŞİ ---
-			try {
-				List<WebElement> rows = driver
-						.findElements(By.cssSelector("div[data-test-id='CompitionHistoryTableItem']"));
-				System.out.println("🔹 Rekabet geçmişi satır sayısı: " + rows.size());
+    private void appendMatches(TeamMatchHistory history, com.fasterxml.jackson.databind.JsonNode matches,
+            String type, int side, String summaryUrl) {
+        for (com.fasterxml.jackson.databind.JsonNode row : matches) {
+            int[] score = finalScore(row.path("SC"));
+            if (score == null) continue;
+            String homeTeam = teamName(row.path("HT"));
+            String awayTeam = teamName(row.path("AT"));
+            if (homeTeam.equals("-") || awayTeam.equals("-")) continue;
+            String date = row.path("POFMD").asText("-");
+            String league = row.path("LG").path("N").asText("-");
+            MatchResult match = new MatchResult(homeTeam, awayTeam, score[0], score[1], date, league, type);
+            if (side == 0) history.addRekabetGecmisiMatch(match);
+            else history.addSonMacMatch(match, side);
+        }
+    }
 
-				for (WebElement r : rows) {
-					try {
-						// 🔹 Tarih
-						String date = safeText(r,
-								"[data-test-id='CompitionTableItemSeason'], [data-test-id='TableBodyDate']");
+    private String teamName(com.fasterxml.jackson.databind.JsonNode team) {
+        String value = team.path("N").asText("").trim();
+        if (value.isEmpty()) value = team.path("NS").asText("").trim();
+        return value.isEmpty() ? "-" : value;
+    }
 
-						// 🔹 Lig (bazı basket sayfalarında iç span’lar içinde)
-						String league = "-";
-						try {
-							WebElement leagueEl = r.findElement(By.cssSelector(
-									"[data-test-id='CompitionTableItemLeague'], [data-test-id='CompitionTableItemTournament'], [data-test-id='CompitionTableItemCompetition'], [data-test-id='TableBodyTournament']"));
-							List<WebElement> spans = leagueEl.findElements(By.tagName("span"));
-							if (!spans.isEmpty()) {
-								StringBuilder sb = new StringBuilder();
-								for (WebElement s : spans) {
-									String txt = s.getText().trim();
-									if (!txt.isEmpty()) {
-										if (sb.length() > 0)
-											sb.append(" ");
-										sb.append(txt);
-									}
-								}
-								league = sb.toString().trim();
-							} else {
-								league = leagueEl.getText().trim();
-							}
-						} catch (Exception ignore) {
-						}
+    private int[] finalScore(com.fasterxml.jackson.databind.JsonNode scores) {
+        int[] result = null;
+        int latest = -1;
+        for (com.fasterxml.jackson.databind.JsonNode score : scores) {
+            int order = score.path("OBI").asInt(-1);
+            // Match the existing daily history table: regulation score, excluding overtime.
+            if ((order == 45) && order > latest
+                    && score.path("HTS").canConvertToInt() && score.path("ATS").canConvertToInt()) {
+                result = new int[] {score.path("HTS").asInt(), score.path("ATS").asInt()};
+                latest = order;
+            }
+        }
+        return result;
+    }
 
-						String homeTeam = extractTeamName(
-								r.findElement(By.cssSelector("div[data-test-id='HomeTeam']")));
-						String awayTeam = extractTeamName(
-								r.findElement(By.cssSelector("div[data-test-id='AwayTeam']")));
-						String score = extractScore(r);
-						int[] sc = parseScore(score);
-
-						th.addRekabetGecmisiMatch(
-								new MatchResult(homeTeam, awayTeam, sc[0], sc[1], date, league, "rekabet-gecmisi"));
-					} catch (Exception ex) {
-						System.out.println("⚠️ Rekabet satırı hatası: " + ex.getMessage());
-					}
-				}
-			} catch (Exception e) {
-				System.out.println("extractCompetitionHistoryResults hata: " + e.getMessage());
-			}
-
-			// --- SON MAÇLAR (Ev / Dep) ---
-			try {
-				List<WebElement> tables = driver.findElements(By.cssSelector("div[data-test-id^='LastMatchesTable']"));
-				for (WebElement table : tables) {
-					int currentSide = 0;
-					try {
-						WebElement titleEl = table
-								.findElement(By.cssSelector("h3, [data-test-id='LastMatchesTableTitle']"));
-						String titleText = titleEl.getText().toLowerCase(Locale.ROOT);
-						if (titleText.contains("ev") || titleText.contains("home"))
-							currentSide = 1;
-						else if (titleText.contains("deplasman") || titleText.contains("away"))
-							currentSide = 2;
-					} catch (Exception e) {
-						currentSide = (tables.indexOf(table) == 0) ? 1 : 2;
-					}
-
-					List<WebElement> rows = table.findElements(By.cssSelector("tbody tr"));
-					for (WebElement r : rows) {
-						try {
-							// 🔹 Lig ve tarih aynı hücrede (ör: <td
-							// data-test-id="TableBodyLeague"><span>V-L</span><span>31 Eki</span></td>)
-							String league = "-";
-							String date = "-";
-							try {
-								WebElement td = r.findElement(By.cssSelector("td[data-test-id='TableBodyLeague']"));
-								List<WebElement> spans = td.findElements(By.tagName("span"));
-								if (!spans.isEmpty()) {
-									if (spans.size() >= 1)
-										league = spans.get(0).getText().trim();
-									if (spans.size() >= 2)
-										date = spans.get(1).getText().trim();
-								} else {
-									league = td.getText().trim();
-								}
-							} catch (Exception ignore) {
-							}
-
-							String homeTeam = extractTeamName(
-									r.findElement(By.cssSelector("div[data-test-id='HomeTeam']")));
-							String awayTeam = extractTeamName(
-									r.findElement(By.cssSelector("div[data-test-id='AwayTeam']")));
-							String score = extractScore(r);
-							int[] sc = parseScore(score);
-
-							th.addSonMacMatch(
-									new MatchResult(homeTeam, awayTeam, sc[0], sc[1], date, league, "son-maclari"),
-									currentSide);
-						} catch (Exception ex) {
-							System.out.println("⚠️ Satır hatası: " + ex.getMessage());
-						}
-					}
-				}
-			} catch (Exception e) {
-				System.out.println("extractMatchResults hata: " + e.getMessage());
-			}
-
-			System.out.println("✅ " + title + " için geçmiş verisi: " + th.getRekabetGecmisi().size() + " rekabet, "
-					+ th.getSonMaclarHome().size() + "+" + th.getSonMaclarAway().size() + " son maç");
-		} catch (Exception e) {
-			System.out.println("⚠️ Geçmiş verisi hatası: " + e.getMessage());
-		}
-		return th;
-	}
-
-	private String extractScore(WebElement row) {
+    private String extractScore(WebElement row) {
 		try {
 			// 1) Öncelikle normal tablo skor alanlarını ara
 			List<WebElement> direct = row
@@ -509,7 +468,7 @@ private double asDouble(Object value) {
 
 	public void close() {
 		try {
-			driver.quit();
+			if (driver != null) driver.quit();
 		} catch (Exception ignore) {
 		}
 	}
