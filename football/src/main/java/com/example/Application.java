@@ -145,6 +145,7 @@ public class Application {
             if (e instanceof HistoryApiClient.RateLimitException) throw (HistoryApiClient.RateLimitException) e;
             if (Thread.currentThread().isInterrupted()) throw new IllegalStateException("HTTP control interrupted", e);
 System.out.println("GENEL HATA: " + e.getMessage()); e.printStackTrace();
+            throw new IllegalStateException("HTTP control failed; output will not be published", e);
 		} finally { if (scraper != null) scraper.close(); }
 	}
 
