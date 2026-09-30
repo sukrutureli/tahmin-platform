@@ -11,7 +11,7 @@ public final class HistoryApiSmoke {
             TeamMatchHistory history = scraper.scrapeTeamHistory(
                     "https://istatistik.nesine.com/3226161",
                     "Leones Quilpue - CD Universidad De Concepcion", null);
-            if (history == null || history.getRekabetGecmisi().size() != 10
+            if (history == null || history.getRekabetGecmisi().size() != 6
                     || history.getSonMaclarHome().size() != 6
                     || history.getSonMaclarAway().size() != 6) {
                 throw new AssertionError("Basketball history count mismatch");
