@@ -40,7 +40,7 @@ public final class HistoryApiClient {
             throw new RateLimitException("Stats API cooldown in effect");
         }
         String version = "Fixture".equals(resource) ? "v4" : "v3";
-        String path = "Summary".equals(resource) ? "Summary?competitionHistoryCount=10" : resource;
+        String path = "Summary".equals(resource) ? "Summary?competitionHistoryCount=6" : resource;
         URI uri = URI.create("https://apistats.nesine.com/api/" + version
                 + "/HeadToHead/" + id + "/" + path);
 
