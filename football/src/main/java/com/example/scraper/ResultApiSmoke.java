@@ -23,7 +23,8 @@ public final class ResultApiSmoke {
         int sport = 1;
         String body = "\"homeTeam\":{\"score\":{\"ordinary\":78,\"current\":91}},"
                 + "\"awayTeam\":{\"score\":{\"ordinary\":78,\"current\":82}}";
-        expect(sport == 1 ? "78-78" : "91-82", "{\"status\":{\"id\":9}," + body + "}", sport);
+        expect("91-82", "{\"status\":{\"id\":9}," + body + "}", sport);
+        expect("91-82", "{\"status\":{\"id\":11}," + body + "}", sport);
         expect("0-1", "{\"status\":{\"id\":5},\"homeTeam\":{\"score\":{\"ordinary\":0,\"current\":0}},"
                 + "\"awayTeam\":{\"score\":{\"ordinary\":1,\"current\":1}}}", sport);
         for (int state : new int[] {1,2,3,4,6,7,8,10,12,13,14,15,21,22,23,24,31,32,33,71,72,999}) {
