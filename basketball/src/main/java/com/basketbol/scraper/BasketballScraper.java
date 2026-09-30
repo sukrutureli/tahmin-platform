@@ -33,8 +33,8 @@ public class BasketballScraper {
         "https://sukrutureli.github.io/Scraper/output/latestBasketbol.json";
 
 	public BasketballScraper() {
-		setupDriver();
-	}
+        // HTTP prediction flow does not initialize a browser.
+    }
 
 	private void setupDriver() {
 		System.setProperty("webdriver.chrome.driver", "/usr/bin/chromedriver");
@@ -156,6 +156,7 @@ private double asDouble(Object value) {
 	// GÜNLÜK MAÇLAR
 	// =============================================================
 	public List<MatchInfo> fetchMatchesSelenium() {
+        if (driver == null) setupDriver();
 		List<MatchInfo> list = new ArrayList<>();
 		try {
 			String date = LocalDate.now(ZoneId.of("Europe/Istanbul")).format(DateTimeFormatter.ofPattern("dd.MM.yyyy"));
@@ -373,8 +374,8 @@ private double asDouble(Object value) {
         int latest = -1;
         for (com.fasterxml.jackson.databind.JsonNode score : scores) {
             int order = score.path("OBI").asInt(-1);
-            // Football final: 99; basketball regulation: 45, overtime final: 1000.
-            if ((order == 99 || order == 45 || order == 1000) && order > latest
+            // Match the existing daily history table: regulation score, excluding overtime.
+            if ((order == 45) && order > latest
                     && score.path("HTS").canConvertToInt() && score.path("ATS").canConvertToInt()) {
                 result = new int[] {score.path("HTS").asInt(), score.path("ATS").asInt()};
                 latest = order;
