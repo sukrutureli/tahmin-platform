@@ -102,6 +102,7 @@ jobs:
           if-no-files-found: error
 
   publish:
+    if: github.ref == 'refs/heads/main'
     name: Publish CONTROL updates
     needs: [football-control, basketball-control]
     runs-on: ubuntu-latest
