@@ -1,0 +1,65 @@
+name: HTTP result control comparison
+
+on:
+  workflow_dispatch:
+    inputs:
+      control_date:
+        description: 'Date of saved MatchInfo and RealScores to compare (YYYY-MM-DD)'
+        required: true
+        type: string
+
+concurrency:
+  group: http-result-control-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  compare:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - module: football
+            sport: futbol
+            package: com.example
+          - module: basketball
+            sport: basketbol
+            package: com.basketbol
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: sukrutureli/fathertahmin
+          ref: main
+          path: published
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+          cache-dependency-path: ${{ matrix.module }}/pom.xml
+      - name: Validate comparison date
+        env:
+          CONTROL_DATE: ${{ github.event.inputs.control_date }}
+        run: |
+          python3 - <<'PY'
+          import datetime, os
+          value = os.environ['CONTROL_DATE']
+          if datetime.date.fromisoformat(value).isoformat() != value:
+              raise SystemExit('Expected YYYY-MM-DD')
+          PY
+      - name: Compare finished scores and verify settlement rules
+        working-directory: ${{ matrix.module }}
+        run: >-
+          mvn clean compile exec:java
+          -Dexec.mainClass=${{ matrix.package }}.scraper.ResultApiSmoke
+          -Dexec.args="../published/${{ matrix.sport }}/data/MatchInfo-${{ github.event.inputs.control_date }}.json ../published/${{ matrix.sport }}/data/RealScores-${{ github.event.inputs.control_date }}.json"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ${{ matrix.module }}-http-control-results
+          path: ${{ matrix.module }}/http-control-results.json
+          if-no-files-found: ignore
