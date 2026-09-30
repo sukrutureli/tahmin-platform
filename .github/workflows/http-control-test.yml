@@ -2,9 +2,11 @@ name: HTTP result control comparison
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - feature/http-result-control
+    inputs:
+      control_date:
+        description: 'Date of saved MatchInfo and RealScores to compare (YYYY-MM-DD)'
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -35,12 +37,22 @@ jobs:
           java-version: '17'
           cache: maven
           cache-dependency-path: ${{ matrix.module }}/pom.xml
+      - name: Validate comparison date
+        env:
+          CONTROL_DATE: ${{ github.event.inputs.control_date }}
+        run: |
+          python3 - <<'PY'
+          import datetime, os
+          value = os.environ['CONTROL_DATE']
+          if datetime.date.fromisoformat(value).isoformat() != value:
+              raise SystemExit('Expected YYYY-MM-DD')
+          PY
       - name: Compare finished scores and verify settlement rules
         working-directory: ${{ matrix.module }}
         run: >-
           mvn clean compile exec:java
           -Dexec.mainClass=${{ matrix.package }}.scraper.ResultApiSmoke
-          -Dexec.args="../published/${{ matrix.sport }}/data/MatchInfo-2026-09-29.json ../published/${{ matrix.sport }}/data/RealScores-2026-09-29.json"
+          -Dexec.args="../published/${{ matrix.sport }}/data/MatchInfo-${{ github.event.inputs.control_date }}.json ../published/${{ matrix.sport }}/data/RealScores-${{ github.event.inputs.control_date }}.json"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
