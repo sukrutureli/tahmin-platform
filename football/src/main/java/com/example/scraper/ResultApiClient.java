@@ -88,6 +88,7 @@ public final class ResultApiClient {
 
     private static final java.net.http.HttpClient HTTP = java.net.http.HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(10))
+            .version(java.net.http.HttpClient.Version.HTTP_1_1)
             .followRedirects(java.net.http.HttpClient.Redirect.NORMAL)
             .build();
 
@@ -106,9 +107,16 @@ public final class ResultApiClient {
                 builder.header("x-brdg", account).header("Origin", "https://istatistik.nesine.com")
                         .header("Content-Type", "application/json");
             }
+            java.net.http.HttpResponse<String> response;
             try {
-                java.net.http.HttpResponse<String> response = HTTP.send(builder.GET().build(),
+                response = HTTP.send(builder.GET().build(),
                         java.net.http.HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+            } catch (IOException ex) {
+                if (attempt == 2) throw ex;
+                Thread.sleep(1000L << attempt);
+                continue;
+            }
+            {
                 int status = response.statusCode();
                 if (status == 200) return response.body();
                 if (status == 429) {
@@ -126,9 +134,6 @@ public final class ResultApiClient {
                     continue;
                 }
                 throw new IOException("Scoreboard returned HTTP " + status + " from " + uri.getHost());
-            } catch (java.net.http.HttpTimeoutException | java.net.ConnectException ex) {
-                if (attempt == 2) throw ex;
-                Thread.sleep(1000L << attempt);
             }
         }
         throw new IOException("Scoreboard request failed");
