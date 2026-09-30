@@ -311,7 +311,7 @@ private double asDouble(Object value) {
             TeamMatchHistory history = new TeamMatchHistory(home + " - " + away, home, away, detailUrl, odds);
             com.fasterxml.jackson.databind.JsonNode summary = HistoryApiClient.get(id, "Summary");
             String summaryUrl = detailUrl.replaceAll("/+$", "") + "/ozet";
-            appendHistory(history, selectGroup(summary.path("SCH"), 3), "rekabet-gecmisi", 0, summaryUrl);
+            appendHistory(history, selectGroup(summary.path("SCH"), 1), "rekabet-gecmisi", 0, summaryUrl);
             com.fasterxml.jackson.databind.JsonNode last = selectGroup(summary.path("SLM"), 5);
             if (last.path("TMS").isArray()) {
                 com.fasterxml.jackson.databind.JsonNode teams = last.path("TMS");
