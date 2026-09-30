@@ -127,7 +127,10 @@ public class Application {
                     historyManager, matchStats, results, predictions, "basketbol.html", controlDate, scraper.getResults());
             JsonStorage.save("basketbol", "RealScores", controlDate, scraper.getResults());
         } catch (Exception e) {
-            System.out.println("GENEL HATA: " + e.getMessage());
+            
+            if (e instanceof HistoryApiClient.RateLimitException) throw (HistoryApiClient.RateLimitException) e;
+            if (Thread.currentThread().isInterrupted()) throw new IllegalStateException("HTTP control interrupted", e);
+System.out.println("GENEL HATA: " + e.getMessage());
             e.printStackTrace();
         } finally {
             if (scraper != null) scraper.close();
