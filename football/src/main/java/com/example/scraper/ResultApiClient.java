@@ -65,8 +65,8 @@ public final class ResultApiClient {
         if (status != 5 && status != 9 && status != 11) return null;
         if (sportId != 1 && sportId != 2) throw new IOException("Unsupported scoreboard sport");
         if (sportId == 2 && status == 11) throw new IOException("Invalid basketball penalty status");
-        // Football markets use 90 minutes; basketball settlement includes completed overtime.
-        String field = sportId == 1 ? "ordinary" : "current";
+        // Preserve the primary score read by the existing football p1 control.
+        String field = "current";
         JsonNode home = match.path("homeTeam").path("score").path(field);
         JsonNode away = match.path("awayTeam").path("score").path(field);
         if (!home.isIntegralNumber() || !away.isIntegralNumber()
