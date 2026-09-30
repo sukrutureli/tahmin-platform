@@ -20,11 +20,14 @@ public class ControlScraper {
         if (rsList != null && !rsList.isEmpty()) results.addAll(rsList);
         if (matches == null) return scores;
         ResultApiClient client = new ResultApiClient();
+        int successfulChecks = 0;
+        int failedChecks = 0;
         for (MatchInfo match : matches) {
             if (match == null || match.getName() == null || !match.hasDetailUrl()) continue;
             String name = match.getName().trim();
             try {
                 String score = client.finishedScore(match.getDetailUrl(), 2);
+                successfulChecks++;
                 if (score == null) {
                     System.out.println("⏳ HTTP maç henüz bitmemiş: " + name);
                     continue;
@@ -39,8 +42,12 @@ public class ControlScraper {
                 Thread.currentThread().interrupt();
                 throw new IllegalStateException("HTTP control interrupted", ex);
             } catch (java.io.IOException ex) {
+                failedChecks++;
                 System.out.println("⚠️ HTTP skor alınamadı: " + name + " | " + ex.getMessage());
             }
+        }
+        if (successfulChecks == 0 && failedChecks > 0) {
+            throw new IllegalStateException("All HTTP scoreboard checks failed; preserving published control data");
         }
         System.out.println("HTTP bitmiş toplam maç: " + scores.size());
         return scores;
