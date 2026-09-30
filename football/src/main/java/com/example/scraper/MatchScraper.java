@@ -437,7 +437,7 @@ private int asInt(Object value, int defaultValue) {
             if (score == null) continue;
             String homeTeam = teamName(row.path("HT"));
             String awayTeam = teamName(row.path("AT"));
-            if (homeTeam.equals("-") || awayTeam.equals("-")) continue;
+            // A missing opponent label must not discard an otherwise valid historical score.
             String date = row.path("POFMD").asText("-");
             String league = row.path("LG").path("N").asText("-");
             MatchResult match = new MatchResult(homeTeam, awayTeam, score[0], score[1], date, league, type, summaryUrl);
