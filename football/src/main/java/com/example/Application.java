@@ -141,7 +141,10 @@ public class Application {
 			System.out.println("futbol.html oluşturuldu.");
 			JsonStorage.save("futbol", "RealScores", controlDate, scraper.getResults());
 		} catch (Exception e) {
-			System.out.println("GENEL HATA: " + e.getMessage()); e.printStackTrace();
+			
+            if (e instanceof HistoryApiClient.RateLimitException) throw (HistoryApiClient.RateLimitException) e;
+            if (Thread.currentThread().isInterrupted()) throw new IllegalStateException("HTTP control interrupted", e);
+System.out.println("GENEL HATA: " + e.getMessage()); e.printStackTrace();
 		} finally { if (scraper != null) scraper.close(); }
 	}
 
