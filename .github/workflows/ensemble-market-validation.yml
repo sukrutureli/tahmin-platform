@@ -1,0 +1,101 @@
+name: Ensemble Market Validation (Artifacts Only)
+on:
+  push:
+    branches: ['experiment/ensemble-market-validation']
+    paths: ['experiments/ensemble_validation/**', '**/experiment/*.java', '.github/workflows/ensemble-market-validation.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: ensemble-validation-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  benchmark:
+    if: github.ref == 'refs/heads/experiment/ensemble-market-validation'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: sukrutureli/fathertahmin
+          ref: '6bc28f1063c1968b8c31dc43a322dbc2439110d7'
+          path: published
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: sukrutureli/fathertahmin
+          ref: '700bc50bd7b63a616a8b9a61d4aa6de2f7e2a14c'
+          path: archive
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: balanced-history-comparison-2026-10-01
+          run-id: 36802060423
+          github-token: ${{ github.token }}
+          path: reference
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+          cache-dependency-path: |
+            football/pom.xml
+            basketball/pom.xml
+      - name: Verify feature and validation rules
+        run: python -m unittest discover -s experiments/ensemble_validation -v
+      - name: Freeze paired inputs and feature ablations
+        run: python experiments/ensemble_validation/prepare.py --published published --archive archive --reference reference --output pipeline-output --holdout 2026-10-01
+      - name: Replay original football models
+        working-directory: football
+        run: mvn -B clean compile exec:java -Dexec.mainClass=com.example.experiment.ExperimentReplay -Dexec.args="../pipeline-output/football-inputs.json ../pipeline-output/football-replay.json"
+      - name: Replay original basketball models
+        working-directory: basketball
+        run: mvn -B clean compile exec:java -Dexec.mainClass=com.basketbol.experiment.ExperimentReplay -Dexec.args="../pipeline-output/basketball-inputs.json ../pipeline-output/basketball-replay.json"
+      - name: Validate baseline parity and train on earlier days only
+        run: python experiments/ensemble_validation/report.py --output pipeline-output
+      - name: Verify provenance and history boundaries
+        env:
+          SOURCE_SHA: ${{ github.sha }}
+          RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          python - <<'PY'
+          import json, os, subprocess
+          from pathlib import Path
+          root = Path("pipeline-output")
+          for sport in ("football", "basketball"):
+              rows = json.loads((root / (sport + "-replay.json")).read_text())
+              assert len({(r["date"], r["eventId"]) for r in rows}) == len(rows)
+              for row in rows:
+                  assert row["role"] == ("holdout" if row["date"] == "2026-10-01" else "training")
+                  for variant in row["variants"].values():
+                      for side in ("home", "away"):
+                          assert all(r["date"] < row["date"] for r in variant.get("audit", {}).get(side, {}).get("rows", []))
+          manifest = json.loads((root / "input-manifest.json").read_text())
+          manifest.update({"sourceSha": os.environ["SOURCE_SHA"], "runUrl": os.environ["RUN_URL"], "publishedSha": subprocess.check_output(["git", "-C", "published", "rev-parse", "HEAD"], text=True).strip(), "archiveSha": subprocess.check_output(["git", "-C", "archive", "rev-parse", "HEAD"], text=True).strip(), "referenceManifest": json.loads(Path("reference/manifest.json").read_text())})
+          (root / "input-manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2))
+          PY
+      - name: Render private artifact previews
+        run: |
+          google-chrome --headless=new --no-sandbox --disable-gpu --screenshot="$PWD/pipeline-output/desktop.png" --window-size=1440,1000 "file://$PWD/pipeline-output/models.html" >/tmp/render.log 2>&1
+          google-chrome --headless=new --no-sandbox --disable-gpu --screenshot="$PWD/pipeline-output/mobile.png" --window-size=390,844 "file://$PWD/pipeline-output/index.html" >>/tmp/render.log 2>&1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ensemble-market-validation-2026-10-01
+          path: pipeline-output/
+          if-no-files-found: error
+          retention-days: 30
+      - name: Upload failed-run diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ensemble-market-validation-diagnostics
+          path: pipeline-output/
+          if-no-files-found: ignore
+          retention-days: 7
