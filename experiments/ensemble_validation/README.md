@@ -21,6 +21,12 @@ tam eşleşmeyen bir aday ağırlık seçiminde yarışamaz.
 
 Eski altı girdi; dengeli altı; basit geniş geçmiş; yalnız güncellik; yalnız saha;
 dengeli geniş; güncellik/saha/form çıkarılmış sürümler ve H2H çıkarılmış kontrol.
+Altı maç için de basit ve güncellik/saha/form çıkarılmış kontroller bulunur.
+Eski arşivin yıl içermeyen Türkçe kısa tarihleri, listenin en yeniden eskiye
+sıralandığı varsayımıyla maç gününden geriye doğru yıl çıkarılarak okunur.
+Aynı gün satırları alınmaz. Ham tarih ve dateInferred/inferredDateCount kaydedilir;
+yılı çıkarılan tarihler doğrulanmış tarih değildir. Bir yıldan uzun ara veren
+takımlarda belirsizlik kalır; güncellik katkısı bu sınırlamayla yorumlanmalıdır.
 Geniş geçmiş, önceki deneyin 1 Ekim artifact'indeki dondurulmuş takım havuzundan
 gelir; yeniden HTTP istekleri yoktur. Önceki günlerde sadece aynı tam takım adıyla
 eşleşen takımların geniş geçmişi bulunur. Geniş geçmiş geriye dönük tüm maçlarda

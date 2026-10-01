@@ -2,12 +2,17 @@ import copy
 import unittest
 from datetime import date
 from prepare import archived,filtered,weighted_stats
-from report import metrics,fit,vector,result,poisson_expectation,candidate_vector
+from report import metrics,fit,vector,result,poisson_expectation,candidate_vector,evaluate
 
 class ValidationTests(unittest.TestCase):
  def test_future_history_excluded_and_duplicates_removed(self):
   rows=[{'id':'x','date':'2026-09-30'},{'id':'x','date':'2026-09-30'},{'id':'y','date':'2026-10-01'}]
   self.assertEqual(filtered(rows,date(2026,10,1),20),[rows[0]])
+ def test_yearless_archive_dates_roll_backward_without_including_today(self):
+  def row(d):return {'homeTeam':'A','awayTeam':'B','homeScore':1,'awayScore':0,'matchDate':d}
+  rows=archived([row('2 Oca'),row('1 Oca'),row('30 Ara'),row('15 Ağu')],'A',date(2026,1,2),'football')
+  self.assertEqual([r['date'] for r in rows],['2026-01-01','2025-12-30','2025-08-15'])
+  self.assertTrue(all(r['dateInferred'] for r in rows))
  def test_unknown_basketball_tie_not_classified_as_loss(self):
   r=archived([{'homeTeam':'A','awayTeam':'B','homeScore':80,'awayScore':80,'matchDate':'30 Eylül 2026'}],'A',date(2026,10,1),'basketball')
   self.assertIsNone(r[0]['win'])
@@ -26,11 +31,17 @@ class ValidationTests(unittest.TestCase):
   self.assertIsNone(result({'realScore':'91-69','odds':{'hOverUnderValue':160}},'basketball','OU'))
   self.assertIsNone(result({'realScore':'91-69','odds':{}},'basketball','OU'))
  def test_fitted_choices_cannot_read_holdout_outcomes(self):
-  prediction={'pHome':.6,'pDraw':.2,'pAway':.2,'pOver25':.6,'pBttsYes':.6}
-  rows=[{'date':d,'realScore':'2-1','variants':{'legacy':{'models':{'EnsembleModel':prediction}}},'odds':{}} for d in ['2026-09-29','2026-09-30'] for i in range(20)]
-  a=fit(rows,'football','MS');b=fit(copy.deepcopy(rows),'football','MS')
-  self.assertEqual(a['candidate'],b['candidate']);self.assertEqual(a['threshold'],b['threshold'])
-  self.assertLessEqual(a['candidate'][2],.5)
+  prediction={'pHome':.6,'pDraw':.2,'pAway':.2,'pOver25':.6,'pBttsYes':.6,'scoreline':'2-1'}
+  stats={'avgGF':1.5,'avgGA':1,'avgPointsPerMatch':1,'rating100':50}
+  entry={'models':{'EnsembleModel':prediction},'match':{'homeStats':stats,'awayStats':stats}}
+  rows=[{'eventId':str(i)+d,'date':d,'role':'training','realScore':'2-1','published':prediction,'variants':{'legacy':entry},'odds':{}} for d in ['2026-09-29','2026-09-30'] for i in range(20)]
+  held=copy.deepcopy(rows[0]);held.update(date='2026-10-01',role='holdout',realScore='2-1');rows.append(held)
+  first=evaluate({'football':rows})
+  rows[-1]['realScore']='0-9'
+  second=evaluate({'football':rows})
+  self.assertEqual(first['recommendations'],second['recommendations'])
+  self.assertEqual([m['training'] for m in first['markets']],[m['training'] for m in second['markets']])
+  self.assertNotEqual(first['markets'][0]['holdout']['accuracy'],second['markets'][0]['holdout']['accuracy'])
  def test_incomplete_model_cannot_win_by_dropping_bad_predictions(self):
   base={'pHome':.6,'pDraw':.2,'pAway':.2}
   perfect={'pHome':.99,'pDraw':.005,'pAway':.005}

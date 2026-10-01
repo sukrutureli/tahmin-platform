@@ -180,7 +180,7 @@ def evaluate(data):
     if variant=='legacy':continue
     for role,subset in (('training',train),('holdout',test)):
      paired=[r for r in subset if variant in r['variants']]
-     reference='wide-balanced' if variant.startswith('wide-no-') else 'legacy'
+     reference='wide-balanced' if variant.startswith('wide-no-') else 'six-balanced' if variant.startswith('six-no-') else 'legacy'
      paired=[r for r in paired if reference in r['variants']]
      paired=[r for r in paired if candidate_vector(r,sport,market,(variant,BASE[sport],0)) is not None and candidate_vector(r,sport,market,(reference,BASE[sport],0)) is not None]
      new=metrics(samples(paired,sport,market,(variant,BASE[sport],0)),labels)
@@ -189,13 +189,14 @@ def evaluate(data):
                               'deltaLogLoss':new['logLoss']-old['logLoss'] if new and old else None})
   candidates={('legacy',BASE[sport])}
   for r in train:
-   for v in ('legacy','six-balanced'):
+   for v in ('legacy','six-balanced','six-simple','six-no-recency','six-no-venue','six-no-form'):
     if v not in r['variants']:continue
     for model in r['variants'][v]['models']:
      if score_value(r,sport,(v,model)) is not None:candidates.add((v,model))
     if sport=='football':candidates.add((v,'PoissonExpectation'))
   scored=[(score_metrics(train,sport,c),c) for c in sorted(candidates)]
-  scored=[(m,c) for m,c in scored if m and m['count']>=30]
+  required=score_metrics(train,sport,('legacy',BASE[sport]))
+  scored=[(m,c) for m,c in scored if m and required and m['count']==required['count'] and m['count']>=30]
   best=min(scored,key=lambda x:(x[0]['teamMAE'],x[1]))[1] if scored else ('legacy',BASE[sport])
   report['recommendations'][sport]['score']={'candidate':list(best),'provisional':True}
   for c in sorted(candidates):report['scores'].append({'sport':sport,'candidate':list(c),'training':score_metrics(train,sport,c),'holdout':score_metrics(test,sport,c),'chosenOnTraining':c==best})
@@ -207,7 +208,7 @@ def page(title,body):return "<!DOCTYPE html><html lang='tr'><head><meta charset=
 def table(headers,rows):return "<div class='scroll'><table><tr>"+''.join('<th>'+html.escape(h)+'</th>' for h in headers)+"</tr>"+''.join('<tr>'+''.join('<td>'+html.escape(str(v))+'</td>' for v in row)+'</tr>' for row in rows)+"</table></div>"
 
 def render(output,data,report):
- note="<p class='note'>Önceki günler eğitim, 1 Ekim ayrı kontrol günüdür. Bugünün henüz tamamlanmayan sonuçları ölçüme girmez. Adaylar optimizasyonu kanıtlanmış model değildir; yayın ve Telegram değişmez. Bütün tahmin yönleri gösterilir; seçim eşiği ayrı değerlendirilir.</p>"
+ note="<p class='note'>Önceki günler eğitim, 1 Ekim ayrı kontrol günüdür. Bugünün henüz tamamlanmayan sonuçları ölçüme girmez. Adaylar optimizasyonu kanıtlanmış model değildir; yayın ve Telegram değişmez. Bütün tahmin yönleri gösterilir; seçim eşiği ayrı değerlendirilir. Eski arşivlerde yıl bulunmayan tarihler sıra ve maç gününe göre çıkarılmıştır; ham tarih ve çıkarılan tarih sayısı JSON denetiminde bulunur, özellikle uzun aralarda belirsizlik vardır.</p>"
  body=note
  for sport,rows in data.items():
   for r in rows:

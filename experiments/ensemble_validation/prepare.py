@@ -8,8 +8,13 @@ from datetime import date, datetime
 from pathlib import Path
 
 MONTHS={m:i+1 for i,m in enumerate('Ocak Şubat Mart Nisan Mayıs Haziran Temmuz Ağustos Eylül Ekim Kasım Aralık'.split())}
+MONTHS.update({m[:3]:i for m,i in list(MONTHS.items())})
 PROFILES={
  'six-balanced':(False,True,True,True),
+ 'six-simple':(False,False,False,False),
+ 'six-no-recency':(False,False,True,True),
+ 'six-no-venue':(False,True,False,True),
+ 'six-no-form':(False,True,True,True),
  'wide-simple':(True,False,False,False),
  'wide-recency':(True,True,False,False),
  'wide-venue':(True,False,True,False),
@@ -23,28 +28,36 @@ def dump(path,value):
  path=Path(path);path.parent.mkdir(parents=True,exist_ok=True)
  path.write_text(json.dumps(value,ensure_ascii=False,indent=2,allow_nan=False),encoding='utf-8')
 
-def read_date(s):
+def read_date(s,anchor=None):
  try:return date.fromisoformat(s[:10])
  except (ValueError,TypeError):pass
  p=str(s).split()
+ if len(p)==2 and anchor is not None:
+  try:
+   d=date(anchor.year,MONTHS[p[1]],int(p[0]))
+   return d if d<=anchor else date(anchor.year-1,MONTHS[p[1]],int(p[0]))
+  except (ValueError,KeyError):return None
  try:return date(int(p[2]),MONTHS[p[1]],int(p[0]))
  except (ValueError,KeyError,IndexError):return None
 
-def friendly(s):return any(k in str(s).casefold() for k in ('hazırlık','friendly','preseason'))
+def friendly(s):return str(s).casefold()=='haz' or any(k in str(s).casefold() for k in ('hazırlık','friendly','preseason'))
 
 def archived(rows,team,cutoff,sport):
- out=[]
+ out=[];anchor=cutoff
  for r in rows:
-  d=read_date(r.get('matchDate'))
+  raw_date=r.get('matchDate');d=read_date(raw_date,anchor)
   if not d or d>=cutoff or r.get('status','finished')!='finished':continue
   if r.get('homeTeam')==team:venue,gf,ga='home',r['homeScore'],r['awayScore']
   elif r.get('awayTeam')==team:venue,gf,ga='away',r['awayScore'],r['homeScore']
   else:continue
+  inferred=len(str(raw_date).split())==2
+  if inferred:anchor=d
   known=sport=='football' or gf!=ga
   out.append({'id':'|'.join(str(r.get(k)) for k in ('matchDate','homeTeam','awayTeam')),
               'date':d.isoformat(),'venue':venue,'for':gf,'against':ga,
               'win':int(gf>ga) if known else None,'draw':int(gf==ga) if known else None,
-              'tournament':r.get('tournament',''),'source':'frozen-six'})
+              'tournament':r.get('tournament',''),'source':'frozen-six',
+              'rawDate':raw_date,'dateInferred':inferred})
  return sorted({r['id']:r for r in out}.values(),key=lambda r:r['date'],reverse=True)
 
 def filtered(rows,cutoff,limit):
@@ -76,6 +89,7 @@ def weighted_stats(rows,cutoff,sport,venue,recency,venue_split,recent_mix,no_for
  total=sum(w for r,w in pairs)
  ess=total*total/sum(w*w for r,w in pairs) if total else 0
  audit={'count':len(rows),'effectiveCount':ess,'venueCount':len(relevant),
+        'inferredDateCount':sum(r.get('dateInferred',False) for r in rows),
         'unknownFinalCount':sum(r.get('win') is None for r in rows),'rows':rows}
  if sport=='football':
   count=len(points)
@@ -133,7 +147,7 @@ def assemble(sources,reference,output,holdout):
      if not rows:
       audits.append({'count':0,'fallback':'unchanged frozen baseline stats; no exact-name dated rows'})
       continue
-     st,audit=weighted_stats(rows,cutoff,sport,v,decay,venue,mix,name=='wide-no-form')
+     st,audit=weighted_stats(rows,cutoff,sport,v,decay,venue,mix,name.endswith('-no-form'))
      match[side].update(st);audits.append(audit)
     variants[name]={'match':match,'audit':{'home':audits[0],'away':audits[1],
                                         'historicalWideScope':'exact team-name overlap with frozen 1 October history pool; no future rows'}}
