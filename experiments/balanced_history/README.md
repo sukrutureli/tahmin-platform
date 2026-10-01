@@ -45,6 +45,10 @@ geçmişten, zayıf örneklerde önselden gelir; futbol Poisson kullanır.
   Ay kimlikleri sunucunun `metaData.rounds` listesinden alınır. En fazla 12
   mevcut ay ziyaret edilir; yeterli örnekte durulur. Takım adı değil ID eşleşir.
   Satırdaki `team` ve `teamType` rakibe aittir; ev/deplasman ters çevrilir.
+- Ham Broadage saatleri UTC'dir: örnek futbol başlangıcı 18:45 ↔ Nesine
+  21:45 ve basketbol 00:30 ↔ Nesine 03:30 doğrulandı. Gün sınırı filtresinden
+  önce +03:00 İstanbul tarihine çevrilir. Hedef maçın Broadage ID'si ayrıca
+  geçmişten dışlanır. Futbolda form sonucu normal süre sonucudur.
 - Bitmiş durumlar 5/9/11; basketbol 11 dışlanır. Uzatmalı satırda açık normal
   süre skoru yoksa satır dışlanır. Futbol normal süre skoru ayrı kullanılır.
 - İstek aralığı 600 ms, takım/URL önbelleği, 25 saniye timeout, geçici ağ ve

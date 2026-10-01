@@ -35,6 +35,13 @@ class ExperimentTests(unittest.TestCase):
     def test_unfinished_future_and_same_day_excluded(self):
         for row in (self.schedule(status={"id":2}),self.schedule(date="10/02/2026 12:00:00"),self.schedule(date="10/01/2026 00:01:00")):
             self.assertIsNone(model.schedule_row(row,self.cutoff,"basketball"))
+        self.assertIsNone(model.schedule_row(self.schedule(date="09/30/2026 22:15:00"),self.cutoff,"basketball"))
+        self.assertEqual(model.parse_date("09/30/2026 22:15:00"),date(2026,10,1))
+
+    def test_football_extra_time_result_does_not_change_regulation_form(self):
+        row=self.schedule(scores={"home":{"ordinary":1,"current":2},"away":{"ordinary":1,"current":1}})
+        parsed=model.schedule_row(row,self.cutoff,"football")
+        self.assertEqual((parsed["win"],parsed["draw"],parsed["for"],parsed["finalFor"]),(0,1,1,2))
 
     def test_opponent_orientation(self):
         row=model.schedule_row(self.schedule(teamType="home"),self.cutoff,"basketball")

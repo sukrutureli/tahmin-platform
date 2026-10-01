@@ -11,7 +11,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
@@ -35,7 +35,12 @@ def parse_date(value):
         pass
     for fmt in ("%m/%d/%Y %H:%M:%S", "%d.%m.%Y"):
         try:
-            return datetime.strptime(value, fmt).date()
+            parsed = datetime.strptime(value, fmt)
+            # Broadage raw widget dates are UTC (verified against saved Nesine start times).
+            # Nesine POFMD/date snapshots use Istanbul; Turkey remains UTC+3.
+            if fmt == "%m/%d/%Y %H:%M:%S":
+                parsed += timedelta(hours=3)
+            return parsed.date()
         except ValueError:
             pass
     parts = value.split()
@@ -139,9 +144,10 @@ def schedule_row(row, cutoff, sport):
     if sport == "basketball" and ff == fa:
         return None
     tournament = row.get("tournament", {})
+    win_for, win_against = (gf, ga) if sport == "football" else (ff, fa)
     return {"id": "broadage:" + str(row["id"]), "date": played.isoformat(), "venue": side,
             "for": gf, "against": ga, "finalFor": ff, "finalAgainst": fa,
-            "win": int(ff > fa), "draw": int(ff == fa), "regulationKnown": True,
+            "win": int(win_for > win_against), "draw": int(win_for == win_against), "regulationKnown": True,
             "tournament": tournament.get("name", ""), "tournamentId": tournament.get("id"),
             "opponent": row.get("team", {}).get("name", ""), "source": "broadage-team-schedule"}
 
@@ -243,7 +249,8 @@ class Collector:
                                          "tournamentId":row.get("LG",{}).get("TID"),
                                          "opponent":row.get("AT" if side=="home" else "HT",{}).get("N",""),
                                          "source":"nesine-summary-general-and-venue"})
-            output.append({"rows":unique(rows),"source":"nesine-summary-general-and-venue","teamId":tid})
+            output.append({"rows":unique(rows),"source":"nesine-summary-general-and-venue","teamId":tid,
+                           "targetTournamentId":header.get("TOUR",{}).get("TID")})
         return output
 
     def collect(self, info, history, cutoff, sport):
@@ -286,7 +293,7 @@ class Collector:
                     for row in flatten(monthly.get("initialData")):
                         raw_count += 1
                         parsed = schedule_row(row, cutoff, sport)
-                        if parsed:
+                        if parsed and str(row.get("id")) != field("MatchId"):
                             collected.append(parsed)
                     collected = unique(collected)
                     limit = CONFIG[sport]["history_limit"]
