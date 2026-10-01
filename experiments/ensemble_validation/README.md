@@ -10,6 +10,13 @@ gerçek EnsembleModel ayrı; PoissonGoalModel ayrıca teşhis amaçlı. Basketbo
 HeuristicPredictor, FormMomentumModel ve gerçek ensemble ayrı. NormalizedFormModel
 sadece eski /10 form zayıflatmasını kaldıran bağımsız adaydır; üretim sınıfı değişmez.
 
+Futbolun orijinal form modeli eksik/sıfır MS oranlarında 1/0 ve Infinity/Infinity
+nedeniyle NaN üretiyor. ValidOddsFormModel üç oranın tamamı geçerli değilse yalnız
+bu modelin piyasa karışımını atlar; form hesabını korur. EnsembleValidOddsForm
+aynı ensemble'a bu güvenli adayı ekler. Bu iki deney sınıfı üretimi değiştirmez.
+Geçersiz orijinal hesaplar sayılır ve açıkça dışlanır; eğitim kapsamı baseline ile
+tam eşleşmeyen bir aday ağırlık seçiminde yarışamaz.
+
 ## Veri deneyleri
 
 Eski altı girdi; dengeli altı; basit geniş geçmiş; yalnız güncellik; yalnız saha;

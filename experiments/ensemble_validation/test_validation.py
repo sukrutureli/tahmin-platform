@@ -2,7 +2,7 @@ import copy
 import unittest
 from datetime import date
 from prepare import archived,filtered,weighted_stats
-from report import metrics,fit,vector,result,poisson_expectation
+from report import metrics,fit,vector,result,poisson_expectation,candidate_vector
 
 class ValidationTests(unittest.TestCase):
  def test_future_history_excluded_and_duplicates_removed(self):
@@ -31,6 +31,16 @@ class ValidationTests(unittest.TestCase):
   a=fit(rows,'football','MS');b=fit(copy.deepcopy(rows),'football','MS')
   self.assertEqual(a['candidate'],b['candidate']);self.assertEqual(a['threshold'],b['threshold'])
   self.assertLessEqual(a['candidate'][2],.5)
+ def test_incomplete_model_cannot_win_by_dropping_bad_predictions(self):
+  base={'pHome':.6,'pDraw':.2,'pAway':.2}
+  perfect={'pHome':.99,'pDraw':.005,'pAway':.005}
+  rows=[{'date':d,'realScore':'2-1','variants':{'legacy':{'models':{'EnsembleModel':base,'ValidOddsFormModel':perfect}}},'odds':{}} for d in ['2026-09-29','2026-09-30'] for i in range(20)]
+  rows[0]['variants']['legacy']['models']['ValidOddsFormModel']={'pHome':'NaN','pDraw':.2,'pAway':.2}
+  self.assertIsNone(candidate_vector(rows[0],'football','MS',('legacy','ValidOddsFormModel',.5)))
+  fitted=fit(rows,'football','MS')
+  self.assertEqual(fitted['candidate'],['legacy','EnsembleModel',0])
+  self.assertEqual(len(fitted['excludedCandidates']),2)
+  self.assertEqual(fitted['excludedCandidates'][0]['validSettledCount'],39)
  def test_poisson_expectation_tracks_attack_and_defence(self):
   h={'avgGF':2,'avgGA':1,'avgPointsPerMatch':1,'rating100':50};a={'avgGF':1,'avgGA':1,'avgPointsPerMatch':1,'rating100':50}
   home,away=poisson_expectation({'homeStats':h,'awayStats':a})

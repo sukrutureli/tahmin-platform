@@ -20,7 +20,7 @@ def vector(p,sport,market):
  return [x/sum(v) for x in v] if sum(v)>0 else [1/len(v)]*len(v)
 
 def allowed(sport,model,market):
- return not(sport=='football' and model=='FormMomentumModel' and market!='MS')
+ return not(sport=='football' and model in ('FormMomentumModel','ValidOddsFormModel') and market!='MS')
 
 def result(row,sport,market):
  m=re.fullmatch(r'(\d+)\s*[-–]\s*(\d+)',str(row.get('realScore','')))
@@ -37,10 +37,13 @@ def candidate_vector(row,sport,market,candidate):
  variant,model,blend=candidate
  models=row['variants'].get(variant,{}).get('models',{})
  if model not in models:return None
- p=vector(models[model],sport,market)
- if blend:
-  base=vector(models[BASE[sport]],sport,market)
-  p=[(1-blend)*b+blend*x for b,x in zip(base,p)]
+ try:
+  p=vector(models[model],sport,market)
+  if blend:
+   base=vector(models[BASE[sport]],sport,market)
+   p=[(1-blend)*b+blend*x for b,x in zip(base,p)]
+ except (ValueError,TypeError,KeyError):
+  return None
  return p
 
 def wilson(hits,n):
@@ -86,10 +89,12 @@ def fit(rows,sport,market):
     if model!=BASE[sport] and allowed(sport,model,market):
      # Preserve at least half of the actual ensemble; don't replace it with a single model.
      for blend in (0.25,0.5):candidates.add((v,model,blend))
- scored=[]
+ scored=[];excluded=[]
  for c in sorted(candidates):
   items=samples(rows,sport,market,c)
-  if len(items)!=len(base_items) or not items:continue
+  if len(items)!=len(base_items) or not items:
+   excluded.append({'candidate':list(c),'validSettledCount':len(items),'requiredCount':len(base_items),'reason':'incomplete paired training coverage'})
+   continue
   m=metrics(items,labels);scored.append((m['logLoss'],c,m))
  if not scored:return {'candidate':list(base),'threshold':0,'training':None,'eligible':False}
  eligible=len(base_items)>=30 and len({r['date'] for r in rows})>=2
@@ -102,6 +107,7 @@ def fit(rows,sport,market):
  policy=max(feasible,key=lambda m:(m['selectedAccuracy'],m['coverage'])) if feasible and eligible else metrics(items,labels,0)
  return {'candidate':list(chosen[1]),'threshold':policy['threshold'],'training':policy,'eligible':eligible,
          'trainingLeaderboard':[{'candidate':list(c),'metrics':m} for loss,c,m in sorted(scored,key=lambda x:x[0])],
+         'excludedCandidates':excluded,
          'status':'exploratory; two training dates cannot establish optimality'}
 
 def parse_score(p):
@@ -145,11 +151,17 @@ def check_parity(rows,sport):
  return {'maximumProbabilityDifference':maximum,'mismatchCount':len(bad),'mismatches':bad}
 
 def evaluate(data):
- report={'markets':[],'models':[],'features':[],'scores':[],'parity':{},'recommendations':{},
+ report={'markets':[],'models':[],'features':[],'scores':[],'parity':{},'recommendations':{},'invalidPredictions':[],
          'promotion':'disabled: insufficient independent days; no production change',
          'scope':'MS1/MSX/MS2, Alt/Üst, Var/Yok where supported. Handicap, period and player markets are not modeled.',
          'scoreTarget':'Saved production settlement score; football extra-time/penalty settlement may differ from a regulation forecast.'}
  for sport,rows in data.items():
+  for r in rows:
+   for variant,entry in r['variants'].items():
+    for model in entry['models']:
+     for market in GROUPS[sport]:
+      if allowed(sport,model,market) and candidate_vector(r,sport,market,(variant,model,0)) is None:
+       report['invalidPredictions'].append({'sport':sport,'date':r['date'],'eventId':r['eventId'],'role':r['role'],'variant':variant,'model':model,'market':market,'reason':'invalid or missing probability; excluded, never clamped'})
   report['parity'][sport]=check_parity(rows,sport)
   if report['parity'][sport]['mismatchCount']:raise ValueError('Baseline parity failed: '+json.dumps(report['parity'][sport]))
   train=[r for r in rows if r['role']=='training'];test=[r for r in rows if r['role']=='holdout']
@@ -162,13 +174,15 @@ def evaluate(data):
    models=sorted({m for r in rows for m in r['variants']['legacy']['models'] if allowed(sport,m,market)})
    for model in models:
     for role,subset in (('training',train),('holdout',test)):
-     report['models'].append({'sport':sport,'market':market,'model':model,'role':role,'metrics':metrics(samples(subset,sport,market,('legacy',model,0)),labels)})
+     missing=sum(result(r,sport,market) is not None and candidate_vector(r,sport,market,('legacy',model,0)) is None for r in subset)
+     report['models'].append({'sport':sport,'market':market,'model':model,'role':role,'invalidSettledCount':missing,'metrics':metrics(samples(subset,sport,market,('legacy',model,0)),labels)})
    for variant in sorted({v for r in rows for v in r['variants']}):
     if variant=='legacy':continue
     for role,subset in (('training',train),('holdout',test)):
      paired=[r for r in subset if variant in r['variants']]
      reference='wide-balanced' if variant.startswith('wide-no-') else 'legacy'
      paired=[r for r in paired if reference in r['variants']]
+     paired=[r for r in paired if candidate_vector(r,sport,market,(variant,BASE[sport],0)) is not None and candidate_vector(r,sport,market,(reference,BASE[sport],0)) is not None]
      new=metrics(samples(paired,sport,market,(variant,BASE[sport],0)),labels)
      old=metrics(samples(paired,sport,market,(reference,BASE[sport],0)),labels)
      report['features'].append({'sport':sport,'market':market,'variant':variant,'reference':reference,'role':role,'metrics':new,'referenceMetrics':old,
@@ -215,7 +229,7 @@ def render(output,data,report):
    compact={v:{'models':entry['models'],'audit':{k:({kk:vv for kk,vv in value.items() if kk!='rows'} if isinstance(value,dict) else value) for k,value in entry.get('audit',{}).items()}} for v,entry in r['variants'].items()}
    body+="<details><summary>Her model ve veri sürümünün hesabı</summary><pre>"+html.escape(json.dumps(compact,ensure_ascii=False,indent=2))+"</pre></details></article>"
  (output/'index.html').write_text(page('1 Ekim · Ensemble ve geçmiş kıyası',body),encoding='utf-8')
- body=note+table(['Spor','Pazar','Model','Veri','N','İsabet','Brier','Log loss'],[(m['sport'],m['market'],m['model'],m['role'],m['metrics']['count'],pct(m['metrics']['accuracy']),f"{m['metrics']['brier']:.4f}",f"{m['metrics']['logLoss']:.4f}") for m in report['models'] if m['metrics']])
+ body=note+"<p>Geçersiz olasılıklar düzeltilmiş gibi gösterilmez. Geçersiz sonuç sütunu modelin hesap üretemediği tamamlanmış maçları gösterir. Eğitim kapsamı eksik adaylar seçilemez; model tablosundaki farklı N değerleri doğrudan kıyaslanmamalıdır.</p>"+table(['Spor','Pazar','Model','Veri','N','Geçersiz sonuç','İsabet','Brier','Log loss'],[(m['sport'],m['market'],m['model'],m['role'],m['metrics']['count'],m['invalidSettledCount'],pct(m['metrics']['accuracy']),f"{m['metrics']['brier']:.4f}",f"{m['metrics']['logLoss']:.4f}") for m in report['models'] if m['metrics']])
  for m in report['markets']:
   hm=m['holdout'];bm=m['baselineHoldout'];body+="<section class='box'><h2>"+m['sport']+' '+m['market']+'</h2><p>Aday: '+html.escape(str(m['training']['candidate']))+'</p>'
   if hm and bm:body+=f"<p>Kontrol gününde mevcut isabet {pct(bm['accuracy'])}; aday {pct(hm['accuracy'])}. Eşikli aday: {hm['selectedCount']}/{hm['count']} maç; isabet {pct(hm['selectedAccuracy'])}.</p>"+table(['Seçenek','Seçilen N','İsabet','%95 aralık','Brier'],[(o['option'],o['predictedCount'],pct(o['precision']),str([round(v,3) for v in o['interval95']]) if o['interval95'] else '—',f"{o['brier']:.4f}") for o in hm['options']])

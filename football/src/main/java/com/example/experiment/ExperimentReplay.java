@@ -11,12 +11,17 @@ public class ExperimentReplay {
   JsonNode inputs=mapper.readTree(Path.of(args[0]).toFile());ArrayNode output=mapper.createArrayNode();
   List<BettingAlgorithm> active=List.of(new EvidenceWeightedModel(), new SimpleHeuristicModel(), new FormMomentumModel());
   List<BettingAlgorithm> evaluated=new ArrayList<>(active);evaluated.add(new EnsembleModel(active)); evaluated.add(new PoissonGoalModel());
+  ValidOddsFormModel validForm=new ValidOddsFormModel();
+  BettingAlgorithm validEnsemble=new EnsembleModel(List.of(new EvidenceWeightedModel(),new SimpleHeuristicModel(),validForm));
+  evaluated.add(validForm);evaluated.add(validEnsemble);
   for(JsonNode input:inputs){ObjectNode row=(ObjectNode)input.deepCopy();ObjectNode variants=mapper.createObjectNode();
    var fields=input.path("variants").fields();while(fields.hasNext()){
     var field=fields.next(); Match match=mapper.treeToValue(field.getValue().path("match"),Match.class); match.getHomeStats().calculateAvgPointsPerMatch(); match.getAwayStats().calculateAvgPointsPerMatch(); match.getHomeStats().calculateH2hWinRate(); match.getAwayStats().calculateH2hWinRate();
     ObjectNode variant=(ObjectNode)field.getValue().deepCopy();ObjectNode predictions=mapper.createObjectNode();
     for(BettingAlgorithm model:evaluated){PredictionResult result=model.predict(match,Optional.ofNullable(match.getOdds()));
-     String key=model.name();
+     String key=model==validEnsemble ? "EnsembleValidOddsForm" : model.name();
+     if(model==validForm && (!Double.isFinite(result.getpHome()) || !Double.isFinite(result.getpDraw()) || !Double.isFinite(result.getpAway())))
+      throw new IllegalStateException("Odds-guarded form returned invalid probabilities");
      predictions.set(key,mapper.valueToTree(result));
     }
     variant.set("models",predictions); variants.set(field.getKey(),variant);
