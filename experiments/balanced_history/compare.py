@@ -553,7 +553,7 @@ def outcomes(real, row):
               "Üst":int(home+away>row["new"]["line"]),"Alt":int(home+away<row["new"]["line"])}
     if row["sport"] == "football":
         result.update({"MSX":int(home==away),"Var":int(home>0 and away>0),"Yok":int(not(home>0 and away>0))})
-    if home+away == row["new"]["line"]:
+    if home+away == row["new"]["line"] or row["new"]["line"] <= 0:
         result.pop("Üst",None);result.pop("Alt",None)
     return result
 
@@ -569,7 +569,12 @@ def evaluate(rows, published):
             p = published/sport_folder/"data"/("RealScores-"+row["date"]+".json")
             real = json.loads(p.read_text()) if p.exists() else []
             by_date[key] = {(r.get("homeTeam"),r.get("awayTeam")):r for r in real}
-        real = by_date[key].get((row["homeTeam"],row["awayTeam"]))
+        # Production settlement stores MatchInfo display names; model history may use full names.
+        # Prefer the exact saved display pair (e.g. U20), never fuzzy team-name matching.
+        real = next((r for (home,away),r in by_date[key].items()
+                     if home + " - " + away == row["name"]), None)
+        if real is None and row["name"] == row["homeTeam"] + " - " + row["awayTeam"]:
+            real = by_date[key].get((row["homeTeam"],row["awayTeam"]))
         result = outcomes(real,row) if real else None
         if result is None:
             missing += 1

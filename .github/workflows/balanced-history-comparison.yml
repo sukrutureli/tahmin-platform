@@ -47,6 +47,11 @@ jobs:
           python-version: '3.11'
       - name: Verify scoring and history rules
         run: python -m unittest discover -s experiments/balanced_history -v
+      - name: Restore HTTP snapshots for this frozen comparison
+        uses: actions/cache@v4
+        with:
+          path: comparison-output/http-cache
+          key: balanced-http-v1-${{ env.COMPARISON_DATE }}-${{ env.PUBLISHED_REF }}
       - name: Generate frozen baseline and experimental comparison
         run: |
           python experiments/balanced_history/compare.py --published published --date "$COMPARISON_DATE" --output comparison-output
@@ -82,6 +87,12 @@ jobs:
           assert len(rows) == manifest["matchCount"]
           print(json.dumps({k: manifest[k] for k in ("matchCount", "footballCount", "basketballCount", "fallbackMatches", "sourceSha", "publishedSha")}, indent=2))
           PY
+      - name: Render desktop and phone previews without publishing
+        run: |
+          google-chrome --headless=new --no-sandbox --disable-gpu --hide-scrollbars --screenshot="$PWD/comparison-output/desktop.png" --window-size=1440,1000 "file://$PWD/comparison-output/index.html" >/tmp/comparison-render.log 2>&1
+          google-chrome --headless=new --no-sandbox --disable-gpu --hide-scrollbars --screenshot="$PWD/comparison-output/mobile.png" --window-size=390,844 "file://$PWD/comparison-output/new-basketball.html" >>/tmp/comparison-render.log 2>&1
+          test -s comparison-output/desktop.png
+          test -s comparison-output/mobile.png
       - name: Upload closed comparison
         uses: actions/upload-artifact@v4
         with:

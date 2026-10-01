@@ -100,6 +100,7 @@ class ExperimentTests(unittest.TestCase):
         outcomes=model.outcomes({"score":"91-69"},row)
         self.assertEqual(outcomes["MS1"],1)
         self.assertNotIn("Üst",outcomes)
+        self.assertNotIn("Üst",model.outcomes({"score":"91-69"},{"sport":"basketball","new":{"line":0}}))
 
     def test_summary_union_deduplicates_and_preserves_overtime_result(self):
         match={"MID":77,"POFMD":"20 Eylül 2026","HT":{"TID":1,"N":"A"},"AT":{"TID":2,"N":"B"},

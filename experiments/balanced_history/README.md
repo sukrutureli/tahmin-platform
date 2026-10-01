@@ -67,6 +67,8 @@ Mevcut olasılıklar arşivden alınır; eski HTML aynen kopyalanır. Sonuç öl
 yalnızca tarihli önceki günlerin dondurulmuş altı maç girdilerindedir. Bu
 ölçüm geniş geçmişin üstünlüğünü kanıtlamaz. Geniş geçmiş için yeni günlük
 snapshot ve gerçek sonuçları biriktirerek ileriye dönük kıyas yapmak gerekir.
+Sonuçlar modeldeki uzun takım adı yerine kaydedilen MatchInfo görünür takım
+çiftiyle tam eşleştirilir; U20 gibi etiketler korunur ve bulanık eşleşme yoktur.
 Sonuç etiketi mevcut `RealScores` settlement skorudur; oranlar ve yüzde
 karşılaştırmaları gelecekteki sonuçlardan öğrenmez. Tarih sırası korunur.
 
