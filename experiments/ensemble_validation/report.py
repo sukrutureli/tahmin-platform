@@ -175,7 +175,10 @@ def evaluate(data):
    for model in models:
     for role,subset in (('training',train),('holdout',test)):
      missing=sum(result(r,sport,market) is not None and candidate_vector(r,sport,market,('legacy',model,0)) is None for r in subset)
-     report['models'].append({'sport':sport,'market':market,'model':model,'role':role,'invalidSettledCount':missing,'metrics':metrics(samples(subset,sport,market,('legacy',model,0)),labels)})
+     paired=[r for r in subset if candidate_vector(r,sport,market,('legacy',model,0)) is not None and candidate_vector(r,sport,market,baseline) is not None]
+     mm=metrics(samples(paired,sport,market,('legacy',model,0)),labels)
+     pm=metrics(samples(paired,sport,market,baseline),labels)
+     report['models'].append({'sport':sport,'market':market,'model':model,'role':role,'invalidSettledCount':missing,'metrics':mm,'pairedBaselineMetrics':pm,'deltaLogLoss':mm['logLoss']-pm['logLoss'] if mm and pm else None})
    for variant in sorted({v for r in rows for v in r['variants']}):
     if variant=='legacy':continue
     for role,subset in (('training',train),('holdout',test)):
@@ -230,7 +233,7 @@ def render(output,data,report):
    compact={v:{'models':entry['models'],'audit':{k:({kk:vv for kk,vv in value.items() if kk!='rows'} if isinstance(value,dict) else value) for k,value in entry.get('audit',{}).items()}} for v,entry in r['variants'].items()}
    body+="<details><summary>Her model ve veri sürümünün hesabı</summary><pre>"+html.escape(json.dumps(compact,ensure_ascii=False,indent=2))+"</pre></details></article>"
  (output/'index.html').write_text(page('1 Ekim · Ensemble ve geçmiş kıyası',body),encoding='utf-8')
- body=note+"<p>Geçersiz olasılıklar düzeltilmiş gibi gösterilmez. Geçersiz sonuç sütunu modelin hesap üretemediği tamamlanmış maçları gösterir. Eğitim kapsamı eksik adaylar seçilemez; model tablosundaki farklı N değerleri doğrudan kıyaslanmamalıdır.</p>"+table(['Spor','Pazar','Model','Veri','N','Geçersiz sonuç','İsabet','Brier','Log loss'],[(m['sport'],m['market'],m['model'],m['role'],m['metrics']['count'],m['invalidSettledCount'],pct(m['metrics']['accuracy']),f"{m['metrics']['brier']:.4f}",f"{m['metrics']['logLoss']:.4f}") for m in report['models'] if m['metrics']])
+ body=note+"<p>Geçersiz olasılıklar düzeltilmiş gibi gösterilmez. Geçersiz sonuç sütunu modelin hesap üretemediği tamamlanmış maçları gösterir. Eğitim kapsamı eksik adaylar seçilemez. Eşleşen mevcut sistem ve log loss farkı yalnız aynı maçları karşılaştırır; negatif fark iyileşmedir.</p>"+table(['Spor','Pazar','Model','Veri','N','Geçersiz sonuç','İsabet','Eşleşen mevcut isabet','Brier','Log loss','Log loss farkı'],[(m['sport'],m['market'],m['model'],m['role'],m['metrics']['count'],m['invalidSettledCount'],pct(m['metrics']['accuracy']),pct(m['pairedBaselineMetrics']['accuracy']),f"{m['metrics']['brier']:.4f}",f"{m['metrics']['logLoss']:.4f}",f"{m['deltaLogLoss']:+.4f}") for m in report['models'] if m['metrics']])
  for m in report['markets']:
   hm=m['holdout'];bm=m['baselineHoldout'];body+="<section class='box'><h2>"+m['sport']+' '+m['market']+'</h2><p>Aday: '+html.escape(str(m['training']['candidate']))+'</p>'
   if hm and bm:body+=f"<p>Kontrol gününde mevcut isabet {pct(bm['accuracy'])}; aday {pct(hm['accuracy'])}. Eşikli aday: {hm['selectedCount']}/{hm['count']} maç; isabet {pct(hm['selectedAccuracy'])}.</p>"+table(['Seçenek','Seçilen N','İsabet','%95 aralık','Brier'],[(o['option'],o['predictedCount'],pct(o['precision']),str([round(v,3) for v in o['interval95']]) if o['interval95'] else '—',f"{o['brier']:.4f}") for o in hm['options']])
