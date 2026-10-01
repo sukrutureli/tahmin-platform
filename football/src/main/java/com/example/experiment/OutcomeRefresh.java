@@ -21,8 +21,8 @@ public final class OutcomeRefresh {
     String score=client.finishedScore("https://istatistik.nesine.com/"+row.path("eventId").asText()+"/ozet",1);
     if(score!=null){((ObjectNode)row).put("realScore",score);((ObjectNode)row).put("resultSource","live HTTP finished scoreboard");entry.put("score",score);entry.put("status","finished");fetched++;}
     else entry.put("status","not finished; frozen final retained if present");
+   }catch(HistoryApiClient.RateLimitException ex){entry.put("status","rate limit; refresh stopped");entry.put("error",ex.getMessage());entry.put("cooldownStopped",true);break;
    }catch(IOException ex){entry.put("status","request failed; frozen final retained if present");entry.put("error",ex.getMessage());
-    if(ex instanceof HistoryApiClient.RateLimitException){entry.put("cooldownStopped",true);break;}
    }
   }
   mapper.writerWithDefaultPrettyPrinter().writeValue(replay.toFile(),rows);
