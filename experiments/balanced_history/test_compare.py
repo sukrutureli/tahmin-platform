@@ -101,6 +101,19 @@ class ExperimentTests(unittest.TestCase):
         self.assertEqual(outcomes["MS1"],1)
         self.assertNotIn("Üst",outcomes)
 
+    def test_summary_union_deduplicates_and_preserves_overtime_result(self):
+        match={"MID":77,"POFMD":"20 Eylül 2026","HT":{"TID":1,"N":"A"},"AT":{"TID":2,"N":"B"},
+               "LG":{"TID":3,"N":"League"},"SC":[{"OBI":45,"HTS":80,"ATS":80},{"OBI":1000,"HTS":91,"ATS":88}]}
+        future=copy.deepcopy(match);future.update({"MID":78,"POFMD":"1 Ekim 2026"})
+        groups=[{"FT":ft,"TMS":[{"TID":tid,"ML":[match,future]} for tid in (1,2)]} for ft in (5,2)]
+        class FakeClient:
+            def get(self,url):
+                return {"d":{"SID":2,"HT":[{"TID":1}],"AT":[{"TID":2}]}} if url.endswith("Header") else {"d":{"SLM":{"ML":[{"TT":groups}]}}}
+        result=model.Collector(FakeClient()).summary_fallback({"detailUrl":"https://istatistik.nesine.com/123"},self.cutoff,"basketball")
+        self.assertEqual([len(r["rows"]) for r in result],[1,1])
+        self.assertEqual([r["rows"][0]["win"] for r in result],[1,0])
+        self.assertEqual(result[0]["rows"][0]["for"],80)
+
 
 if __name__=="__main__":
     unittest.main()
