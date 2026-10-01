@@ -1,0 +1,99 @@
+name: Balanced History Comparison (Artifacts Only)
+
+on:
+  push:
+    branches: ['experiment/balanced-history-comparison']
+    paths:
+      - 'experiments/balanced_history/**'
+      - '.github/workflows/balanced-history-comparison.yml'
+  workflow_dispatch:
+    inputs:
+      comparison_date:
+        description: 'Date of the frozen prediction snapshot (YYYY-MM-DD)'
+        default: '2026-10-01'
+        required: true
+      published_ref:
+        description: 'fathertahmin commit or ref containing that date'
+        default: '700bc50bd7b63a616a8b9a61d4aa6de2f7e2a14c'
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: balanced-history-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  compare:
+    if: github.ref == 'refs/heads/experiment/balanced-history-comparison'
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      COMPARISON_DATE: ${{ inputs.comparison_date || '2026-10-01' }}
+      PUBLISHED_REF: ${{ inputs.published_ref || '700bc50bd7b63a616a8b9a61d4aa6de2f7e2a14c' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: sukrutureli/fathertahmin
+          ref: ${{ env.PUBLISHED_REF }}
+          path: published
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Verify scoring and history rules
+        run: python -m unittest discover -s experiments/balanced_history -v
+      - name: Generate frozen baseline and experimental comparison
+        run: |
+          python experiments/balanced_history/compare.py --published published --date "$COMPARISON_DATE" --output comparison-output
+      - name: Validate artifact coverage and provenance
+        env:
+          SOURCE_SHA: ${{ github.sha }}
+          RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          python - <<'PY'
+          import hashlib, json, math, os, subprocess
+          from pathlib import Path
+          root = Path("comparison-output")
+          rows = json.loads((root / "predictions.json").read_text())
+          assert len({(r["sport"], r["eventId"]) for r in rows}) == len(rows)
+          for row in rows:
+              prediction = row["new"]
+              labels = ["MS1", "MSX", "MS2"] if row["sport"] == "football" else ["MS1", "MS2"]
+              assert abs(sum(prediction["probabilities"][k] for k in labels) - 1) < 1e-9
+              assert all(math.isfinite(v) and 0 <= v <= 1 for v in prediction["probabilities"].values())
+              for side in ("homeStats", "awayStats"):
+                  past = prediction[side]["rows"]
+                  assert len({r["id"] for r in past}) == len(past)
+                  assert all(r["date"] < os.environ["COMPARISON_DATE"] for r in past)
+          for sport, folder in (("football", "futbol"), ("basketball", "basketbol")):
+              assert (root / ("baseline-" + sport + ".html")).read_bytes() == Path("published", folder, folder + ".html").read_bytes()
+              for path in Path("published", folder, "data").glob("*-" + os.environ["COMPARISON_DATE"] + ".json"):
+                  target = root / "frozen-inputs" / folder / path.name
+                  target.parent.mkdir(parents=True, exist_ok=True)
+                  target.write_bytes(path.read_bytes())
+          manifest = json.loads((root / "manifest.json").read_text())
+          manifest.update({"sourceSha": os.environ["SOURCE_SHA"], "publishedSha": subprocess.check_output(["git", "-C", "published", "rev-parse", "HEAD"], text=True).strip(), "runUrl": os.environ["RUN_URL"]})
+          (root / "manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2))
+          assert len(rows) == manifest["matchCount"]
+          print(json.dumps({k: manifest[k] for k in ("matchCount", "footballCount", "basketballCount", "fallbackMatches", "sourceSha", "publishedSha")}, indent=2))
+          PY
+      - name: Upload closed comparison
+        uses: actions/upload-artifact@v4
+        with:
+          name: balanced-history-comparison-${{ env.COMPARISON_DATE }}
+          path: comparison-output/
+          if-no-files-found: error
+          retention-days: 30
+      - name: Upload diagnostics if generation fails
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: balanced-history-diagnostics-${{ env.COMPARISON_DATE }}
+          path: comparison-output/
+          if-no-files-found: ignore
+          retention-days: 7
