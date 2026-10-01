@@ -50,6 +50,10 @@ geçmişten, zayıf örneklerde önselden gelir; futbol Poisson kullanır.
 - İstek aralığı 600 ms, takım/URL önbelleği, 25 saniye timeout, geçici ağ ve
   502/503/504 için en fazla üç deneme. 429 bütün koşuyu durdurur; kota aşma
   yöntemleri yoktur. Diğer endpoint hataları görünür arşiv fallback üretir.
+- Broadage geçmişi boşsa veya dondurulmuş son altı girdiden daha eskiyse
+  Nesine Summary genel + saha listelerinin benzersiz birleşimi kullanılır.
+  Bu kaynak çoğu zaman 6–12 maç sağlar; 20/25 garanti edilmez. O da eskiyse
+  arşiv korunur. Böylece daha büyük ama daha eski örnek, yakın formu silmez.
 
 ID alanları Nesine/Broadage arasında farklıdır. İki kaynağı havuzlayıp aynı
 maçı iki kez saymayız. Kaynak değişimi karşılaştırmada görülebilir. Aynı
