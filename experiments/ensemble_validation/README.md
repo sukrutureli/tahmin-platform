@@ -85,3 +85,32 @@ Bu bir eğitim kısıtıdır; yarın daha kötü sonuç çıkmayacağını garan
 skor için aynı kapsamda en düşük takım MAE seçilir. Geniş geçmiş/alt model
 yoksa legacy ensemble'a dönüş önceden belirtilir; kötü maçlar düşürülmez.
 Kurallar 2 Ekim ve sonrası için dondurulur, otomatik üretime alınmaz.
+
+
+## Pazar özellikleri ve günlük defter
+
+HistoryBttsModel, gol atma/yeme ve tarihsel KG sıklığını Beta(1,1)
+yumuşatmasıyla kullanır. HistoryTotalsModel futbolda tarihsel Üst sıklığını
+hücum/savunma gol beklentisiyle, basketbolda beklenen toplamı geçmiş toplam
+skor varyansı ve o maçın baremiyle birleştirir. 8 sayı basketbol standart
+sapma tabanıdır; öğrenilmiş lig parametresi değildir. Bunlar sabit deney
+hipotezleridir; orijinal üretim modeli değiştirilmez. Yalnız doğru pazarda
+yarışırlar. error-diagnostics.json ve errors.html doğru/yanlış maçların
+özelliklerini, örnek sayısını ve bütün hataları ayrı verir.
+
+experiment-settings.json gün, yayımlanmış kaynak SHA'sı ve önceki başarılı
+denemenin artifact/run kimliğini belirler. Önceki günden kural
+before-results-predictions.json içine, güncel sonuç yenilemesinden önce
+kaydedilir. Aynı günden öğrenilen kural bağımsız doğrulamada kullanılamaz.
+Maç başlamadan kayıt zamanı ayrıca denetlenir; geç oluşturulan tahmin
+gerçek ileriye dönük tahmin gibi sayılmaz. daily-evaluation.json ve
+daily-journal.json önceki artifact defterini taşır; aynı gün tekrarında
+satırları çoğaltmaz. Günlük snapshot'ta henüz bitmeyen maçlar paydada
+yoktur; bu yüzden farklı snapshot'ların N değerleri değişebilir.
+
+Geniş geçmiş havuzu hâlâ dondurulmuş 1 Ekim referansından gelir; sonraki
+günlerin yeni takımlarında yoksa altı maç/baseline kullanılır. Yeni
+takımlar için güncel geniş API havuzu toplanmış gibi gösterilmez.
+GitHub schedule sadece default branch'te çalıştığından main'e cron
+eklenmez; günlük deney ayrıca ChatGPT görevinden settings dosyası
+güncellenerek tetiklenir. Çıktılar sadece Actions artifact'tir.

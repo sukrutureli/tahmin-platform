@@ -21,6 +21,8 @@ def vector(p,sport,market):
  return [x/sum(v) for x in v] if sum(v)>0 else [1/len(v)]*len(v)
 
 def allowed(sport,model,market):
+ if model=='HistoryBttsModel':return sport=='football' and market=='BTTS'
+ if model=='HistoryTotalsModel':return market=='OU'
  return not(sport=='football' and model in ('FormMomentumModel','ValidOddsFormModel') and market!='MS')
 
 def result(row,sport,market):
@@ -219,14 +221,15 @@ def evaluate(data):
    hm=metrics(samples(test,sport,market,c),labels,fitted['threshold']);bm=metrics(samples(test,sport,market,baseline),labels)
    report['markets'].append({'sport':sport,'market':market,'training':fitted,'holdout':hm,'baselineHoldout':bm})
    report['recommendations'][sport][market]={'candidate':list(c),'threshold':fitted['threshold'],'provisional':True}
-   models=sorted({m for r in rows for m in r['variants']['legacy']['models'] if allowed(sport,m,market)})
+   models=sorted({m for r in rows for entry in r['variants'].values() for m in entry['models'] if allowed(sport,m,market)})
    for model in models:
+    model_variant='six-balanced' if model.startswith('History') else 'legacy'
     for role,subset in (('training',train),('holdout',test)):
-     missing=sum(result(r,sport,market) is not None and candidate_vector(r,sport,market,('legacy',model,0)) is None for r in subset)
-     paired=[r for r in subset if candidate_vector(r,sport,market,('legacy',model,0)) is not None and candidate_vector(r,sport,market,baseline) is not None]
-     mm=metrics(samples(paired,sport,market,('legacy',model,0)),labels)
+     missing=sum(result(r,sport,market) is not None and candidate_vector(r,sport,market,(model_variant,model,0)) is None for r in subset)
+     paired=[r for r in subset if candidate_vector(r,sport,market,(model_variant,model,0)) is not None and candidate_vector(r,sport,market,baseline) is not None]
+     mm=metrics(samples(paired,sport,market,(model_variant,model,0)),labels)
      pm=metrics(samples(paired,sport,market,baseline),labels)
-     report['models'].append({'sport':sport,'market':market,'model':model,'role':role,'invalidSettledCount':missing,'metrics':mm,'pairedBaselineMetrics':pm,'deltaLogLoss':mm['logLoss']-pm['logLoss'] if mm and pm else None})
+     report['models'].append({'sport':sport,'market':market,'model':model,'variant':model_variant,'role':role,'invalidSettledCount':missing,'metrics':mm,'pairedBaselineMetrics':pm,'deltaLogLoss':mm['logLoss']-pm['logLoss'] if mm and pm else None})
    for variant in sorted({v for r in rows for v in r['variants']}):
     if variant=='legacy':continue
     for role,subset in (('training',train),('holdout',test)):
@@ -256,11 +259,12 @@ def evaluate(data):
 
 STYLE="body{font-family:Segoe UI,Arial;background:#f3f6fa;color:#222;margin:0}main{max-width:1450px;padding:18px;margin:auto}h1{color:#004d80}nav{display:flex;gap:18px;flex-wrap:wrap}a{color:#0077cc}.box{background:white;border:1px solid #dce3ec;border-radius:10px;padding:16px;margin:16px 0}.scroll{overflow-x:auto}table{width:100%;border-collapse:collapse;background:white}th{background:#0077cc;color:white}td,th{padding:10px;text-align:center;border-bottom:1px solid #ddd}tr:nth-child(even){background:#f3f6fa}.note{padding:12px;background:#fff1df;border-radius:8px}summary{cursor:pointer;font-weight:bold}pre{white-space:pre-wrap;word-break:break-word}"
 def pct(x):return '—' if x is None else f'%{100*x:.1f}'
-def page(title,body):return "<!DOCTYPE html><html lang='tr'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>"+html.escape(title)+"</title><style>"+STYLE+"</style></head><body><main><h1>"+html.escape(title)+"</h1><nav><a href='index.html'>Günlük kıyas</a><a href='models.html'>Modeller</a><a href='features.html'>Geçmiş etkileri</a><a href='scores.html'>Skor tahminleri</a><a href='today-rules.html'>Bugünden çıkarılan kurallar</a></nav>"+body+"</main></body></html>"
+def page(title,body):return "<!DOCTYPE html><html lang='tr'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>"+html.escape(title)+"</title><style>"+STYLE+"</style></head><body><main><h1>"+html.escape(title)+"</h1><nav><a href='index.html'>Günlük kıyas</a><a href='models.html'>Modeller</a><a href='features.html'>Geçmiş etkileri</a><a href='scores.html'>Skor tahminleri</a><a href='today-rules.html'>Bugünden çıkarılan kurallar</a><a href='day-by-day.html'>Gün gün takip</a><a href='errors.html'>Hata analizi</a></nav>"+body+"</main></body></html>"
 def table(headers,rows):return "<div class='scroll'><table><tr>"+''.join('<th>'+html.escape(h)+'</th>' for h in headers)+"</tr>"+''.join('<tr>'+''.join('<td>'+html.escape(str(v))+'</td>' for v in row)+'</tr>' for row in rows)+"</table></div>"
 
 def render(output,data,report):
- note="<p class='note'>Önceki günler eğitim, 1 Ekim ayrı kontrol günüdür. Bugünün henüz tamamlanmayan sonuçları ölçüme girmez. Adaylar optimizasyonu kanıtlanmış model değildir; yayın ve Telegram değişmez. Bütün tahmin yönleri gösterilir; seçim eşiği ayrı değerlendirilir. Eski arşivlerde yıl bulunmayan tarihler sıra ve maç gününe göre çıkarılmıştır; ham tarih ve çıkarılan tarih sayısı JSON denetiminde bulunur, özellikle uzun aralarda belirsizlik vardır.</p>"
+ target=max(r['date'] for rows in data.values() for r in rows if r['role']=='holdout')
+ note=f"<p class='note'>Önceki günler eğitim, {target} ayrı kontrol günüdür. Bugünün henüz tamamlanmayan sonuçları ölçüme girmez. Adaylar optimizasyonu kanıtlanmış model değildir; yayın ve Telegram değişmez. Bütün tahmin yönleri gösterilir; seçim eşiği ayrı değerlendirilir. Eski arşivlerde yıl bulunmayan tarihler sıra ve maç gününe göre çıkarılmıştır; ham tarih ve çıkarılan tarih sayısı JSON denetiminde bulunur, özellikle uzun aralarda belirsizlik vardır.</p>"
  body=note
  for sport,rows in data.items():
   for r in rows:
@@ -283,7 +287,7 @@ def render(output,data,report):
    if sc:body+=f'<p>Önceki günlerde seçilen skor adayı: {sc[0]:.2f}–{sc[1]:.2f} · '+html.escape(str(score_candidate))+'</p>'
    compact={v:{'models':entry['models'],'audit':{k:({kk:vv for kk,vv in value.items() if kk!='rows'} if isinstance(value,dict) else value) for k,value in entry.get('audit',{}).items()}} for v,entry in r['variants'].items()}
    body+="<details><summary>Her model ve veri sürümünün hesabı</summary><pre>"+html.escape(json.dumps(compact,ensure_ascii=False,indent=2))+"</pre></details></article>"
- (output/'index.html').write_text(page('1 Ekim · Ensemble ve geçmiş kıyası',body),encoding='utf-8')
+ (output/'index.html').write_text(page(target+' · Ensemble ve geçmiş kıyası',body),encoding='utf-8')
  body=note+"<p>Geçersiz olasılıklar düzeltilmiş gibi gösterilmez. Geçersiz sonuç sütunu modelin hesap üretemediği tamamlanmış maçları gösterir. Eğitim kapsamı eksik adaylar seçilemez. Eşleşen mevcut sistem ve log loss farkı yalnız aynı maçları karşılaştırır; negatif fark iyileşmedir.</p>"+table(['Spor','Pazar','Model','Veri','N','Geçersiz sonuç','İsabet','Eşleşen mevcut isabet','Brier','Log loss','Log loss farkı'],[(m['sport'],m['market'],m['model'],m['role'],m['metrics']['count'],m['invalidSettledCount'],pct(m['metrics']['accuracy']),pct(m['pairedBaselineMetrics']['accuracy']),f"{m['metrics']['brier']:.4f}",f"{m['metrics']['logLoss']:.4f}",f"{m['deltaLogLoss']:+.4f}") for m in report['models'] if m['metrics']])
  for m in report['markets']:
   hm=m['holdout'];bm=m['baselineHoldout'];body+="<section class='box'><h2>"+m['sport']+' '+m['market']+'</h2><p>Aday: '+html.escape(str(m['training']['candidate']))+'</p>'

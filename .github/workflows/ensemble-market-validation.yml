@@ -19,10 +19,24 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+      - name: Resolve experimental day and frozen source
+        id: cfg
+        run: |
+          python - <<'PY'
+          import json, os, re
+          from datetime import date
+          c=json.load(open("experiments/ensemble_validation/experiment-settings.json"))
+          date.fromisoformat(c["target_date"])
+          assert re.fullmatch("[0-9a-f]{40}", c["published_ref"])
+          assert str(c["previous_run_id"]).isdigit()
+          assert re.fullmatch("ensemble-market-validation-[0-9-]+",c["previous_artifact"])
+          with open(os.environ["GITHUB_OUTPUT"],"a") as f:
+              for k,v in c.items(): f.write(f"{k}={v}\n")
+          PY
       - uses: actions/checkout@v4
         with:
           repository: sukrutureli/fathertahmin
-          ref: '6bc28f1063c1968b8c31dc43a322dbc2439110d7'
+          ref: ${{ steps.cfg.outputs.published_ref }}
           path: published
           persist-credentials: false
       - uses: actions/checkout@v4
@@ -32,6 +46,24 @@ jobs:
           path: archive
           persist-credentials: false
       - uses: actions/download-artifact@v4
+        with:
+          name: ${{ steps.cfg.outputs.previous_artifact }}
+          run-id: ${{ steps.cfg.outputs.previous_run_id }}
+          github-token: ${{ github.token }}
+          path: previous
+      - name: Restore frozen history reference from previous artifact
+        id: seed
+        run: |
+          mkdir -p reference
+          if test -f previous/reference-predictions.json; then
+            cp previous/reference-predictions.json reference/predictions.json
+            cp previous/reference-manifest.json reference/manifest.json
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/download-artifact@v4
+        if: steps.seed.outputs.available != 'true'
         with:
           name: balanced-history-comparison-2026-10-01
           run-id: 36802060423
@@ -51,13 +83,21 @@ jobs:
       - name: Verify feature and validation rules
         run: python -m unittest discover -s experiments/ensemble_validation -v
       - name: Freeze paired inputs and feature ablations
-        run: python experiments/ensemble_validation/prepare.py --published published --archive archive --reference reference --output pipeline-output --holdout 2026-10-01
+        run: python experiments/ensemble_validation/prepare.py --published published --archive archive --reference reference --output pipeline-output --holdout '${{ steps.cfg.outputs.target_date }}'
+      - name: Preserve reproducible history seed in artifact
+        run: |
+          cp reference/predictions.json pipeline-output/reference-predictions.json
+          cp reference/manifest.json pipeline-output/reference-manifest.json
       - name: Replay original football models
         working-directory: football
         run: mvn -B clean compile exec:java -Dexec.mainClass=com.example.experiment.ExperimentReplay -Dexec.args="../pipeline-output/football-inputs.json ../pipeline-output/football-replay.json"
       - name: Replay original basketball models
         working-directory: basketball
         run: mvn -B clean compile exec:java -Dexec.mainClass=com.basketbol.experiment.ExperimentReplay -Dexec.args="../pipeline-output/basketball-inputs.json ../pipeline-output/basketball-replay.json"
+      - name: Add experimental goal and total history features
+        run: python experiments/ensemble_validation/history_markets.py --output pipeline-output
+      - name: Freeze earlier-day rule predictions before refreshing labels
+        run: python experiments/ensemble_validation/daybook.py freeze --output pipeline-output --previous previous
       - name: Refresh today's finished football outcomes (artifact only)
         working-directory: football
         run: mvn -B exec:java -Dexec.mainClass=com.example.experiment.OutcomeRefresh -Dexec.args="../pipeline-output/football-replay.json ../pipeline-output/football-outcome-audit.json"
@@ -66,8 +106,13 @@ jobs:
         run: mvn -B exec:java -Dexec.mainClass=com.basketbol.experiment.OutcomeRefresh -Dexec.args="../pipeline-output/basketball-replay.json ../pipeline-output/basketball-outcome-audit.json"
       - name: Validate baseline parity and train on earlier days only
         run: python experiments/ensemble_validation/report.py --output pipeline-output
+      - name: Diagnose incorrect forecasts by historical features
+        run: python experiments/ensemble_validation/error_diagnostics.py --output pipeline-output
+      - name: Settle saved predictions and update daily journal
+        run: python experiments/ensemble_validation/daybook.py settle --output pipeline-output --previous previous
       - name: Verify provenance and history boundaries
         env:
+          HOLDOUT_DATE: ${{ steps.cfg.outputs.target_date }}
           SOURCE_SHA: ${{ github.sha }}
           RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
@@ -79,7 +124,7 @@ jobs:
               rows = json.loads((root / (sport + "-replay.json")).read_text())
               assert len({(r["date"], r["eventId"]) for r in rows}) == len(rows)
               for row in rows:
-                  assert row["role"] == ("holdout" if row["date"] == "2026-10-01" else "training")
+                  assert row["role"] == ("holdout" if row["date"] == os.environ["HOLDOUT_DATE"] else "training")
                   for variant in row["variants"].values():
                       for side in ("home", "away"):
                           assert all(r["date"] < row["date"] for r in variant.get("audit", {}).get(side, {}).get("rows", []))
@@ -93,7 +138,7 @@ jobs:
           google-chrome --headless=new --no-sandbox --disable-gpu --screenshot="$PWD/pipeline-output/mobile.png" --window-size=390,844 "file://$PWD/pipeline-output/index.html" >>/tmp/render.log 2>&1
       - uses: actions/upload-artifact@v4
         with:
-          name: ensemble-market-validation-2026-10-01
+          name: ensemble-market-validation-${{ steps.cfg.outputs.target_date }}
           path: pipeline-output/
           if-no-files-found: error
           retention-days: 30
