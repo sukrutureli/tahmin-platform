@@ -80,6 +80,8 @@ sonuçlarından ayrı aday kurallar çıkarır. Önceki günlerde seçilen adayl
 bağımsız kontrol tablosu korunur. Bugünden öğrenilen adayın bugünkü isabeti
 eğitim başarısıdır; doğrulama başarısı diye sunulmaz. Sabit veri sürümü ve
 ensemble karışım ızgarasından her pazar için en düşük bugünkü log loss seçilir;
+seçilecek aday aynı maçlarda bugünkü isabeti legacy ensemble'ın altına düşüremez.
+Bu bir eğitim kısıtıdır; yarın daha kötü sonuç çıkmayacağını garanti etmez.
 skor için aynı kapsamda en düşük takım MAE seçilir. Geniş geçmiş/alt model
 yoksa legacy ensemble'a dönüş önceden belirtilir; kötü maçlar düşürülmez.
 Kurallar 2 Ekim ve sonrası için dondurulur, otomatik üretime alınmaz.

@@ -2,7 +2,7 @@ import copy
 import unittest
 from datetime import date
 from prepare import archived,filtered,weighted_stats
-from report import metrics,fit,vector,result,poisson_expectation,candidate_vector,evaluate
+from report import metrics,fit,vector,result,poisson_expectation,candidate_vector,evaluate,derive_today_rules
 
 class ValidationTests(unittest.TestCase):
  def test_future_history_excluded_and_duplicates_removed(self):
@@ -52,6 +52,13 @@ class ValidationTests(unittest.TestCase):
   self.assertEqual(fitted['candidate'],['legacy','EnsembleModel',0])
   self.assertEqual(len(fitted['excludedCandidates']),2)
   self.assertEqual(fitted['excludedCandidates'][0]['validSettledCount'],39)
+ def test_today_rule_cannot_trade_lower_hit_rate_for_lower_log_loss(self):
+  base={'pHome':.99,'pAway':.01,'pOver25':.5}
+  alternative={'pHome':.4,'pAway':.6,'pOver25':.5}
+  rows=[{'role':'holdout','realScore':score,'odds':{'hOverUnderValue':160},'variants':{'legacy':{'models':{'BasketEnsembleModel':base}},'wide-balanced':{'models':{'BasketEnsembleModel':alternative}}}} for score in ('91-81','89-81','80-90')]
+  rules=derive_today_rules(rows,'basketball')['markets']['MS']
+  self.assertLess(rules['leaderboard'][0]['metrics']['accuracy'],rules['baseline']['accuracy'])
+  self.assertGreaterEqual(rules['rule']['metrics']['accuracy'],rules['baseline']['accuracy'])
  def test_poisson_expectation_tracks_attack_and_defence(self):
   h={'avgGF':2,'avgGA':1,'avgPointsPerMatch':1,'rating100':50};a={'avgGF':1,'avgGA':1,'avgPointsPerMatch':1,'rating100':50}
   home,away=poisson_expectation({'homeStats':h,'awayStats':a})

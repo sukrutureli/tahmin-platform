@@ -161,6 +161,7 @@ def derive_today_rules(rows,sport):
      if model!=BASE[sport] and allowed(sport,model,market):
       for blend in (.25,.5):candidates.add((variant,model,blend))
   settled=[r for r in today if result(r,sport,market) is not None and candidate_vector(r,sport,market,base) is not None]
+  bm=metrics(samples(settled,sport,market,base),labels)
   ranked=[]
   for c in sorted(candidates):
    items=[(today_rule_vector(r,sport,market,c),result(r,sport,market)) for r in settled]
@@ -169,8 +170,9 @@ def derive_today_rules(rows,sport):
     fallback=sum(candidate_vector(r,sport,market,c) is None for r in settled)
     ranked.append({'candidate':list(c),'metrics':m,'fallbackCount':fallback,'changedInputCount':len(settled)-fallback})
   ranked.sort(key=lambda x:(x['metrics']['logLoss'],x['candidate']!=list(base),tuple(x['candidate'])))
-  rules['markets'][market]={'rule':ranked[0] if ranked else None,'baseline':metrics(samples(settled,sport,market,base),labels),
-                           'leaderboard':ranked,'minimumEstablishedEvidence':False,'selectionTarget':'minimum today log loss, no selection filtering'}
+  feasible=[x for x in ranked if bm and x['metrics']['accuracy']>=bm['accuracy']]
+  rules['markets'][market]={'rule':feasible[0] if feasible else None,'baseline':bm,
+                           'leaderboard':ranked,'minimumEstablishedEvidence':False,'selectionTarget':'minimum today log loss subject to no lower today accuracy than the unchanged ensemble; no selection filtering'}
  score_candidates={('legacy',BASE[sport])}
  for r in today:
   for variant,entry in r['variants'].items():
@@ -292,7 +294,7 @@ def render(output,data,report):
  (output/'features.html').write_text(page('Geçmiş, saha, güncellik ve form katkısı',body),encoding='utf-8')
  body=note+"<p>MAE ve RMSE düşük olduğunda skor tahmin hatası daha azdır. Ondalıklı beklenen skor ile tam skor isabeti farklı hedeflerdir; skor hiçbir pazar seçimini veto etmez.</p>"+table(['Spor','Skor hesabı','Veri','N','Takım MAE','Takım RMSE','Toplam hatası','Tam skor isabeti'],[(m['sport'],str(m['candidate']),role,m[role]['count'],f"{m[role]['teamMAE']:.3f}",f"{m[role]['teamRMSE']:.3f}",f"{m[role]['totalMAE']:.3f}",pct(m[role]['exactRoundedScoreRate'])) for m in report['scores'] for role in ('training','holdout') if m[role]])
  (output/'scores.html').write_text(page('Skor tahmini karşılaştırması',body),encoding='utf-8')
- body="<p class='note'>Bu sayfa bugünün sonuçlarından kural çıkarır. Buradaki başarı eğitim başarısıdır; aynı gün doğrulama sayılmaz. Kurallar yarın değişmeden sınanmak üzere frozen-today-rules.json dosyasına kaydedildi. Main ve Telegram değişmez.</p><p>Her pazar ayrı değerlendirilir. Tarih/saha/form ve geniş geçmiş sürümleri ile en az %50 mevcut ensemble bırakan alt model karışımları denenir. Tüm tamamlanmış maçlar aynı kohortta ölçülür; eksik geniş geçmişte mevcut sisteme dönüş önceden tanımlıdır. En düşük log loss adaydır. Skor için en düşük takım MAE adayı seçilir.</p>"
+ body="<p class='note'>Bu sayfa bugünün sonuçlarından kural çıkarır. Buradaki başarı eğitim başarısıdır; aynı gün doğrulama sayılmaz. Kurallar yarın değişmeden sınanmak üzere frozen-today-rules.json dosyasına kaydedildi. Main ve Telegram değişmez.</p><p>Her pazar ayrı değerlendirilir. Tarih/saha/form ve geniş geçmiş sürümleri ile en az %50 mevcut ensemble bırakan alt model karışımları denenir. Tüm tamamlanmış maçlar aynı kohortta ölçülür; eksik geniş geçmişte mevcut sisteme dönüş önceden tanımlıdır. Bugünkü isabeti mevcut sistemin altına düşürmeyen adaylar arasından en düşük log loss seçilir; bu yarın isabetin düşmeyeceğini garanti etmez. Tablodaki liste olasılık hatasına göre sıralanır, düşük isabetli aday seçilemez. Skor için en düşük takım MAE adayı seçilir.</p>"
  for sport,rules in report['todayDerivedRules'].items():
   body+='<h2>'+sport+'</h2>'
   for market,entry in rules['markets'].items():
