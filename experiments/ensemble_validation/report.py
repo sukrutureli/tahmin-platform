@@ -5,6 +5,7 @@ import json
 import math
 import re
 import statistics
+from datetime import date,datetime,timedelta,timezone
 from pathlib import Path
 from prepare import dump
 
@@ -141,6 +142,51 @@ def score_metrics(rows,sport,candidate):
          'marginMAE':statistics.mean(abs(p[0]-p[1]-y[0]+y[1]) for p,y in data),
          'exactRoundedScoreRate':statistics.mean(tuple(math.floor(x+.5) for x in p)==y for p,y in data)}
 
+def today_rule_vector(row,sport,market,candidate):
+ # A frozen rule must specify its missing-history behavior before tomorrow's outcomes.
+ return candidate_vector(row,sport,market,candidate) or candidate_vector(row,sport,market,('legacy',BASE[sport],0))
+
+def derive_today_rules(rows,sport):
+ today=[r for r in rows if r['role']=='holdout']
+ rules={'purpose':'Rules derived from today, for a later independent test. Today is training here, never validation.',
+        'autoPromotion':False,'sampleWarning':'One day can overfit; candidate rule, not an established optimal system.',
+        'fallback':'unchanged legacy ensemble when the selected variant/model is unavailable or invalid',
+        'markets':{},'scores':{}}
+ for market,labels in GROUPS[sport].items():
+  base=('legacy',BASE[sport],0);candidates={base}
+  for r in today:
+   for variant,entry in r['variants'].items():
+    candidates.add((variant,BASE[sport],0))
+    for model in entry['models']:
+     if model!=BASE[sport] and allowed(sport,model,market):
+      for blend in (.25,.5):candidates.add((variant,model,blend))
+  settled=[r for r in today if result(r,sport,market) is not None and candidate_vector(r,sport,market,base) is not None]
+  ranked=[]
+  for c in sorted(candidates):
+   items=[(today_rule_vector(r,sport,market,c),result(r,sport,market)) for r in settled]
+   m=metrics(items,labels)
+   if m:
+    fallback=sum(candidate_vector(r,sport,market,c) is None for r in settled)
+    ranked.append({'candidate':list(c),'metrics':m,'fallbackCount':fallback,'changedInputCount':len(settled)-fallback})
+  ranked.sort(key=lambda x:(x['metrics']['logLoss'],x['candidate']!=list(base),tuple(x['candidate'])))
+  rules['markets'][market]={'rule':ranked[0] if ranked else None,'baseline':metrics(samples(settled,sport,market,base),labels),
+                           'leaderboard':ranked,'minimumEstablishedEvidence':False,'selectionTarget':'minimum today log loss, no selection filtering'}
+ score_candidates={('legacy',BASE[sport])}
+ for r in today:
+  for variant,entry in r['variants'].items():
+   for model in entry['models']:
+    if score_value(r,sport,(variant,model)) is not None:score_candidates.add((variant,model))
+   if sport=='football':score_candidates.add((variant,'PoissonExpectation'))
+ baseline_score=score_metrics(today,sport,('legacy',BASE[sport]))
+ ranked_scores=[]
+ for c in sorted(score_candidates):
+  m=score_metrics(today,sport,c)
+  if m and baseline_score and m['count']==baseline_score['count']:ranked_scores.append({'candidate':list(c),'metrics':m})
+ ranked_scores.sort(key=lambda x:(x['metrics']['teamMAE'],x['candidate']!=['legacy',BASE[sport]],tuple(x['candidate'])))
+ rules['scores']={'rule':ranked_scores[0] if ranked_scores else None,'baseline':baseline_score,'leaderboard':ranked_scores,
+                  'fallback':'unchanged legacy score if selected score candidate is unavailable','selectionTarget':'minimum today team MAE'}
+ return rules
+
 def check_parity(rows,sport):
  maximum=0;bad=[]
  for r in rows:
@@ -151,7 +197,7 @@ def check_parity(rows,sport):
  return {'maximumProbabilityDifference':maximum,'mismatchCount':len(bad),'mismatches':bad}
 
 def evaluate(data):
- report={'markets':[],'models':[],'features':[],'scores':[],'parity':{},'recommendations':{},'invalidPredictions':[],
+ report={'markets':[],'models':[],'features':[],'scores':[],'parity':{},'recommendations':{},'invalidPredictions':[],'todayDerivedRules':{},
          'promotion':'disabled: insufficient independent days; no production change',
          'scope':'MS1/MSX/MS2, Alt/Üst, Var/Yok where supported. Handicap, period and player markets are not modeled.',
          'scoreTarget':'Saved production settlement score; football extra-time/penalty settlement may differ from a regulation forecast.'}
@@ -203,11 +249,12 @@ def evaluate(data):
   best=min(scored,key=lambda x:(x[0]['teamMAE'],x[1]))[1] if scored else ('legacy',BASE[sport])
   report['recommendations'][sport]['score']={'candidate':list(best),'provisional':True}
   for c in sorted(candidates):report['scores'].append({'sport':sport,'candidate':list(c),'training':score_metrics(train,sport,c),'holdout':score_metrics(test,sport,c),'chosenOnTraining':c==best})
+  report['todayDerivedRules'][sport]=derive_today_rules(rows,sport)
  return report
 
 STYLE="body{font-family:Segoe UI,Arial;background:#f3f6fa;color:#222;margin:0}main{max-width:1450px;padding:18px;margin:auto}h1{color:#004d80}nav{display:flex;gap:18px;flex-wrap:wrap}a{color:#0077cc}.box{background:white;border:1px solid #dce3ec;border-radius:10px;padding:16px;margin:16px 0}.scroll{overflow-x:auto}table{width:100%;border-collapse:collapse;background:white}th{background:#0077cc;color:white}td,th{padding:10px;text-align:center;border-bottom:1px solid #ddd}tr:nth-child(even){background:#f3f6fa}.note{padding:12px;background:#fff1df;border-radius:8px}summary{cursor:pointer;font-weight:bold}pre{white-space:pre-wrap;word-break:break-word}"
 def pct(x):return '—' if x is None else f'%{100*x:.1f}'
-def page(title,body):return "<!DOCTYPE html><html lang='tr'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>"+html.escape(title)+"</title><style>"+STYLE+"</style></head><body><main><h1>"+html.escape(title)+"</h1><nav><a href='index.html'>Günlük kıyas</a><a href='models.html'>Modeller</a><a href='features.html'>Geçmiş etkileri</a><a href='scores.html'>Skor tahminleri</a></nav>"+body+"</main></body></html>"
+def page(title,body):return "<!DOCTYPE html><html lang='tr'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'><title>"+html.escape(title)+"</title><style>"+STYLE+"</style></head><body><main><h1>"+html.escape(title)+"</h1><nav><a href='index.html'>Günlük kıyas</a><a href='models.html'>Modeller</a><a href='features.html'>Geçmiş etkileri</a><a href='scores.html'>Skor tahminleri</a><a href='today-rules.html'>Bugünden çıkarılan kurallar</a></nav>"+body+"</main></body></html>"
 def table(headers,rows):return "<div class='scroll'><table><tr>"+''.join('<th>'+html.escape(h)+'</th>' for h in headers)+"</tr>"+''.join('<tr>'+''.join('<td>'+html.escape(str(v))+'</td>' for v in row)+'</tr>' for row in rows)+"</table></div>"
 
 def render(output,data,report):
@@ -224,10 +271,12 @@ def render(output,data,report):
    for market,labels in GROUPS[sport].items():
     recommendation=report['recommendations'][sport][market];candidate=tuple(recommendation['candidate'])
     b=vector(base,sport,market);w=vector(wide,sport,market) if wide else None;p=candidate_vector(r,sport,market,candidate)
-    for i,label in enumerate(labels):lines.append((label,pct(b[i]),pct(w[i]) if w else '—',pct(p[i]) if p else '—'))
+    today_rule=report['todayDerivedRules'][sport]['markets'][market]['rule']
+    tp=today_rule_vector(r,sport,market,tuple(today_rule['candidate'])) if today_rule else None
+    for i,label in enumerate(labels):lines.append((label,pct(b[i]),pct(w[i]) if w else '—',pct(p[i]) if p else '—',pct(tp[i]) if tp else '—'))
     pick=max(range(len(p)),key=lambda i:p[i]) if p else None
     body+='<p><strong>'+market+' aday yönü: '+(labels[pick] if pick is not None else 'Veri yok')+'</strong> · Eğitimde seçilen eşik: '+pct(recommendation['threshold'])+' · '+('Eşiği geçiyor' if p and max(p)>=recommendation['threshold'] else 'Eşiğin altında')+'</p>'
-   body+=table(['Seçenek','Mevcut %','Dengeli geniş %','Önceki günlerde seçilen aday %'],lines)
+   body+=table(['Seçenek','Mevcut %','Dengeli geniş %','Önceki günlerde seçilen aday %','Bugünden çıkarılan kural % (eğitim)'],lines)
    score_candidate=tuple(report['recommendations'][sport]['score']['candidate']);sc=score_value(r,sport,score_candidate)
    if sc:body+=f'<p>Önceki günlerde seçilen skor adayı: {sc[0]:.2f}–{sc[1]:.2f} · '+html.escape(str(score_candidate))+'</p>'
    compact={v:{'models':entry['models'],'audit':{k:({kk:vv for kk,vv in value.items() if kk!='rows'} if isinstance(value,dict) else value) for k,value in entry.get('audit',{}).items()}} for v,entry in r['variants'].items()}
@@ -243,9 +292,23 @@ def render(output,data,report):
  (output/'features.html').write_text(page('Geçmiş, saha, güncellik ve form katkısı',body),encoding='utf-8')
  body=note+"<p>MAE ve RMSE düşük olduğunda skor tahmin hatası daha azdır. Ondalıklı beklenen skor ile tam skor isabeti farklı hedeflerdir; skor hiçbir pazar seçimini veto etmez.</p>"+table(['Spor','Skor hesabı','Veri','N','Takım MAE','Takım RMSE','Toplam hatası','Tam skor isabeti'],[(m['sport'],str(m['candidate']),role,m[role]['count'],f"{m[role]['teamMAE']:.3f}",f"{m[role]['teamRMSE']:.3f}",f"{m[role]['totalMAE']:.3f}",pct(m[role]['exactRoundedScoreRate'])) for m in report['scores'] for role in ('training','holdout') if m[role]])
  (output/'scores.html').write_text(page('Skor tahmini karşılaştırması',body),encoding='utf-8')
+ body="<p class='note'>Bu sayfa bugünün sonuçlarından kural çıkarır. Buradaki başarı eğitim başarısıdır; aynı gün doğrulama sayılmaz. Kurallar yarın değişmeden sınanmak üzere frozen-today-rules.json dosyasına kaydedildi. Main ve Telegram değişmez.</p><p>Her pazar ayrı değerlendirilir. Tarih/saha/form ve geniş geçmiş sürümleri ile en az %50 mevcut ensemble bırakan alt model karışımları denenir. Tüm tamamlanmış maçlar aynı kohortta ölçülür; eksik geniş geçmişte mevcut sisteme dönüş önceden tanımlıdır. En düşük log loss adaydır. Skor için en düşük takım MAE adayı seçilir.</p>"
+ for sport,rules in report['todayDerivedRules'].items():
+  body+='<h2>'+sport+'</h2>'
+  for market,entry in rules['markets'].items():
+   if not entry['rule']:continue
+   best=entry['rule'];base=entry['baseline'];m=best['metrics']
+   body+='<section class="box"><h3>'+market+'</h3><p>Aday kural: '+html.escape(str(best['candidate']))+f" · N={m['count']} · eksik veriyle mevcut sisteme dönüş={best['fallbackCount']}</p><p>Bugünde mevcut isabet {pct(base['accuracy'])}, kural isabeti {pct(m['accuracy'])}; log loss {base['logLoss']:.4f} → {m['logLoss']:.4f}. Bu artış bağımsız test değildir.</p>"
+   body+=table(['Veri sürümü / model / karışım','N','İsabet','Log loss','Mevcut sisteme dönüş'],[(str(x['candidate']),x['metrics']['count'],pct(x['metrics']['accuracy']),f"{x['metrics']['logLoss']:.4f}",x['fallbackCount']) for x in entry['leaderboard'][:10]])+'</section>'
+  score=rules['scores']
+  if score['rule']:body+='<p>Bugünden skor adayı: '+html.escape(str(score['rule']['candidate']))+f" · Takım MAE {score['baseline']['teamMAE']:.3f} → {score['rule']['metrics']['teamMAE']:.3f}</p>"
+ body+='<h2>Bugünün geçmiş özelliği katkıları</h2><p>Çıkarıldığında log loss yükselen özellik, bu maçlarda yardımcı olmuş olabilir. Negatif fark çıkarılınca iyileşme demektir. Bir günlük ilişki kalıcı önem kanıtı değildir.</p>'+table(['Spor','Pazar','Çıkarılan özellik','N','Log loss farkı'],[(m['sport'],m['market'],m['variant'],m['metrics']['count'],f"{m['deltaLogLoss']:+.4f}") for m in report['features'] if m['role']=='holdout' and '-no-' in m['variant'] and m['metrics']])
+ (output/'today-rules.html').write_text(page('Bugünün sonuçlarından yarın için aday kurallar',body),encoding='utf-8')
 
 if __name__=='__main__':
  p=argparse.ArgumentParser();p.add_argument('--output',type=Path,required=True);a=p.parse_args()
  data={s:json.loads((a.output/(s+'-replay.json')).read_text()) for s in GROUPS}
  report=evaluate(data);dump(a.output/'evaluation.json',report);render(a.output,data,report)
+ holdout=max(r['date'] for rows in data.values() for r in rows if r['role']=='holdout')
+ dump(a.output/'frozen-today-rules.json',{'derivedFromDate':holdout,'validFromDate':(date.fromisoformat(holdout)+timedelta(days=1)).isoformat(),'createdAt':datetime.now(timezone.utc).isoformat(),'purpose':'exploratory rule learned today; evaluate on future outcomes without refitting','rules':report['todayDerivedRules']})
  print(json.dumps({'parity':report['parity'],'promotion':report['promotion']},ensure_ascii=False))

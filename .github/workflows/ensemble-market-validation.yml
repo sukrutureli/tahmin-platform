@@ -58,6 +58,12 @@ jobs:
       - name: Replay original basketball models
         working-directory: basketball
         run: mvn -B clean compile exec:java -Dexec.mainClass=com.basketbol.experiment.ExperimentReplay -Dexec.args="../pipeline-output/basketball-inputs.json ../pipeline-output/basketball-replay.json"
+      - name: Refresh today's finished football outcomes (artifact only)
+        working-directory: football
+        run: mvn -B exec:java -Dexec.mainClass=com.example.experiment.OutcomeRefresh -Dexec.args="../pipeline-output/football-replay.json ../pipeline-output/football-outcome-audit.json"
+      - name: Refresh today's finished basketball outcomes (artifact only)
+        working-directory: basketball
+        run: mvn -B exec:java -Dexec.mainClass=com.basketbol.experiment.OutcomeRefresh -Dexec.args="../pipeline-output/basketball-replay.json ../pipeline-output/basketball-outcome-audit.json"
       - name: Validate baseline parity and train on earlier days only
         run: python experiments/ensemble_validation/report.py --output pipeline-output
       - name: Verify provenance and history boundaries

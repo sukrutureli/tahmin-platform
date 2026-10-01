@@ -66,3 +66,20 @@ değildir. 1 Ekim henüz tamamlanmamış maçları ve eşleşmeyen sonuçlar dı
 Olasılık eğitiminde sonuç sızıntısı yoktur; öğrenilmiş kalibrasyon henüz yoktur.
 Artifact/source SHA'ları ve giriş hash'leri kaydedilir. Main'e geçiş veya
 yayın/Telegram yoktur; daha fazla bağımsız gün olmadan otomatik terfi kapalıdır.
+
+## Bugünden kural çıkarma (ayrı araştırma)
+
+Replay hesaplandıktan sonra bugünün bitmiş sonuçları mevcut ResultApiClient ile
+yenilenir. Yalnız artifact replay etiketi değişir; üretim dosyası, Application,
+Telegram veya control workflow'u çağrılmaz. Canlı maç skoru alınmaz, 429 cooldown
+ve mevcut 500 ms istek aralığı korunur. Başarısız istekler ve arşiv/güncel farkları
+spor başına outcome-audit.json içinde izlenir. Model girdileri yeniden üretilmez.
+
+today-rules.html ve frozen-today-rules.json, kullanıcı isteğiyle bugünün
+sonuçlarından ayrı aday kurallar çıkarır. Önceki günlerde seçilen adayların
+bağımsız kontrol tablosu korunur. Bugünden öğrenilen adayın bugünkü isabeti
+eğitim başarısıdır; doğrulama başarısı diye sunulmaz. Sabit veri sürümü ve
+ensemble karışım ızgarasından her pazar için en düşük bugünkü log loss seçilir;
+skor için aynı kapsamda en düşük takım MAE seçilir. Geniş geçmiş/alt model
+yoksa legacy ensemble'a dönüş önceden belirtilir; kötü maçlar düşürülmez.
+Kurallar 2 Ekim ve sonrası için dondurulur, otomatik üretime alınmaz.
