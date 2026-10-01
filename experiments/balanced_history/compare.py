@@ -200,6 +200,52 @@ class Collector:
         self.teams = {}
         self.config = None
 
+    def summary_fallback(self, info, cutoff, sport):
+        eid = event_id(info)
+        base = "https://apistats.nesine.com/api/v3/HeadToHead/" + eid + "/"
+        header = self.client.get(base + "Header")["d"]
+        if header.get("SID") != (1 if sport == "football" else 2):
+            raise ValueError("Nesine sport mismatch")
+        summary = self.client.get(base + "Summary?competitionHistoryCount=6")["d"]
+        ids = [header[k][0]["TID"] for k in ("HT", "AT")]
+        output = []
+        for tid in ids:
+            rows = []
+            for league in summary.get("SLM", {}).get("ML", []):
+                for group in league.get("TT", []):
+                    if group.get("FT") not in (5, 2):
+                        continue
+                    for team in group.get("TMS", []):
+                        if team.get("TID") != tid:
+                            continue
+                        for row in team.get("ML", []):
+                            played = parse_date(row.get("POFMD"))
+                            if not played or played >= cutoff:
+                                continue
+                            scores = {s.get("OBI"):s for s in row.get("SC") or []}
+                            regulation = scores.get(99 if sport == "football" else 45)
+                            if not regulation:
+                                continue
+                            final = scores.get(1000, regulation) if sport == "basketball" else regulation
+                            side = "home" if row.get("HT", {}).get("TID") == tid else "away" if row.get("AT", {}).get("TID") == tid else None
+                            if side is None:
+                                continue
+                            own, other = ("HTS", "ATS") if side == "home" else ("ATS", "HTS")
+                            values = [s.get(k) for s in (regulation,final) for k in (own,other)]
+                            if not all(isinstance(v,(int,float)) and v >= 0 for v in values):
+                                continue
+                            gf,ga,ff,fa = values
+                            known = sport != "basketball" or ff != fa
+                            rows.append({"id":"nesine:"+str(row["MID"]),"date":played.isoformat(),"venue":side,
+                                         "for":gf,"against":ga,"finalFor":ff if known else None,"finalAgainst":fa if known else None,
+                                         "win":int(ff>fa) if known else None,"draw":int(ff==fa) if known else None,
+                                         "regulationKnown":True,"tournament":row.get("LG",{}).get("N",""),
+                                         "tournamentId":row.get("LG",{}).get("TID"),
+                                         "opponent":row.get("AT" if side=="home" else "HT",{}).get("N",""),
+                                         "source":"nesine-summary-general-and-venue"})
+            output.append({"rows":unique(rows),"source":"nesine-summary-general-and-venue","teamId":tid})
+        return output
+
     def collect(self, info, history, cutoff, sport):
         eid = event_id(info)
         page = self.client.get("https://istatistik.nesine.com/p1/" + eid, text=True)
@@ -209,6 +255,8 @@ class Collector:
                 raise ValueError("Missing p1 field: " + key)
             return found.group(1)
         account = field("AccountId")
+        if int(field("SportId")) != (1 if sport == "football" else 2):
+            raise ValueError("Broadage sport mismatch")
         if self.config is None:
             self.config = self.client.get("https://cdn-saas.broadage.com/config/config.json")
         prefix = self.config["accountMap"][account.upper()]
@@ -461,8 +509,16 @@ def run_day(published, day, sport, collector=None):
         if collector:
             try:
                 fetched = collector.collect(info, history, cutoff, sport)
-                # Different providers use different IDs/names: never pool them and count duplicates.
-                data = [f if f["rows"] else {"rows": r, "source": "archive-fallback-empty-schedule"} for f,r in zip(fetched,fallback)]
+                # Never replace a more recent archived signal with stale provider coverage.
+                needs_summary = [not f["rows"] or bool(r and max(x["date"] for x in f["rows"]) < max(x["date"] for x in r)) for f,r in zip(fetched,fallback)]
+                summary = collector.summary_fallback(info,cutoff,sport) if any(needs_summary) else [None,None]
+                data = []
+                for f,r,s,needed in zip(fetched,fallback,summary,needs_summary):
+                    if needed:
+                        f = s if s and s["rows"] else {"rows":r,"source":"archive-fallback-empty-or-stale-schedule"}
+                        if r and f["rows"] and max(x["date"] for x in f["rows"]) < max(x["date"] for x in r):
+                            f = {"rows":r,"source":"archive-fallback-stale-summary"}
+                    data.append(f)
             except RateLimitError:
                 raise
             except (ValueError,KeyError,urllib.error.URLError,TimeoutError) as exc:
