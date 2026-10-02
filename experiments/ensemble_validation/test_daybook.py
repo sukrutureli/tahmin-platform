@@ -23,6 +23,15 @@ class DailyExperimentTests(unittest.TestCase):
   b=freeze(self.fixture(),{'derivedFromDate':'2026-10-01','validFromDate':'2026-10-02','rules':{}})
   self.assertFalse(b['independentRuleAvailable'])
   self.assertEqual(b['predictions'][0]['markets']['MS']['candidate'],['legacy','EnsembleModel',0])
+ def test_btts_dependence_candidate_is_bounded_and_uses_joint_history(self):
+  data=self.fixture()
+  rows=data['football'][0]['variants']['six-balanced']['audit']['home']['rows']
+  for i,r in enumerate(rows):r.update({'for':2 if i%2 else 0,'against':2 if i%2 else 0})
+  enrich(data['football'],'football')
+  entry=data['football'][0]['variants']['six-balanced']
+  self.assertGreater(entry['marketFeatureAudit']['bttsDependenceCorrection'],1)
+  self.assertGreater(entry['models']['HistoryCoupledBttsModel']['pBttsYes'],entry['models']['HistoryBttsModel']['pBttsYes'])
+  self.assertTrue(0<=entry['models']['HistoryCoupledBttsModel']['pBttsYes']<=1)
  def test_settlement_uses_saved_probabilities_even_when_models_change(self):
   data=self.fixture();book=freeze(data,{})
   data['football'][0]['variants']['legacy']['models']['EnsembleModel']['pHome']=.01

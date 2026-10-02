@@ -114,3 +114,17 @@ takımlar için güncel geniş API havuzu toplanmış gibi gösterilmez.
 GitHub schedule sadece default branch'te çalıştığından main'e cron
 eklenmez; günlük deney ayrıca ChatGPT görevinden settings dosyası
 güncellenerek tetiklenir. Çıktılar sadece Actions artifact'tir.
+
+## KG bağımlılık kontrolü (2 Ekim deneyi)
+
+HistoryCoupledBttsModel, gol atma ve gol yeme sıklıklarının çarpımına ek
+olarak takımın tarihsel ortak gol frekansını kullanır. Her takım için
+KG / (gol-atma * gol-yeme) oranı 0.5–2 bandında tutulur; iki takımın
+geometrik ortalaması karşılaşma çarpımını düzeltir. Bu sabit deney
+hipotezi 29/30 Eylül ve 1 Ekim'de basit KG modelinin tekrar eden zayıf
+sonucundan türetilmiştir; hiçbir 2 Ekim sonucu parametre seçiminde
+kullanılmamıştır. Sonuç sızıntısı ve sınır testleri vardır.
+Bu adayın 1 Ekim'de basit KG adayından iyi çıkması, üretim ensemble'ından
+iyi olduğu anlamına gelmez. Başarısız adaylar raporda kalır.
+2 Ekim'in ilk kayıt dosyası yeniden kullanılacak; yeni aday mevcut
+dondurulmuş tahminleri değiştirmez. Geniş havuz 1 Ekim'den kalmaktadır.

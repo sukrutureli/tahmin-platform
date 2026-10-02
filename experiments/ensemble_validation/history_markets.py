@@ -49,6 +49,16 @@ def enrich(rows,sport):
     btts['pBttsYes']=.5*home_scores*away_scores+.25*h['bttsRate']+.25*a['bttsRate']
     btts['scoreline']=''
     entry['models']['HistoryBttsModel']=btts
+    # Historical joint scoring can differ from multiplying marginal frequencies.
+    # Estimate that dependence from pre-fixture history, not today's outcome.
+    def dependence(team):
+     independent=team['scoresRate']*team['concedesRate']
+     return max(.5,min(2.0,team['bttsRate']/independent))
+    correction=math.sqrt(dependence(h)*dependence(a))
+    coupled=copy.deepcopy(btts)
+    coupled['pBttsYes']=.5*min(1.0,home_scores*away_scores*correction)+.25*h['bttsRate']+.25*a['bttsRate']
+    entry['models']['HistoryCoupledBttsModel']=coupled
+    entry['marketFeatureAudit']['bttsDependenceCorrection']=correction
    else:
     line=row['odds'].get('hOverUnderValue',0)
     if line<=0:continue

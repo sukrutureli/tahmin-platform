@@ -21,7 +21,7 @@ def vector(p,sport,market):
  return [x/sum(v) for x in v] if sum(v)>0 else [1/len(v)]*len(v)
 
 def allowed(sport,model,market):
- if model=='HistoryBttsModel':return sport=='football' and market=='BTTS'
+ if model in ('HistoryBttsModel','HistoryCoupledBttsModel'):return sport=='football' and market=='BTTS'
  if model=='HistoryTotalsModel':return market=='OU'
  return not(sport=='football' and model in ('FormMomentumModel','ValidOddsFormModel') and market!='MS')
 
