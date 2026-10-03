@@ -128,3 +128,16 @@ Bu adayın 1 Ekim'de basit KG adayından iyi çıkması, üretim ensemble'ından
 iyi olduğu anlamına gelmez. Başarısız adaylar raporda kalır.
 2 Ekim'in ilk kayıt dosyası yeniden kullanılacak; yeni aday mevcut
 dondurulmuş tahminleri değiştirmez. Geniş havuz 1 Ekim'den kalmaktadır.
+
+
+## Çok günlük güvenlik kuralı (3 Ekim adayı)
+
+2 Ekim'de 1 Ekim'den tek günle seçilen kurallar; ileriye dönük 104 futbol ve
+54 basketbol maçının çoğu pazarında mevcut sistemden düşük isabet verdi. Bu nedenle
+ertesi gün kuralı artık tek son güne uydurulmaz. Tamamlanmış bütün kaynak günler
+birlikte değerlendirilir; adayın her bir günde legacy ensemble isabetinden düşük
+olmaması, toplam isabetinin de düşük olmaması ve en az 10 ya da örneklerin yüzde
+10'unda gerçekten farklı hesap üretmesi gerekir. Bu koşulları geçen adaylar
+arasından toplam log loss en düşük olan seçilir. Skor adayında aynı mantık her gün
+legacy takım MAE'sini geçmeme koşuluyla uygulanır. Bu yalnız deney seçimidir;
+otomatik üretim terfisi hâlâ kapalıdır.

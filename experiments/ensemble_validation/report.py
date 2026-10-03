@@ -148,47 +148,76 @@ def today_rule_vector(row,sport,market,candidate):
  # A frozen rule must specify its missing-history behavior before tomorrow's outcomes.
  return candidate_vector(row,sport,market,candidate) or candidate_vector(row,sport,market,('legacy',BASE[sport],0))
 
+def score_rule_metrics(rows,sport,candidate):
+ data=[];base=('legacy',BASE[sport])
+ for r in rows:
+  actual=parse_score({'scoreline':r.get('realScore')})
+  fallback=score_value(r,sport,base)
+  pred=score_value(r,sport,candidate) or fallback
+  if actual is not None and fallback is not None and pred is not None:data.append((pred,actual))
+ if not data:return None
+ return {'count':len(data),'teamMAE':statistics.mean((abs(p[0]-y[0])+abs(p[1]-y[1]))/2 for p,y in data),
+         'teamRMSE':math.sqrt(statistics.mean(((p[0]-y[0])**2+(p[1]-y[1])**2)/2 for p,y in data)),
+         'totalMAE':statistics.mean(abs(sum(p)-sum(y)) for p,y in data),
+         'marginMAE':statistics.mean(abs(p[0]-p[1]-y[0]+y[1]) for p,y in data),
+         'exactRoundedScoreRate':statistics.mean(tuple(math.floor(x+.5) for x in p)==y for p,y in data)}
+
 def derive_today_rules(rows,sport):
  today=[r for r in rows if r['role']=='holdout']
- rules={'purpose':'Rules derived from today, for a later independent test. Today is training here, never validation.',
-        'autoPromotion':False,'sampleWarning':'One day can overfit; candidate rule, not an established optimal system.',
+ completed=[r for r in rows if r.get('realScore')]
+ rules={'purpose':'Rules selected through today for a later independent test. The latest day is training here, never validation.',
+        'autoPromotion':False,'sampleWarning':'Candidates must not lower hit rate on any completed source day; this still does not establish optimality.',
         'fallback':'unchanged legacy ensemble when the selected variant/model is unavailable or invalid',
         'markets':{},'scores':{}}
  for market,labels in GROUPS[sport].items():
   base=('legacy',BASE[sport],0);candidates={base}
-  for r in today:
+  for r in completed:
    for variant,entry in r['variants'].items():
     candidates.add((variant,BASE[sport],0))
     for model in entry['models']:
      if model!=BASE[sport] and allowed(sport,model,market):
       for blend in (.25,.5):candidates.add((variant,model,blend))
-  settled=[r for r in today if result(r,sport,market) is not None and candidate_vector(r,sport,market,base) is not None]
+  settled=[r for r in completed if result(r,sport,market) is not None and candidate_vector(r,sport,market,base) is not None]
   bm=metrics(samples(settled,sport,market,base),labels)
+  baseline_by_day={d:metrics(samples([r for r in settled if r['date']==d],sport,market,base),labels)
+                   for d in sorted({r['date'] for r in settled})}
   ranked=[]
   for c in sorted(candidates):
    items=[(today_rule_vector(r,sport,market,c),result(r,sport,market)) for r in settled]
    m=metrics(items,labels)
    if m:
     fallback=sum(candidate_vector(r,sport,market,c) is None for r in settled)
-    ranked.append({'candidate':list(c),'metrics':m,'fallbackCount':fallback,'changedInputCount':len(settled)-fallback})
+    by_day={d:metrics([(today_rule_vector(r,sport,market,c),result(r,sport,market)) for r in settled if r['date']==d],labels)
+            for d in baseline_by_day}
+    ranked.append({'candidate':list(c),'metrics':m,'byDay':by_day,'fallbackCount':fallback,'changedInputCount':len(settled)-fallback})
   ranked.sort(key=lambda x:(x['metrics']['logLoss'],x['candidate']!=list(base),tuple(x['candidate'])))
-  feasible=[x for x in ranked if bm and x['metrics']['accuracy']>=bm['accuracy']]
+  feasible=[x for x in ranked if bm and x['metrics']['accuracy']>=bm['accuracy']
+            and (x['candidate']==list(base) or x['changedInputCount']>=max(10,math.ceil(.10*len(settled))))
+            and all(x['byDay'][d]['accuracy']>=baseline_by_day[d]['accuracy'] for d in baseline_by_day)]
   rules['markets'][market]={'rule':feasible[0] if feasible else None,'baseline':bm,
-                           'leaderboard':ranked,'minimumEstablishedEvidence':False,'selectionTarget':'minimum today log loss subject to no lower today accuracy than the unchanged ensemble; no selection filtering'}
+                           'baselineByDay':baseline_by_day,'leaderboard':ranked,'minimumEstablishedEvidence':False,
+                           'selectionTarget':'minimum cumulative log loss subject to no lower accuracy than the unchanged ensemble on every completed source day; no selection filtering'}
  score_candidates={('legacy',BASE[sport])}
- for r in today:
+ for r in completed:
   for variant,entry in r['variants'].items():
    for model in entry['models']:
     if score_value(r,sport,(variant,model)) is not None:score_candidates.add((variant,model))
    if sport=='football':score_candidates.add((variant,'PoissonExpectation'))
- baseline_score=score_metrics(today,sport,('legacy',BASE[sport]))
+ baseline_score=score_rule_metrics(completed,sport,('legacy',BASE[sport]))
+ score_baseline_by_day={d:score_rule_metrics([r for r in completed if r['date']==d],sport,('legacy',BASE[sport])) for d in sorted({r['date'] for r in completed})}
  ranked_scores=[]
  for c in sorted(score_candidates):
-  m=score_metrics(today,sport,c)
-  if m and baseline_score and m['count']==baseline_score['count']:ranked_scores.append({'candidate':list(c),'metrics':m})
+  m=score_rule_metrics(completed,sport,c)
+  by_day={d:score_rule_metrics([r for r in completed if r['date']==d],sport,c) for d in score_baseline_by_day}
+  if m and baseline_score and m['count']==baseline_score['count']:
+   changed=sum(score_value(r,sport,c) is not None for r in completed)
+   ranked_scores.append({'candidate':list(c),'metrics':m,'byDay':by_day,'changedInputCount':changed})
  ranked_scores.sort(key=lambda x:(x['metrics']['teamMAE'],x['candidate']!=['legacy',BASE[sport]],tuple(x['candidate'])))
- rules['scores']={'rule':ranked_scores[0] if ranked_scores else None,'baseline':baseline_score,'leaderboard':ranked_scores,
-                  'fallback':'unchanged legacy score if selected score candidate is unavailable','selectionTarget':'minimum today team MAE'}
+ feasible_scores=[x for x in ranked_scores if x['metrics']['teamMAE']<=baseline_score['teamMAE']
+                  and (x['candidate']==['legacy',BASE[sport]] or x['changedInputCount']>=max(10,math.ceil(.10*len(completed))))
+                  and all(x['byDay'][d] and score_baseline_by_day[d] and x['byDay'][d]['teamMAE']<=score_baseline_by_day[d]['teamMAE'] for d in score_baseline_by_day)]
+ rules['scores']={'rule':feasible_scores[0] if feasible_scores else None,'baseline':baseline_score,'baselineByDay':score_baseline_by_day,'leaderboard':ranked_scores,
+                  'fallback':'unchanged legacy score if selected score candidate is unavailable','selectionTarget':'minimum cumulative team MAE with no worse team MAE on any completed source day'}
  return rules
 
 def check_parity(rows,sport):

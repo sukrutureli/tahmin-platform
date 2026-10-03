@@ -55,10 +55,19 @@ class ValidationTests(unittest.TestCase):
  def test_today_rule_cannot_trade_lower_hit_rate_for_lower_log_loss(self):
   base={'pHome':.99,'pAway':.01,'pOver25':.5}
   alternative={'pHome':.4,'pAway':.6,'pOver25':.5}
-  rows=[{'role':'holdout','realScore':score,'odds':{'hOverUnderValue':160},'variants':{'legacy':{'models':{'BasketEnsembleModel':base}},'wide-balanced':{'models':{'BasketEnsembleModel':alternative}}}} for score in ('91-81','89-81','80-90')]
+  rows=[{'date':'2026-10-01','role':'holdout','realScore':score,'odds':{'hOverUnderValue':160},'variants':{'legacy':{'models':{'BasketEnsembleModel':base}},'wide-balanced':{'models':{'BasketEnsembleModel':alternative}}}} for score in ('91-81','89-81','80-90')]
   rules=derive_today_rules(rows,'basketball')['markets']['MS']
   self.assertLess(rules['leaderboard'][0]['metrics']['accuracy'],rules['baseline']['accuracy'])
   self.assertGreaterEqual(rules['rule']['metrics']['accuracy'],rules['baseline']['accuracy'])
+ def test_rolling_rule_rejects_candidate_that_only_wins_latest_day(self):
+  base={'pHome':.6,'pAway':.4,'pOver25':.5}
+  wrong={'pHome':.4,'pAway':.6,'pOver25':.5}
+  rows=[]
+  for d,scores in [('2026-09-30',['2-1']*10),('2026-10-01',['1-2']*3)]:
+   for score in scores:
+    rows.append({'date':d,'role':'holdout' if d=='2026-10-01' else 'training','realScore':score,'odds':{},'variants':{'legacy':{'models':{'BasketEnsembleModel':base}},'six-balanced':{'models':{'BasketEnsembleModel':wrong}}}})
+  rule=derive_today_rules(rows,'basketball')['markets']['MS']['rule']
+  self.assertEqual(rule['candidate'],['legacy','BasketEnsembleModel',0])
  def test_poisson_expectation_tracks_attack_and_defence(self):
   h={'avgGF':2,'avgGA':1,'avgPointsPerMatch':1,'rating100':50};a={'avgGF':1,'avgGA':1,'avgPointsPerMatch':1,'rating100':50}
   home,away=poisson_expectation({'homeStats':h,'awayStats':a})
