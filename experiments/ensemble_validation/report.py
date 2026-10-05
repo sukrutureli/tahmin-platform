@@ -253,7 +253,7 @@ def evaluate(data):
    report['recommendations'][sport][market]={'candidate':list(c),'threshold':fitted['threshold'],'provisional':True}
    models=sorted({m for r in rows for entry in r['variants'].values() for m in entry['models'] if allowed(sport,m,market)})
    for model in models:
-    model_variant='six-balanced' if model.startswith('History') else 'legacy'
+    model_variant='six-balanced' if model.startswith('History') or model=='VarianceShrinkTotalsModel' else 'legacy'
     for role,subset in (('training',train),('holdout',test)):
      missing=sum(result(r,sport,market) is not None and candidate_vector(r,sport,market,(model_variant,model,0)) is None for r in subset)
      paired=[r for r in subset if candidate_vector(r,sport,market,(model_variant,model,0)) is not None and candidate_vector(r,sport,market,baseline) is not None]
