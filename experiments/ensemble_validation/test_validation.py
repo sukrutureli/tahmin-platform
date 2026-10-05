@@ -5,6 +5,26 @@ from prepare import archived,filtered,weighted_stats
 from report import metrics,fit,vector,result,poisson_expectation,candidate_vector,evaluate,derive_today_rules
 
 class ValidationTests(unittest.TestCase):
+ def test_duplicate_short_names_keep_their_own_published_prediction(self):
+  from prepare import paired_baselines,take_baseline
+  matches=[{'homeTeam':'A','awayTeam':'B','odds':{'ms1':1.2}}, {'homeTeam':'A','awayTeam':'B','odds':{'ms1':1.4}}]
+  predictions=[{'homeTeam':'A','awayTeam':'B','pHome':.7},{'homeTeam':'A','awayTeam':'B','pHome':.6}]
+  pairs=paired_baselines(matches,predictions)
+  self.assertEqual(take_baseline(pairs,('A','B'),{'ms1':1.4})[1]['pHome'],.6)
+  self.assertEqual(take_baseline(pairs,('A','B'),{'ms1':1.2})[1]['pHome'],.7)
+  with self.assertRaises(ValueError):take_baseline(paired_baselines(matches,predictions),('A','B'),{})
+  with self.assertRaises(ValueError):paired_baselines(matches,predictions[:1])
+ def test_variance_shrink_preserves_direction_and_reduces_extreme_confidence(self):
+  from history_markets import variance_shrink
+  from report import allowed
+  self.assertAlmostEqual(variance_shrink(.9,8),.9)
+  self.assertAlmostEqual(variance_shrink(.9,16),.7)
+  self.assertAlmostEqual(variance_shrink(.1,16),.3)
+  self.assertEqual(variance_shrink(.5,30),.5)
+  self.assertTrue(allowed('basketball','VarianceShrinkTotalsModel','OU'))
+  self.assertFalse(allowed('basketball','VarianceShrinkTotalsModel','MS'))
+  self.assertFalse(allowed('football','VarianceShrinkTotalsModel','OU'))
+  with self.assertRaises(ValueError):variance_shrink(.9,float('nan'))
  def test_future_history_excluded_and_duplicates_removed(self):
   rows=[{'id':'x','date':'2026-09-30'},{'id':'x','date':'2026-09-30'},{'id':'y','date':'2026-10-01'}]
   self.assertEqual(filtered(rows,date(2026,10,1),20),[rows[0]])

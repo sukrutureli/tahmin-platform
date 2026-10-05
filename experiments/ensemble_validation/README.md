@@ -141,3 +141,18 @@ olmaması, toplam isabetinin de düşük olmaması ve en az 10 ya da örneklerin
 arasından toplam log loss en düşük olan seçilir. Skor adayında aynı mantık her gün
 legacy takım MAE'sini geçmeme koşuluyla uygulanır. Bu yalnız deney seçimidir;
 otomatik üretim terfisi hâlâ kapalıdır.
+
+## 5 Ekim deney onarımı ve oynaklık adayı
+
+Aynı kısa takım adlarıyla kaydedilen U21/büyük takım karşılaşmaları artık Match ve
+PredictionResult sırası doğrulanarak eşlenir; tekrar eden adlar ilk oranlarla
+ayırt edilir. Belirsiz eşleşme hata verir; parity toleransı değişmez.
+
+VarianceShrinkTotalsModel yalnız basketbol Alt/Üst adayıdır. 3 ve 4 Ekim hata
+kohortlarında toplam skor standart sapmasının daha yüksek olmasından türetilen
+hipotezdir: p = 0.5 + (HistoryTotals p - 0.5) * min(1, 8 / sigma).
+8 mevcut sigma tabanıdır; sonuçlardan ayarlanmış eşik değildir. Skor değişmez,
+sonuç etiketi okunmaz. Bu ilişki nedensellik veya bağımsız başarı kanıtı değildir.
+5 Ekim adayın geliştirme günüdür; aynı gün başarısı bağımsız doğrulama sayılmaz.
+Önceki başarılı artifactlerdeki tahminler değişmez; başarısız 5 Ekim parity
+artifact'i teşhis içindir ve doğrulanmış tahmin kaydı olarak kullanılmaz.

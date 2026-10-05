@@ -99,6 +99,23 @@ def weighted_stats(rows,cutoff,sport,venue,recency,venue_split,recent_mix,no_for
  else:stats={'avgPointsFor':avgf,'avgPointsAgainst':avga,'avgTotalPoints':avgf+avga,'ppg':ppg}
  return stats,audit
 
+def paired_baselines(matches,predictions):
+ if len(matches)!=len(predictions):raise ValueError('Match/prediction row count differs')
+ pairs={}
+ for match,prediction in zip(matches,predictions):
+  key=(match['homeTeam'],match['awayTeam'])
+  if key!=(prediction['homeTeam'],prediction['awayTeam']):raise ValueError('Match/prediction order differs')
+  pairs.setdefault(key,[]).append((match,prediction))
+ return pairs
+
+def take_baseline(pairs,key,odds):
+ candidates=pairs.get(key,[])
+ if len(candidates)>1:
+  indexes=[i for i,(m,p) in enumerate(candidates) if m.get('odds')==odds]
+  if len(indexes)!=1:raise ValueError('Ambiguous duplicate fixture: '+str(key))
+  return candidates.pop(indexes[0])
+ return candidates.pop(0) if candidates else (None,None)
+
 def assemble(sources,reference,output,holdout):
  pool={}
  for r in json.loads((reference/'predictions.json').read_text()):
@@ -117,13 +134,12 @@ def assemble(sources,reference,output,holdout):
   for k,p in files.items():
    if p.exists():hashes[f'{root.name}/{folder}/{p.name}']=hashlib.sha256(p.read_bytes()).hexdigest()
   histories={str(r.get('originalMatchUrl',r.get('detailUrl',''))).rstrip('/').split('/')[-1]:r for r in data['TeamMatchHistory']}
-  matches={(m['homeTeam'],m['awayTeam']):m for m in data['Match']}
-  predictions={(m['homeTeam'],m['awayTeam']):m for m in data['PredictionResult']}
+  pairs=paired_baselines(data['Match'],data['PredictionResult'])
   real={' - '.join((r['homeTeam'],r['awayTeam'])):r['score'] for r in data['RealScores']}
   for info in data['MatchInfo']:
    eid=info['detailUrl'].rstrip('/').split('/')[-1];h=histories.get(eid)
    if not h:excluded.append({'sport':sport,'date':d,'eventId':eid,'reason':'history absent'});continue
-   key=h['teamEv'],h['teamDep'];base=matches.get(key);published=predictions.get(key)
+   key=h['teamEv'],h['teamDep'];base,published=take_baseline(pairs,key,info['odds'])
    if base is None or published is None:raise ValueError(f'Frozen baseline absent: {sport} {d} {eid}')
    base=copy.deepcopy(base);base['odds']=info['odds']
    cutoff=date.fromisoformat(d)

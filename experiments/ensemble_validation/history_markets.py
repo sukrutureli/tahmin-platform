@@ -8,6 +8,11 @@ from prepare import dump, friendly
 
 BASE={'football':'EnsembleModel','basketball':'BasketEnsembleModel'}
 
+def variance_shrink(probability,sigma):
+ if not math.isfinite(probability) or not 0<=probability<=1 or not math.isfinite(sigma) or sigma<=0:
+  raise ValueError('Invalid variance shrink input')
+ return .5+(probability-.5)*min(1.0,8.0/sigma)
+
 def features(rows):
  if not rows:return None
  pairs=[(r,.25 if friendly(r.get('tournament','')) else 1.0) for r in rows]
@@ -66,6 +71,9 @@ def enrich(rows,sport):
     sigma=max(8.0,math.sqrt((h['totalVariance']+a['totalVariance'])/2))
     total['pOver25']=.5*(1+math.erf((expected_home+expected_away-line)/(sigma*math.sqrt(2))))
     entry['marketFeatureAudit']['totalSigma']=sigma
+    shrunk=copy.deepcopy(total)
+    shrunk['pOver25']=variance_shrink(total['pOver25'],sigma)
+    entry['models']['VarianceShrinkTotalsModel']=shrunk
    entry['models']['HistoryTotalsModel']=total
  return rows
 

@@ -23,6 +23,7 @@ def vector(p,sport,market):
 def allowed(sport,model,market):
  if model in ('HistoryBttsModel','HistoryCoupledBttsModel'):return sport=='football' and market=='BTTS'
  if model=='HistoryTotalsModel':return market=='OU'
+ if model=='VarianceShrinkTotalsModel':return sport=='basketball' and market=='OU'
  return not(sport=='football' and model in ('FormMomentumModel','ValidOddsFormModel') and market!='MS')
 
 def result(row,sport,market):

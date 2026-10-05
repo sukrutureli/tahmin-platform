@@ -12,6 +12,18 @@ class DailyExperimentTests(unittest.TestCase):
   a=self.fixture();b=copy.deepcopy(a);b['football'][0]['realScore']='9-9'
   enrich(a['football'],'football');enrich(b['football'],'football')
   self.assertEqual(a['football'][0]['variants'],b['football'][0]['variants'])
+ def test_variance_shrink_candidate_ignores_outcome_and_preserves_score(self):
+  rows=self.fixture()['football'];row=rows[0];row['odds']={'hOverUnderValue':160}
+  for entry in row['variants'].values():entry['models']['BasketEnsembleModel']=entry['models'].pop('EnsembleModel')
+  for side in ('home','away'):
+   for i,r in enumerate(row['variants']['six-balanced']['audit'][side]['rows']):
+    r.update({'for':60 if i%2 else 100,'against':80})
+  other=copy.deepcopy(rows);other[0]['realScore']='120-110'
+  enrich(rows,'basketball');enrich(other,'basketball')
+  models=rows[0]['variants']['six-balanced']['models']
+  self.assertIn('VarianceShrinkTotalsModel',models)
+  self.assertEqual(models['VarianceShrinkTotalsModel'],other[0]['variants']['six-balanced']['models']['VarianceShrinkTotalsModel'])
+  self.assertEqual(models['VarianceShrinkTotalsModel']['scoreline'],models['HistoryTotalsModel']['scoreline'])
  def test_future_history_rejected(self):
   data=self.fixture();data['football'][0]['variants']['six-balanced']['audit']['home']['rows'][0]['date']='2026-10-01'
   with self.assertRaises(ValueError):enrich(data['football'],'football')
