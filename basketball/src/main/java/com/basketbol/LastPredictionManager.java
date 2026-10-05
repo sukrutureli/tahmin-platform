@@ -1,5 +1,7 @@
 package com.basketbol;
 
+import com.basketbol.util.FixtureIdentity;
+
 import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.ZoneId;
@@ -36,6 +38,7 @@ public class LastPredictionManager {
 			LastPrediction tempLastPrediction = new LastPrediction(matchInfo.get(i).getName(),
 					matchInfo.get(i).getTime());
 
+			tempLastPrediction.setEventId(FixtureIdentity.eventId(matchInfo.get(i).getDetailUrl()));
 			tempLastPrediction.setScore(predictionResults.get(i).getScoreline());
 
 			List<String> tahminList = calculatePrediction(th, predictionResults.get(i), matchInfo.get(i),
@@ -57,6 +60,7 @@ public class LastPredictionManager {
 				String awayTeam = tempLastPrediction.getName().split(" - ", 2)[1].trim();
 				PredictionData tempPredictionData = new PredictionData(homeTeam, awayTeam,
 						tempLastPrediction.getPredictions());
+				tempPredictionData.setEventId(tempLastPrediction.getEventId());
 				predictionData.add(tempPredictionData);
 				predictionData.get(predictionData.size() - 1).getStatuses()
 						.put(tempLastPrediction.getPredictions().get(0), "pending");

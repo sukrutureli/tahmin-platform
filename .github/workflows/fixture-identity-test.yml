@@ -1,0 +1,32 @@
+name: Fixture identity regression
+
+on:
+  push:
+    branches: [main, fix/control-fixture-identity]
+    paths:
+      - 'football/**'
+      - 'basketball/**'
+      - '.github/workflows/fixture-identity-test.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        module: [football, basketball]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+          cache-dependency-path: ${{ matrix.module }}/pom.xml
+      - name: Compile and verify fixture settlement without network or publishing
+        working-directory: ${{ matrix.module }}
+        run: mvn --batch-mode test-compile exec:java -Dexec.mainClass=FixtureIdentityRegression -Dexec.classpathScope=test -Dexec.args=integration

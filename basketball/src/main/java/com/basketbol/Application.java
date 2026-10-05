@@ -112,7 +112,7 @@ public class Application {
 
             // Futbolda olduğu gibi canlı skor listesi yerine MatchInfo detail URL'lerinin p1 sürümünü kullan.
             Map<String, String> updatedScores = scraper.fetchFinishedScoresFromDetails(rsList, matches);
-            List<PredictionData> predictions = PredictionUpdater.updateFromGithub(updatedScores, "PredictionData-");
+            List<PredictionData> predictions = PredictionUpdater.updateFromGithub(updatedScores, "PredictionData-", matches, controlDate);
 
             for (int i = 0; i < matches.size(); i++) {
                 MatchInfo match = matches.get(i);

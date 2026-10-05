@@ -5,6 +5,11 @@ import java.util.List;
 import java.util.Map;
 
 public class PredictionData {
+	private String eventId;
+
+	public String getEventId() { return eventId; }
+	public void setEventId(String eventId) { this.eventId = eventId; }
+
 
 	private String homeTeam;
 	private String awayTeam;

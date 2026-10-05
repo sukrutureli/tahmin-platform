@@ -1,6 +1,11 @@
 package com.basketbol.model;
 
 public class RealScores {
+	private String eventId;
+
+	public String getEventId() { return eventId; }
+	public void setEventId(String eventId) { this.eventId = eventId; }
+
 	private String homeTeam;
 	private String awayTeam;
 	private String score;

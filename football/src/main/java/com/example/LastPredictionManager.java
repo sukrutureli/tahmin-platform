@@ -1,5 +1,7 @@
 package com.example;
 
+import com.example.util.FixtureIdentity;
+
 import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.ZoneId;
@@ -44,6 +46,7 @@ public class LastPredictionManager {
 			LastPrediction tempLastPrediction = new LastPrediction(currentMatchInfo.getName(),
 					currentMatchInfo.getTime());
 
+			tempLastPrediction.setEventId(FixtureIdentity.eventId(currentMatchInfo.getDetailUrl()));
 			tempLastPrediction.setScore(predictionResult.getScoreline());
 			tempLastPrediction.setMbs(currentMatchInfo.getOdds().getMbs());
 
@@ -83,6 +86,7 @@ public class LastPredictionManager {
 				String awayTeam = tempLastPrediction.getName().split(" - ", 2)[1].trim();
 				PredictionData tempPredictionData = new PredictionData(homeTeam, awayTeam,
 						tempLastPrediction.getPredictions());
+				tempPredictionData.setEventId(tempLastPrediction.getEventId());
 				predictionData.add(tempPredictionData);
 				for (String prediction : tempLastPrediction.getPredictions()) {
 					predictionData.get(predictionData.size() - 1).getStatuses().put(prediction, "pending");

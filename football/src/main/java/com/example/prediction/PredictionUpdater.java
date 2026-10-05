@@ -1,6 +1,8 @@
 package com.example.prediction;
 
 import com.example.model.PredictionData;
+import com.example.model.MatchInfo;
+import com.example.util.FixtureIdentity;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.*;
 import java.net.HttpURLConnection;
@@ -18,41 +20,15 @@ public class PredictionUpdater {
 	 * versiyonunu "data/2025-10-16-updated.json" olarak kaydeder.
 	 */
 	public static List<PredictionData> update(List<PredictionData> predictions,
-			Map<String, String> updatedScores, String prefix, String day) throws IOException {
-		// 🔹 Güncelleme işlemleri...
-		for (PredictionData p : predictions) {
-			String home = p.getHomeTeam();
-			String away = p.getAwayTeam();
-			String matchedKey = null;
-			int count = 0;
-
-			for (String key : updatedScores.keySet()) {
-				String[] parts = key.split(" - ");
-				if (parts.length == 2) {
-					String homeKey = parts[0];
-					String awayKey = parts[1];
-
-					if (home.equals(homeKey) && away.equals(awayKey)) {
-						matchedKey = key;
-						count = 1;
-						break;
-					}
-
-					if (home.equals(homeKey) || away.equals(awayKey)) {
-						matchedKey = key;
-						count++;
-					}
-				}
-			}
-
-			if (matchedKey != null && count == 1) {
-				String score = updatedScores.get(matchedKey);
-				p.setScore(score);
-				evaluatePredictions(p, score);
-			} else {
-				System.out.println("⚠️ Eşleşme bulunamadı: " + p.getHomeTeam() + " - " + p.getAwayTeam());
-			}
-		}
+			Map<String, String> updatedScores, List<MatchInfo> matches, String prefix, String day) throws IOException {
+		FixtureIdentity.bindPredictions(predictions, matches);
+        for (PredictionData p : predictions) {
+            String score = p.getEventId() == null ? null : updatedScores.get(p.getEventId());
+            if (score != null) {
+                p.setScore(score);
+                evaluatePredictions(p, score);
+            }
+        }
 
 		// 🔹 Kaydet
 		File outDir = new File("public/futbol/data");

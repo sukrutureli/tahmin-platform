@@ -4,6 +4,11 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class LastPrediction {
+	private String eventId;
+
+	public String getEventId() { return eventId; }
+	public void setEventId(String eventId) { this.eventId = eventId; }
+
 	private String name;
 	private String time;
 	private List<String> predictions;

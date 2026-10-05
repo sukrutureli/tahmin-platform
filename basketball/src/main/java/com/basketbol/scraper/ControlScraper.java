@@ -1,5 +1,7 @@
 package com.basketbol.scraper;
 
+import com.basketbol.util.FixtureIdentity;
+
 import org.openqa.selenium.*;
 import org.openqa.selenium.chrome.ChromeDriver;
 import org.openqa.selenium.chrome.ChromeOptions;
@@ -19,6 +21,7 @@ public class ControlScraper {
         Map<String, String> scores = new HashMap<>();
         if (rsList != null && !rsList.isEmpty()) results.addAll(rsList);
         if (matches == null) return scores;
+        FixtureIdentity.bindScores(results, matches);
         ResultApiClient client = new ResultApiClient();
         int successfulChecks = 0;
         int failedChecks = 0;
@@ -32,9 +35,7 @@ public class ControlScraper {
                     System.out.println("⏳ HTTP maç henüz bitmemiş: " + name);
                     continue;
                 }
-                scores.put(name, score);
-                String[] teams = name.split(" - ", 2);
-                if (teams.length == 2) upsertRealScore(teams[0].trim(), teams[1].trim(), score);
+                FixtureIdentity.recordScore(scores, results, match, score);
                 System.out.println("✅ HTTP CONTROL " + name + " → " + score);
             } catch (HistoryApiClient.RateLimitException ex) {
                 throw ex;
@@ -82,6 +83,7 @@ public class ControlScraper {
         Map<String, String> scores = new HashMap<>();
         if (rsList != null && !rsList.isEmpty()) results.addAll(rsList);
         if (matches == null) return scores;
+        FixtureIdentity.bindScores(results, matches);
 
         System.out.println("🔎 Basket detail skor kontrol edilecek toplam maç: " + matches.size());
         for (MatchInfo matchInfo : matches) {
@@ -120,10 +122,7 @@ public class ControlScraper {
                 String homeScore = scoreMatcher.group(1);
                 String awayScore = scoreMatcher.group(2);
                 String score = homeScore + "-" + awayScore;
-                scores.put(matchName, score);
-
-                String[] teams = matchName.split(" - ", 2);
-                if (teams.length == 2) upsertRealScore(teams[0].trim(), teams[1].trim(), score);
+                FixtureIdentity.recordScore(scores, results, matchInfo, score);
                 System.out.println("✅ BASKET DETAIL " + matchName + " → " + score);
             } catch (TimeoutException e) {
                 System.out.println("⚠️ Basket detail skor alanı bulunamadı: " + matchName);

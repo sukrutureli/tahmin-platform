@@ -1,6 +1,8 @@
 package com.basketbol.prediction;
 
 import com.basketbol.model.PredictionData;
+import com.basketbol.model.MatchInfo;
+import com.basketbol.util.FixtureIdentity;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.*;
 import java.net.HttpURLConnection;
@@ -17,16 +19,8 @@ public class PredictionUpdater {
 	 * GitHub Pages üzerindeki JSON'u indirir, skorları günceller, güncel
 	 * versiyonunu "data/2025-10-16-updated.json" olarak kaydeder.
 	 */
-	public static List<PredictionData> updateFromGithub(Map<String, String> updatedScores, String prefix) throws IOException {
-		String day;
-		LocalTime now = LocalTime.now(ZoneId.of("Europe/Istanbul"));
-		if (now.isAfter(LocalTime.MIDNIGHT) && now.isBefore(LocalTime.of(6, 0))) {
-			day = LocalDate.now(ZoneId.of("Europe/Istanbul")).minusDays(1)
-					.format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
-		} else {
-			day = LocalDate.now(ZoneId.of("Europe/Istanbul")).format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
-		}
-
+	public static List<PredictionData> updateFromGithub(Map<String, String> updatedScores,
+			String prefix, List<MatchInfo> matches, String day) throws IOException {
 		// 🔹 Private repo'dan dosya URL'si (raw)
 		String url = "https://raw.githubusercontent.com/sukrutureli/fathertahmin/main/basketbol/data/" + prefix + day + ".json";
 		System.out.println("📥 JSON indiriliyor: " + url);
@@ -55,40 +49,19 @@ public class PredictionUpdater {
 			predictions = mapper.readerForListOf(PredictionData.class).readValue(in);
 		}
 
-		// 🔹 Güncelleme işlemleri...
-		for (PredictionData p : predictions) {
-			String home = p.getHomeTeam();
-			String away = p.getAwayTeam();
-			String matchedKey = null;
-			int count = 0;
+		return update(predictions, updatedScores, matches, prefix, day);
+    }
 
-			for (String key : updatedScores.keySet()) {
-				String[] parts = key.split(" - ");
-				if (parts.length == 2) {
-					String homeKey = parts[0];
-					String awayKey = parts[1];
-
-					if (home.equals(homeKey) && away.equals(awayKey)) {
-						matchedKey = key;
-						count = 1;
-						break;
-					}
-
-					if (home.equals(homeKey) || away.equals(awayKey)) {
-						matchedKey = key;
-						count++;
-					}
-				}
-			}
-
-			if (matchedKey != null && count == 1) {
-				String score = updatedScores.get(matchedKey);
-				p.setScore(score);
-				evaluatePredictions(p, score);
-			} else {
-				System.out.println("⚠️ Eşleşme bulunamadı: " + p.getHomeTeam() + " - " + p.getAwayTeam());
-			}
-		}
+    public static List<PredictionData> update(List<PredictionData> predictions,
+            Map<String, String> updatedScores, List<MatchInfo> matches, String prefix, String day) throws IOException {
+        FixtureIdentity.bindPredictions(predictions, matches);
+        for (PredictionData p : predictions) {
+            String score = p.getEventId() == null ? null : updatedScores.get(p.getEventId());
+            if (score != null) {
+                p.setScore(score);
+                evaluatePredictions(p, score);
+            }
+        }
 
 		// 🔹 Kaydet
 		File outDir = new File("public/basketbol/data");

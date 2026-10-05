@@ -1,5 +1,7 @@
 package com.example.report;
 
+import com.example.util.FixtureIdentity;
+
 import com.example.MatchHistoryManager;
 import com.example.model.LastPrediction;
 import com.example.model.Match;
@@ -24,7 +26,11 @@ public class CombinedHtmlReportGenerator {
 			List<PredictionResult> results, List<PredictionData> sublistPredictionData, String fileName, String day,
 			List<RealScores> realScores) {
 
-		ZoneId istanbulZone = ZoneId.of("Europe/Istanbul");
+		FixtureIdentity.bindPredictions(sublistPredictionData, matches);
+        FixtureIdentity.bindCoupons(sublistPredictions, matches);
+        FixtureIdentity.bindScores(realScores, matches);
+
+        ZoneId istanbulZone = ZoneId.of("Europe/Istanbul");
 
 		List<TeamMatchHistory> histories = historyManager != null ? historyManager.getTeamHistories() : List.of();
 
@@ -250,7 +256,7 @@ public class CombinedHtmlReportGenerator {
 			html.append("<span class='match-time'>").append(match.getTime()).append("</span>");
 			html.append("<span class='match-separator'>•</span>");
 			html.append("<span class='match-name'>").append(match.getName())
-					.append(getRealScore(realScores, homeStr, awayStr)).append("</span>");
+					.append(FixtureIdentity.realScore(realScores, match)).append("</span>");
 			html.append("<span class='match-separator'>•</span>");
 			html.append("<span class='match-mbs-box ").append(mbsClassBox).append("'>").append(match.getOdds().getMbs())
 					.append("</span>");
@@ -412,37 +418,7 @@ public class CombinedHtmlReportGenerator {
 		return new String[]{parts[0], parts[1]};
 	}
 
-	private static PredictionData findPredictionData(List<PredictionData> predictionData,
-			LastPrediction prediction) {
-		if (predictionData == null || prediction == null) return null;
-		String[] teams = splitMatchName(prediction.getName());
-		for (PredictionData data : predictionData) {
-			if (teams[0].equals(data.getHomeTeam()) && teams[1].equals(data.getAwayTeam())) {
-				return data;
-			}
-		}
-		return null;
-	}
-
-	private static String getRealScore(List<RealScores> rsList, String home, String away) {
-		String score = " (⏳)";
-		int count = 0;
-
-		if (rsList != null) {
-			for (RealScores rs : rsList) {
-				if (home.equals(rs.getHomeTeam()) && away.equals(rs.getAwayTeam())) {
-					score = " (" + rs.getScore() + ")";
-					count = 1;
-					break;
-				}
-				if (home.equals(rs.getHomeTeam()) || away.equals(rs.getAwayTeam())) {
-					score = " (" + rs.getScore() + ")";
-					count++;
-				}
-			}
-			if (count != 1)
-				score = " (⏳)";
-		}
-		return score;
-	}
+	private static PredictionData findPredictionData(List<PredictionData> dataList, LastPrediction prediction) {
+        return FixtureIdentity.predictionFor(dataList, prediction);
+    }
 }

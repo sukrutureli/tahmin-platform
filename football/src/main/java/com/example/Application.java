@@ -129,7 +129,7 @@ public class Application {
 			// Tahmin verilen maçların kendi Nesine detail URL'lerini kullan.
 			// Böylece canlı skor sayfasındaki farklı/kısaltılmış takım isimlerine bağımlı değiliz.
 			Map<String, String> updatedScores = scraper.fetchFinishedScoresFromDetails(rsList, matches, predictionData);
-			List<PredictionData> predictions = PredictionUpdater.update(predictionData, updatedScores,
+			List<PredictionData> predictions = PredictionUpdater.update(predictionData, updatedScores, matches,
 					"PredictionData-", controlDate);
 
 			for (int i = 0; i < matches.size(); i++) {

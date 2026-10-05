@@ -1,5 +1,7 @@
 package com.basketbol.html;
 
+import com.basketbol.util.FixtureIdentity;
+
 import com.basketbol.MatchHistoryManager;
 import com.basketbol.model.*;
 import com.basketbol.util.MathUtils;
@@ -22,7 +24,11 @@ public class CombinedHtmlReportGenerator {
 			List<PredictionResult> results, List<PredictionData> sublistPredictionData, String fileName, String day,
 			List<RealScores> realScores) {
 
-		ZoneId istanbulZone = ZoneId.of("Europe/Istanbul");
+		FixtureIdentity.bindPredictions(sublistPredictionData, matches);
+        FixtureIdentity.bindCoupons(sublistPredictions, matches);
+        FixtureIdentity.bindScores(realScores, matches);
+
+        ZoneId istanbulZone = ZoneId.of("Europe/Istanbul");
 
 		StringBuilder html = new StringBuilder();
 		html.append("<!DOCTYPE html><html lang='tr'><head><meta charset='UTF-8'>");
@@ -119,9 +125,7 @@ public class CombinedHtmlReportGenerator {
 
 		for (int i = 0; i < sublistPredictions.size(); i++) {
 			LastPrediction p = sublistPredictions.get(i);
-			PredictionData d = (sublistPredictionData != null && i < sublistPredictionData.size())
-					? sublistPredictionData.get(i)
-					: null;
+			PredictionData d = FixtureIdentity.predictionFor(sublistPredictionData, sublistPredictions.get(i));
 
 			String actualScore = (d != null && d.getScore() != null) ? d.getScore() : "-";
 
@@ -158,9 +162,7 @@ public class CombinedHtmlReportGenerator {
 		int pending = 0;
 
 		for (int i = 0; i < sublistPredictions.size(); i++) {
-			PredictionData d = (sublistPredictionData != null && i < sublistPredictionData.size())
-					? sublistPredictionData.get(i)
-					: null;
+			PredictionData d = FixtureIdentity.predictionFor(sublistPredictionData, sublistPredictions.get(i));
 
 			if (d != null && d.getStatuses() != null) {
 				for (String pick : sublistPredictions.get(i).getPredictions()) {
@@ -241,7 +243,7 @@ public class CombinedHtmlReportGenerator {
 
 			html.append("<div class='match-header'>");
 			html.append("<div class='match-name'>").append(match.getName())
-					.append(getRealScore(realScores, homeStr, awayStr)).append("</div>");
+					.append(FixtureIdentity.realScore(realScores, match)).append("</div>");
 			html.append("<div class='match-time'>").append(match.getTime()).append("</div>");
 			html.append("</div>");
 
@@ -375,26 +377,4 @@ public class CombinedHtmlReportGenerator {
 		System.out.println("✅ Birleşik basketbol HTML üretildi: " + output.getAbsolutePath());
 	}
 
-	// Detaylı kısımda skor yanına parantez içinde gerçek skor yazmak için
-	private static String getRealScore(List<RealScores> rsList, String home, String away) {
-		String score = " (⏳)";
-		int count = 0;
-
-		if (rsList != null) {
-			for (RealScores rs : rsList) {
-				if (home.equals(rs.getHomeTeam()) && away.equals(rs.getAwayTeam())) {
-					score = " (" + rs.getScore() + ")";
-					count = 1;
-					break;
-				}
-				if (home.equals(rs.getHomeTeam()) || away.equals(rs.getAwayTeam())) {
-					score = " (" + rs.getScore() + ")";
-					count++;
-				}
-			}
-			if (count != 1)
-				score = " (⏳)";
-		}
-		return score;
-	}
 }
