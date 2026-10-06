@@ -26,7 +26,10 @@ def diagnose(data):
              'expectedTotal':(h['totalMean']+a['totalMean'])/2,
              'totalStdDev':((h['totalVariance']+a['totalVariance'])/2)**.5,
              'minimumHistoryCount':min(h['count'],a['count'])}
-     if sport=='basketball':values['expectedTotalMinusLine']=values['expectedTotal']-row['odds'].get('hOverUnderValue',0)
+     if sport=='basketball':
+      # Goal/2.5-goal event rates are not meaningful basketball predictors.
+      for key in ('meanScoringRate','meanConcedingRate','meanCleanSheetRate','meanBlankRate','meanHistoricalOverRate','meanHistoricalBttsRate'):values.pop(key)
+      values['expectedTotalMinusLine']=values['expectedTotal']-row['odds'].get('hOverUnderValue',0)
      cohorts[correct].append(values)
      if not correct:errors.append({'date':row['date'],'eventId':row['eventId'],'name':row['name'],'realScore':row['realScore'],'probabilities':p,'features':values})
     keys=sorted({k for items in cohorts.values() for f in items for k in f})

@@ -156,3 +156,22 @@ sonuç etiketi okunmaz. Bu ilişki nedensellik veya bağımsız başarı kanıt�
 5 Ekim adayın geliştirme günüdür; aynı gün başarısı bağımsız doğrulama sayılmaz.
 Önceki başarılı artifactlerdeki tahminler değişmez; başarısız 5 Ekim parity
 artifact'i teşhis içindir ve doğrulanmış tahmin kaydı olarak kullanılmaz.
+
+## 6 Ekim koşullu kalibrasyon gölge deneyi
+
+conditional_rules.py, sabit model karışımlarından ayrı olarak tek koşullu
+olasılık kalibrasyonunu araştırır. Özellik/eşik yalnız hedef tarihten önceki
+satırlardan seçilir; son tamamlanmış kaynak gün kronolojik kontroldür. Eğitimde
+20 baseline önsel örneği kullanılır, karışım yüzde 25/50 ile sınırlıdır.
+Basketbolda gol atamama/KG/2.5-gol frekansları aday ve hata teşhisinden çıkarılır.
+Hedef günün sonuçları seçime giremez. Eksik özellikte baseline korunur.
+
+Geçmiş kontrolde yeterli N ile isabet düşmeden log loss iyileşirse koşullu aday
+etkinleşir. Elenen/az örnekli aday da researchProbabilities olarak ayrı kaydedilir
+ve başarısızlıkları gizlenmeden sonraki günlerde sınanır. İlk kayıt ve kural
+parametreleri 7 takvim günü sabittir; aynı gün tekrarında dosya byte olarak
+yeniden kullanılır. conditional-before-results.json/conditional-evaluation.json
+ve conditional-rules.html günlük daybook'tan ayrıdır; mevcut tahmin, skor,
+main ve Telegram değişmez. İlk geliştirme günü 6 Ekimdir; geçmiş kontrol
+bağımsız başarı değildir. Lig/rakip gücü henüz eklenmemiştir; geniş havuz hâlâ
+1 Ekimden dondurulmuştur, güncel geniş HTTP havuzu toplanmış gibi gösterilmez.

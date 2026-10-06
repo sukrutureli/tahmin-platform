@@ -96,6 +96,8 @@ jobs:
         run: mvn -B clean compile exec:java -Dexec.mainClass=com.basketbol.experiment.ExperimentReplay -Dexec.args="../pipeline-output/basketball-inputs.json ../pipeline-output/basketball-replay.json"
       - name: Add experimental goal and total history features
         run: python experiments/ensemble_validation/history_markets.py --output pipeline-output
+      - name: Freeze conditional calibration shadow predictions
+        run: python experiments/ensemble_validation/conditional_rules.py freeze --output pipeline-output --previous previous
       - name: Freeze earlier-day rule predictions before refreshing labels
         run: python experiments/ensemble_validation/daybook.py freeze --output pipeline-output --previous previous
       - name: Refresh today's finished football outcomes (artifact only)
@@ -110,6 +112,8 @@ jobs:
         run: python experiments/ensemble_validation/error_diagnostics.py --output pipeline-output
       - name: Settle saved predictions and update daily journal
         run: python experiments/ensemble_validation/daybook.py settle --output pipeline-output --previous previous
+      - name: Evaluate conditional calibration shadow predictions
+        run: python experiments/ensemble_validation/conditional_rules.py settle --output pipeline-output --previous previous
       - name: Verify provenance and history boundaries
         env:
           HOLDOUT_DATE: ${{ steps.cfg.outputs.target_date }}
