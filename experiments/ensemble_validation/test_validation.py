@@ -5,6 +5,13 @@ from prepare import archived,filtered,weighted_stats
 from report import metrics,fit,vector,result,poisson_expectation,candidate_vector,evaluate,derive_today_rules
 
 class ValidationTests(unittest.TestCase):
+ def test_placeholder_team_identity_is_excluded_without_guessing(self):
+  from prepare import valid_team_identity
+  self.assertFalse(valid_team_identity(('-', '-')))
+  self.assertFalse(valid_team_identity(('A', ' ')))
+  self.assertFalse(valid_team_identity((None, 'B')))
+  self.assertTrue(valid_team_identity(('A-B', 'B')))
+
  def test_duplicate_short_names_keep_their_own_published_prediction(self):
   from prepare import paired_baselines,take_baseline
   matches=[{'homeTeam':'A','awayTeam':'B','odds':{'ms1':1.2}}, {'homeTeam':'A','awayTeam':'B','odds':{'ms1':1.4}}]

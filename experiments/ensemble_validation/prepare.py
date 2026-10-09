@@ -99,6 +99,9 @@ def weighted_stats(rows,cutoff,sport,venue,recency,venue_split,recent_mix,no_for
  else:stats={'avgPointsFor':avgf,'avgPointsAgainst':avga,'avgTotalPoints':avgf+avga,'ppg':ppg}
  return stats,audit
 
+def valid_team_identity(key):
+ return all(isinstance(team,str) and team.strip() not in ('','-') for team in key)
+
 def paired_baselines(matches,predictions):
  if len(matches)!=len(predictions):raise ValueError('Match/prediction row count differs')
  pairs={}
@@ -139,7 +142,11 @@ def assemble(sources,reference,output,holdout):
   for info in data['MatchInfo']:
    eid=info['detailUrl'].rstrip('/').split('/')[-1];h=histories.get(eid)
    if not h:excluded.append({'sport':sport,'date':d,'eventId':eid,'reason':'history absent'});continue
-   key=h['teamEv'],h['teamDep'];base,published=take_baseline(pairs,key,info['odds'])
+   key=h['teamEv'],h['teamDep']
+   if not valid_team_identity(key):
+    excluded.append({'sport':sport,'date':d,'eventId':eid,'reason':'team identity absent','teams':list(key)})
+    continue
+   base,published=take_baseline(pairs,key,info['odds'])
    if base is None or published is None:raise ValueError(f'Frozen baseline absent: {sport} {d} {eid}')
    base=copy.deepcopy(base);base['odds']=info['odds']
    cutoff=date.fromisoformat(d)
