@@ -175,3 +175,29 @@ ve conditional-rules.html günlük daybook'tan ayrıdır; mevcut tahmin, skor,
 main ve Telegram değişmez. İlk geliştirme günü 6 Ekimdir; geçmiş kontrol
 bağımsız başarı değildir. Lig/rakip gücü henüz eklenmemiştir; geniş havuz hâlâ
 1 Ekimden dondurulmuştur, güncel geniş HTTP havuzu toplanmış gibi gösterilmez.
+
+
+## 11 Ekim: günlük geniş HTTP geçmişi
+
+1 Ekim havuzunun yeni takımları kapsamaması giderildi. live_history.py, daha önce
+balanced-history deneyinde kullanılan Broadage takım takvimini tekrar kullanır.
+Nesine event ID -> widget takım ID eşlemesi, API metadata takım ID doğrulaması
+ve endpoint'in verdiği ay navigasyonu kullanılır. Futbol 20/basketbol 25 geçmiş
+üst sınırı korunur; en çok 12 aylık sayfa taranır. Aynı gün/gelecek, canlı ve
+normal süre skoru bilinmeyen uzatma satırları alınmaz. Basketbolda galibiyet
+son skorla, sayı ortalamaları normal süreyle hesaplanır.
+
+500 ms istek aralığı, tek seri istemci, takım bazlı istek önbelleği ve 45 dakika
+toplama bütçesi vardır. 429 tüm toplamayı durdurur; eksiklikler saklanmaz.
+Ham HTTP yanıtları, istek hataları, takım kimlikleri ve toplama zamanı artifact'e
+yazılır. live-history.json aynı gün tekrarında aynen kullanılır; günlük havuzlar
+live-history-journal.json ile sonraki artifact'e taşınır. prepare.py yalnız aynı
+fixture günü ve event ID için bu veriyi kullanır; eski günlere bugünden geçmiş
+uydurmaz. Eksik günlerde eski 1 Ekim havuzu/fallback görünür kalır.
+
+11 Ekim ilk maç-öncesi tahminleri zaten kayıtlıdır: bu ek veri onlara uygulanmaz.
+Bugün çekilen geniş geçmişten aynı gün yapılan karşılaştırma retrospektiftir.
+Her geniş varyant audit'inde collectedAt/historyBeforeKickoff görünür. Yeni
+günlerde geniş geçmiş dondurma adımından önce toplanır; maç-öncesi kaydı yalnız
+gerçek kayıt saati kickoff'tan önceyse bağımsız sayılır. Baseline parity, skor,
+main, günlük/control üretim iş akışları ve Telegram değişmez.

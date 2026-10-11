@@ -14,7 +14,7 @@ jobs:
   benchmark:
     if: github.ref == 'refs/heads/experiment/ensemble-market-validation'
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
         with:
@@ -82,8 +82,10 @@ jobs:
             basketball/pom.xml
       - name: Verify feature and validation rules
         run: python -m unittest discover -s experiments/ensemble_validation -v
+      - name: Collect daily wide HTTP history (experiment only)
+        run: python experiments/ensemble_validation/live_history.py --published published --previous previous --output pipeline-output --target-date '${{ steps.cfg.outputs.target_date }}'
       - name: Freeze paired inputs and feature ablations
-        run: python experiments/ensemble_validation/prepare.py --published published --archive archive --reference reference --output pipeline-output --holdout '${{ steps.cfg.outputs.target_date }}'
+        run: python experiments/ensemble_validation/prepare.py --published published --archive archive --reference reference --output pipeline-output --holdout '${{ steps.cfg.outputs.target_date }}' --live-history pipeline-output/live-history-journal.json
       - name: Preserve reproducible history seed in artifact
         run: |
           cp reference/predictions.json pipeline-output/reference-predictions.json

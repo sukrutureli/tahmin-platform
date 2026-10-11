@@ -119,7 +119,14 @@ def take_baseline(pairs,key,odds):
   return candidates.pop(indexes[0])
  return candidates.pop(0) if candidates else (None,None)
 
-def assemble(sources,reference,output,holdout):
+def assemble(sources,reference,output,holdout,live_history=None):
+ live={}
+ if live_history and live_history.exists():
+  snapshots=json.loads(live_history.read_text())
+  if isinstance(snapshots,dict):snapshots=[snapshots]
+  for snapshot in snapshots:
+   if snapshot.get("targetDate", "9999")<=holdout:
+    for r in snapshot.get("fixtures",[]):live[(r["sport"],snapshot["targetDate"],r["eventId"])]=r
  pool={}
  for r in json.loads((reference/'predictions.json').read_text()):
   for team,key in ((r['homeTeam'],'homeStats'),(r['awayTeam'],'awayStats')):
@@ -152,6 +159,10 @@ def assemble(sources,reference,output,holdout):
    cutoff=date.fromisoformat(d)
    six=[archived(h.get(k,[]),team,cutoff,sport) for k,team in zip(('sonMaclarHome','sonMaclarAway'),key)]
    wide=[filtered(pool.get((sport,team),[]),cutoff,20 if sport=='football' else 25) for team in key]
+   collected=live.get((sport,d,eid))
+   if collected:
+    if collected['teams']!=list(key):raise ValueError('Live history identity mismatch: '+eid)
+    wide=[filtered(side['rows'],cutoff,20 if sport=='football' else 25) for side in collected['sides']]
    wide_ok=all(len(w)>=len(s) and len(w)>0 for w,s in zip(wide,six))
    variants={'legacy':{'match':base,'audit':{'kind':'exact saved Match JSON'}}}
    no_h2h=copy.deepcopy(base)
@@ -173,17 +184,19 @@ def assemble(sources,reference,output,holdout):
      st,audit=weighted_stats(rows,cutoff,sport,v,decay,venue,mix,name.endswith('-no-form'))
      match[side].update(st);audits.append(audit)
     variants[name]={'match':match,'audit':{'home':audits[0],'away':audits[1],
-                                        'historicalWideScope':'exact team-name overlap with frozen 1 October history pool; no future rows'}}
+                                        'historicalWideScope':'daily HTTP event/team identity' if collected else 'frozen 1 October team pool',
+                                        'collectedAt':collected.get('collectedAt') if collected else None,
+                                        'historyBeforeKickoff':collected.get('beforeKickoff',False) if collected else None}}
    records[sport].append({'date':d,'eventId':eid,'name':info['name'],'time':info['time'],
                          'role':'holdout' if d==holdout else 'training','odds':info['odds'],
                          'published':published,'realScore':real.get(info['name']),'wideAvailable':wide_ok,'variants':variants})
  for sport,rows in records.items():dump(output/(sport+'-inputs.json'),rows)
  dump(output/'input-manifest.json',{'holdoutDate':holdout,'hashes':hashes,'excluded':excluded,
       'counts':{s:len(r) for s,r in records.items()},'futureDataPolicy':'features strictly before fixture date; holdout outcomes never select weights',
-      'wideLimitation':'Older expanded history exists only for teams present in the frozen 1 October artifact. Paired comparisons report their own cohort.'})
+      'liveHistoryFixtures':len(live),'wideLimitation':'Daily HTTP history is used only for its recorded fixture day. Older dates retain the frozen 1 October pool. After-kickoff collections are retrospective; missing teams remain explicit.'})
  return records
 
 if __name__=='__main__':
  p=argparse.ArgumentParser();p.add_argument('--published',type=Path,required=True);p.add_argument('--archive',type=Path,required=True)
  p.add_argument('--reference',type=Path,required=True);p.add_argument('--output',type=Path,required=True);p.add_argument('--holdout',default='2026-10-01')
- a=p.parse_args();assemble([a.archive,a.published],a.reference,a.output,a.holdout)
+ p.add_argument('--live-history',type=Path);a=p.parse_args();assemble([a.archive,a.published],a.reference,a.output,a.holdout,a.live_history)

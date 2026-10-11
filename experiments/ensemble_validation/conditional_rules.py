@@ -120,7 +120,7 @@ def freeze(data, previous=None, now=None):
          'frozenThrough':previous['frozenThrough'] if carry else
              (date.fromisoformat(target)+timedelta(days=6)).isoformat(),
          'rules':rules,'scorePolicy':'original score unchanged','autoPromotion':False,
-         'historyScope':'frozen 1 October pool; new teams can lack wide history',
+         'historyScope':'Daily HTTP snapshots when available; older missing dates use frozen 1 October pool; after-kickoff collections are retrospective',
          'predictions':[]}
     for s,rows in data.items():
         for r in rows:
