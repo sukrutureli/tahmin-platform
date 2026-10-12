@@ -51,6 +51,41 @@ jobs:
           run-id: ${{ steps.cfg.outputs.previous_run_id }}
           github-token: ${{ github.token }}
           path: previous
+      - uses: actions/download-artifact@v4
+        if: hashFiles('previous/rule-mining-dataset.json') == ''
+        with:
+          name: ensemble-market-validation-2026-10-03
+          run-id: 37182748093
+          github-token: ${{ github.token }}
+          path: rule-bootstrap/0
+      - uses: actions/download-artifact@v4
+        if: hashFiles('previous/rule-mining-dataset.json') == ''
+        with:
+          name: ensemble-market-validation-2026-10-05
+          run-id: 37422557787
+          github-token: ${{ github.token }}
+          path: rule-bootstrap/1
+      - uses: actions/download-artifact@v4
+        if: hashFiles('previous/rule-mining-dataset.json') == ''
+        with:
+          name: ensemble-market-validation-2026-10-07
+          run-id: 37737276785
+          github-token: ${{ github.token }}
+          path: rule-bootstrap/2
+      - uses: actions/download-artifact@v4
+        if: hashFiles('previous/rule-mining-dataset.json') == ''
+        with:
+          name: ensemble-market-validation-2026-10-08
+          run-id: 37892855843
+          github-token: ${{ github.token }}
+          path: rule-bootstrap/3
+      - uses: actions/download-artifact@v4
+        if: hashFiles('previous/rule-mining-dataset.json') == ''
+        with:
+          name: ensemble-market-validation-2026-10-09
+          run-id: 38030605924
+          github-token: ${{ github.token }}
+          path: rule-bootstrap/4
       - name: Restore frozen history reference from previous artifact
         id: seed
         run: |
@@ -102,6 +137,8 @@ jobs:
         run: python experiments/ensemble_validation/conditional_rules.py freeze --output pipeline-output --previous previous
       - name: Freeze earlier-day rule predictions before refreshing labels
         run: python experiments/ensemble_validation/daybook.py freeze --output pipeline-output --previous previous
+      - name: Discover and freeze two-condition history rules (shadow only)
+        run: python experiments/ensemble_validation/mine_rules.py --input pipeline-output --output pipeline-output --previous previous --bootstrap rule-bootstrap --target-date '${{ steps.cfg.outputs.target_date }}'
       - name: Refresh today's finished football outcomes (artifact only)
         working-directory: football
         run: mvn -B exec:java -Dexec.mainClass=com.example.experiment.OutcomeRefresh -Dexec.args="../pipeline-output/football-replay.json ../pipeline-output/football-outcome-audit.json"
@@ -116,6 +153,8 @@ jobs:
         run: python experiments/ensemble_validation/daybook.py settle --output pipeline-output --previous previous
       - name: Evaluate conditional calibration shadow predictions
         run: python experiments/ensemble_validation/conditional_rules.py settle --output pipeline-output --previous previous
+      - name: Settle immutable subgroup rule forecasts
+        run: python experiments/ensemble_validation/mine_rules.py --settle --input pipeline-output --output pipeline-output --target-date '${{ steps.cfg.outputs.target_date }}'
       - name: Verify provenance and history boundaries
         env:
           HOLDOUT_DATE: ${{ steps.cfg.outputs.target_date }}

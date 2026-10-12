@@ -1,0 +1,69 @@
+name: Historical Subgroup Rule Mining (Artifacts Only)
+on:
+  push:
+    branches: ['experiment/ensemble-market-validation']
+    paths: ['experiments/ensemble_validation/mine_rules.py', 'experiments/ensemble_validation/test_mine_rules.py', '.github/workflows/subgroup-rule-mining.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  mine:
+    if: github.ref == 'refs/heads/experiment/ensemble-market-validation'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: actions/download-artifact@v4
+        with:
+          name: ensemble-market-validation-2026-10-12
+          run-id: 38216431292
+          github-token: ${{ github.token }}
+          path: source
+      - uses: actions/download-artifact@v4
+        with:
+          name: ensemble-market-validation-2026-10-03
+          run-id: 37182748093
+          github-token: ${{ github.token }}
+          path: rule-bootstrap/0
+      - uses: actions/download-artifact@v4
+        with:
+          name: ensemble-market-validation-2026-10-05
+          run-id: 37422557787
+          github-token: ${{ github.token }}
+          path: rule-bootstrap/1
+      - uses: actions/download-artifact@v4
+        with:
+          name: ensemble-market-validation-2026-10-07
+          run-id: 37737276785
+          github-token: ${{ github.token }}
+          path: rule-bootstrap/2
+      - uses: actions/download-artifact@v4
+        with:
+          name: ensemble-market-validation-2026-10-08
+          run-id: 37892855843
+          github-token: ${{ github.token }}
+          path: rule-bootstrap/3
+      - uses: actions/download-artifact@v4
+        with:
+          name: ensemble-market-validation-2026-10-09
+          run-id: 38030605924
+          github-token: ${{ github.token }}
+          path: rule-bootstrap/4
+      - name: Verify chronological rules and immutable forecasts
+        run: python -m unittest discover -s experiments/ensemble_validation -v
+      - name: Mine historical conditions with October 11 untouched test
+        run: python experiments/ensemble_validation/mine_rules.py --input source --output mining-output --bootstrap rule-bootstrap --target-date 2026-10-12
+      - name: Settle late shadow examples as retrospective only
+        run: python experiments/ensemble_validation/mine_rules.py --settle --input source --output mining-output --target-date 2026-10-12
+      - uses: actions/upload-artifact@v4
+        with:
+          name: subgroup-rule-mining-bootstrap
+          path: mining-output/
+          if-no-files-found: error
+          retention-days: 30

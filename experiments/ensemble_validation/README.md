@@ -210,3 +210,42 @@ Artık toplam 45 dakika bütçe spor başına 22.5 dakika ayrılır; futbol sür
 bitmesi basketbolu atlamaz. 429 yine bütün HTTP toplamayı durdurur. Atlanan her
 fixture hata listesinde açıkça görünür. Eski günlük snapshot'lar değişmez.
 Bu altyapı düzeltmesidir; yeni tahmin kuralı veya üretim değişikliği değildir.
+
+
+## 13 Ekim: geçmişten bir/iki koşullu pazar kuralları
+
+mine_rules.py, geçmiş özelliklerinden ayrı MS1/MSX/MS2/Alt/Üst/Var/Yok adayları
+çıkarır. En çok iki koşul; güncel sonuç/published pick bir özellik değildir.
+Saha gol/sayı farkı, saha toplamı, hücum/savunma farkı, galibiyet oranı,
+son üç / önceki üç form değişimi, KG/Üst/gol atamama sıklığı, oynaklık
+ve yeterli kayıtlı geniş geçmiş varsa son-altı/geniş farkı taranır.
+Rakip gücü/lig kalibrasyonu henüz yoktur; yapılmış gibi gösterilmez.
+
+Eski başarılı 3/5/7/8/9 Ekim artifact'lerinden pruned günler geri alınır;
+rule-mining-dataset.json ile günlük artifact'lerde taşınır. Threshold'lar
+yalnız eğitimdeki yüzde 25/50/75 kesimlerinden seçilir. En az 40 eğitim,
+15 doğrulama örneği, eğitimde en az üç ek doğru ve log loss iyileşmesi
+gerekir. İlk 16 atomdan iki farklı özellikli birleşimler ve ilk 10 eğitim
+adayı incelenir. Doğrulamada isabet azalmadan log loss iyileşmeli.
+MSX adayı gerçekten MSX argmax üretmeli. Son iki bitmiş kaynak gün
+doğrulama ve seçime hiçbir etkisi olmayan kronolojik testtir.
+
+Çok aday araması geriye dönük overfit riski taşır; test sonucu kötü olan
+aday başka adayla değiştirilmez ve gizlenmez. Bu yeni geliştirme deneyi,
+bağımsız maç-öncesi kanıt değildir. mined-rules.json/html her kuralın
+koşulları, örnekleri, main ile aynı kohorttaki doğru sayısı, Brier ve
+log loss'u, maç listelerini ve elenen adayları gösterir.
+
+Bu yalnız tablo üretmez: kurallar sonuç yenilemesinden ÖNCE ayrı
+mined-before-results.json tahminlerine uygulanır; dışarıda baseline korunur.
+Çakışmada doğrulama log loss farkıyla deterministik seçim vardır.
+Aynı gün yeniden çalıştırma tahminleri byte olarak korur. Sonradan
+mined-daily-evaluation.json yalnız tamamlanmış sonuçları değerlendirir;
+maç-öncesi ve geç kayıtlar ayrıdır. Orijinal daybook/skor ve Telegram
+değişmez. Mevcut 12 Ekim örneklerine yeni hesap geç yapılmıştır;
+ileriye dönük başarı diye sayılmaz.
+
+Hızlı Historical Subgroup Rule Mining workflow'u kayıtlı 12 Ekim artifact'i
+üzerinde 10 Ekim seçim/11 Ekim dokunulmamış test raporu çıkarır.
+Günlük Ensemble workflow'u bu adımları yeni günlere aynı şekilde uygular.
+Main'e otomatik terfi/yayın yoktur.
