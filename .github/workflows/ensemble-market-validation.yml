@@ -107,6 +107,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+      - name: Install independent outcome learner dependency
+        run: python -m pip install numpy==2.3.5
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -139,6 +141,10 @@ jobs:
         run: python experiments/ensemble_validation/daybook.py freeze --output pipeline-output --previous previous
       - name: Discover and freeze two-condition history rules (shadow only)
         run: python experiments/ensemble_validation/mine_rules.py --input pipeline-output --output pipeline-output --previous previous --bootstrap rule-bootstrap --target-date '${{ steps.cfg.outputs.target_date }}'
+      - name: Learn outcomes and freeze independent model forecasts
+        env:
+          OPENBLAS_NUM_THREADS: '1'
+        run: python experiments/ensemble_validation/outcome_learning.py --dataset pipeline-output/rule-mining-dataset.json --output pipeline-output --previous previous --target-date '${{ steps.cfg.outputs.target_date }}'
       - name: Refresh today's finished football outcomes (artifact only)
         working-directory: football
         run: mvn -B exec:java -Dexec.mainClass=com.example.experiment.OutcomeRefresh -Dexec.args="../pipeline-output/football-replay.json ../pipeline-output/football-outcome-audit.json"
@@ -155,6 +161,10 @@ jobs:
         run: python experiments/ensemble_validation/conditional_rules.py settle --output pipeline-output --previous previous
       - name: Settle immutable subgroup rule forecasts
         run: python experiments/ensemble_validation/mine_rules.py --settle --input pipeline-output --output pipeline-output --target-date '${{ steps.cfg.outputs.target_date }}'
+      - name: Settle independent learned forecasts
+        env:
+          OPENBLAS_NUM_THREADS: '1'
+        run: python experiments/ensemble_validation/outcome_learning.py --settle --dataset pipeline-output/rule-mining-dataset.json --output pipeline-output --target-date '${{ steps.cfg.outputs.target_date }}'
       - name: Verify provenance and history boundaries
         env:
           HOLDOUT_DATE: ${{ steps.cfg.outputs.target_date }}

@@ -249,3 +249,37 @@ Hızlı Historical Subgroup Rule Mining workflow'u kayıtlı 12 Ekim artifact'i
 üzerinde 10 Ekim seçim/11 Ekim dokunulmamış test raporu çıkarır.
 Günlük Ensemble workflow'u bu adımları yeni günlere aynı şekilde uygular.
 Main'e otomatik terfi/yayın yoktur.
+
+
+## 13 Ekim: gerçek sonuçtan doğrudan öğrenme
+
+outcome_learning.py main'i geçme koşulu olmadan gerçek sonuçtan eğitilir.
+Her spor/pazar için L2 multinomial softmax; takım skorları için ridge regresyon
+vardır. Ham geçmiş özellikleri, mutlak güç farkı, ev/deplasman gol/sayı
+ortalamaları, geçerli ilk oranlardan marjı alınmış olasılıklar ve overround
+kullanılır. Geçmiş / yalnız oran / birlikte üç özellik grubu ve .1/1/10
+regularizasyon yalnız doğrulama log loss'u (skorda MAE) ile seçilir.
+Main model olasılıkları/skorları bir girdi, önsel veya seçim şartı değildir.
+
+Medyan, merkezleme ve ölçekler yalnız eğitimde öğrenilir; eksik girdiler için
+medyan + eksiklik bayrağı kullanılır. Test gününün etiketleri/özellikleri
+eğitimi, ön işlemeyi veya model seçimini değiştiremez. Ağırlıklar standardize
+ilişkisel katsayılardır; bağımsız nedensel önem diye sunulmaz. Saha/lige göre
+rakip güç düzeltmesi henüz yoktur. Skor başlığı MS/OU/KG başlıklarından ayrı
+öğrenilir; sınıf olasılıkları skor dağılımından türetilmiş değildir. Skor hedefi
+yayınlanmış settlement skorudur; futbolda uzatma/penaltı farkı olabilir.
+
+İlk hızlı rapor 11 Ekim doğrulama, 12 Ekim dokunulmamış test kullanır. Bu yeni
+geliştirme/geriye dönük kıyastır; ileriye dönük kanıt değildir. Küçük test N
+saklanmaz; main kıyası yalnız aynı geçerli kohortta yapılır.
+outcome-learning.json/html, üç özellik grubunun doğrulama metriklerini,
+öğrenilen katsayıları, gerçek skorları ve maç listesini saklar.
+learned-before-results.json sonuç yenilemesinden önce bağımsız olasılık/skor
+kaydeder; aynı gün dosya byte olarak korunur. learned-daily-evaluation.json
+live/eksik sonuçları dışlar ve maç-öncesi/sonradan kayıtları ayırır.
+Üretim daybook/skor, main, control ve Telegram değişmez.
+
+Test kıyasının modeli/eşikleri değişmez. Test raporundan sonra, seçilen aynı
+özellik grubu ve regularizasyonla tamamlanmış bütün geçmiş günler üzerinde
+forecastModel yeniden eğitilir; yalnız gelecek gün tahminleri için kullanılır.
+Bu yeniden eğitilmiş modelin kendi eğitim günündeki sonucu bağımsız test sayılmaz.
