@@ -315,10 +315,12 @@ def collect_day(published, previous, output, target, max_seconds=2700):
             dump(output / 'live-history.json', old)
             preserve_journal(previous,output,old)
             return old
-    deadline = time.monotonic() + max_seconds
     stopped = False
+    rate_limited = False
     try:
         for sport, folder in (('football','futbol'),('basketball','basketbol')):
+            # Separate budgets prevent a large football slate starving basketball.
+            deadline = time.monotonic() + max_seconds / 2
             infos = json.loads((published/folder/'data'/f'MatchInfo-{target}.json').read_text())
             histories = json.loads((published/folder/'data'/f'TeamMatchHistory-{target}.json').read_text())
             by_id = {event_id({'detailUrl':h.get('originalMatchUrl',h.get('detailUrl',''))}):h for h in histories}
@@ -330,8 +332,8 @@ def collect_day(published, previous, output, target, max_seconds=2700):
                     continue
                 if time.monotonic() > deadline:
                     stopped = True
-                    snapshot['errors'].append({'sport':sport,'eventId':eid,'reason':'collection time budget exhausted; remaining fixtures unavailable'})
-                    break
+                    snapshot['errors'].append({'sport':sport,'eventId':eid,'reason':'sport collection time budget exhausted; fixture unavailable'})
+                    continue
                 try:
                     sides = collector.collect(info,h,cutoff,sport)
                     now = datetime.now(timezone.utc)
@@ -345,6 +347,7 @@ def collect_day(published, previous, output, target, max_seconds=2700):
                         'collectedAt':now.isoformat(),'beforeKickoff':prospective})
                 except RateLimitError as exc:
                     stopped = True
+                    rate_limited = True
                     snapshot['errors'].append({'sport':sport,'eventId':eid,'reason':str(exc)})
                     break
                 except Exception as exc:
@@ -352,10 +355,10 @@ def collect_day(published, previous, output, target, max_seconds=2700):
                 finally:
                     # Keep a recoverable partial artifact even on runner timeout.
                     dump(output/'live-history.json',snapshot)
-            if stopped: break
+            if rate_limited: break
     finally:
         snapshot.update({'completedAt':datetime.now(timezone.utc).isoformat(),'stoppedEarly':stopped,
-                         'requests':client.audit})
+                         'requests':client.audit,'rateLimited':rate_limited,'secondsPerSport':max_seconds / 2})
         dump(output/'live-history.json',snapshot)
         preserve_journal(previous,output,snapshot)
     return snapshot

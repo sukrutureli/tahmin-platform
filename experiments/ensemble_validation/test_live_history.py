@@ -54,3 +54,22 @@ class LivePreparationTests(unittest.TestCase):
             fixture['teams']=['U21 A','B'];dump(live,[{'targetDate':target,'fixtures':[fixture]}])
             with self.assertRaisesRegex(ValueError,'identity mismatch'):
                 assemble([source],ref,out,target,live)
+
+class CollectionBudgetTests(unittest.TestCase):
+    def test_football_budget_cannot_starve_basketball(self):
+        from prepare import dump
+        clock=[0]
+        def fake_collect(info,history,cutoff,sport):
+            clock[0]+=1.1
+            return [{'rows':[]},{'rows':[]}]
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d)
+            for folder,ids in [('futbol',['1','2']),('basketbol',['3'])]:
+                dump(root/folder/'data/MatchInfo-2026-10-12.json',[{'detailUrl':'https://istatistik.nesine.com/'+i,'time':'23:59'} for i in ids])
+                dump(root/folder/'data/TeamMatchHistory-2026-10-12.json',[{'originalMatchUrl':'https://istatistik.nesine.com/'+i,'teamEv':'A','teamDep':'B'} for i in ids])
+            with patch('live_history.time.monotonic',side_effect=lambda:clock[0]), patch('live_history.Collector.collect',side_effect=fake_collect):
+                s=collect_day(root,root/'previous',root/'out','2026-10-12',max_seconds=2)
+            self.assertEqual([r['sport'] for r in s['fixtures']],['football','basketball'])
+            self.assertTrue(s['stoppedEarly'])
+            self.assertFalse(s['rateLimited'])
+            self.assertEqual(s['errors'][0]['eventId'],'2')

@@ -201,3 +201,12 @@ Her geniş varyant audit'inde collectedAt/historyBeforeKickoff görünür. Yeni
 günlerde geniş geçmiş dondurma adımından önce toplanır; maç-öncesi kaydı yalnız
 gerçek kayıt saati kickoff'tan önceyse bağımsız sayılır. Baseline parity, skor,
 main, günlük/control üretim iş akışları ve Telegram değişmez.
+
+
+## 12 Ekim toplama bütçesi onarımı
+
+11 Ekim'de tek bütçe futbol tarafından tüketildiği için basketbol hiç taranmadı.
+Artık toplam 45 dakika bütçe spor başına 22.5 dakika ayrılır; futbol süresinin
+bitmesi basketbolu atlamaz. 429 yine bütün HTTP toplamayı durdurur. Atlanan her
+fixture hata listesinde açıkça görünür. Eski günlük snapshot'lar değişmez.
+Bu altyapı düzeltmesidir; yeni tahmin kuralı veya üretim değişikliği değildir.
