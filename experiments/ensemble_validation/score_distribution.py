@@ -55,6 +55,8 @@ def learn(report):
     source=next(m for m in report['models'] if m['sport']=='football' and m['market']=='score')
     if not source.get('model'):return {'targetDate':report['targetDate'],'model':None,'status':'score mean model unavailable'}
     assert source['validationDate']<source['untouchedTestDate']<report['targetDate']
+    assert all(d<source['validationDate'] for d in source['trainingDates'])
+    assert all(d<report['targetDate'] for d in source['forecastTrainingDates'])
     assert all(m['date']==source['validationDate'] for m in source['validation']['matches'])
     assert all(m['date']==source['untouchedTestDate'] for m in source['test']['matches'])
     candidates=[{'model':m,'validation':measure(source['validation']['matches'],m)} for m in CANDIDATES]
@@ -88,7 +90,8 @@ def freeze(output,data,previous=None):
         if model.get(split):
             r=model[split];lines.append((split,r['count'],r['roundedMeanExactHits'],r['exactHits'],f"{r['roundedMeanScore']['teamMAE']:.3f} → {r['modalScore']['teamMAE']:.3f}",f"{r['jointLogLoss']:.3f}"))
     body='<p>Futbol skorunda ortalamayı yuvarlamak yerine skor dağılımının en olası hücresi gösterilir. Poisson, düşük-skor bağımlılığı ve negatif binom adayları yalnız önceki doğrulama gününden seçilir. Basketbolun mevcut skor modeli korunur. Tam skor isabeti ile ortalama hata farklı hedeflerdir; modal skor daha yüksek MAE verebilir. Mevcut günün yeni skor kayıtları sonuçlardan sonra üretildiyse araştırmadır.</p>'+table(['Dönem','N','Yuvarlanan ortalama tam isabet','Yeni tam isabet','MAE eski → yeni','Dağılım log loss'],lines)
-    body+=table(['Maç','Yeni en olası skor','Bu skorun olasılığı','Alternatifler','Önceki ortalama beklenti'],[(e['name'],e['scoreline'],f"%{100*e['probability']:.1f}",', '.join(f"{x['scoreline']} (%{100*x['probability']:.1f})" for x in e['alternatives']),f"{e['meanGoals'][0]:.2f}–{e['meanGoals'][1]:.2f}") for e in saved['predictions']])
+    body+=f"<p>{book['targetDate']} yeni skor kayıtları: {sum(e['prospectiveBeforeKickoff'] for e in saved['predictions'])}/{len(saved['predictions'])} maç öncesi. Kayıt zamanı: {saved['createdAt']}. Önceki tahminler değiştirilmedi.</p>"
+    body+=table(['Maç','Yeni en olası skor','Bu skorun olasılığı','İki alternatif','Önceki ortalama beklenti'],[(e['name'],e['scoreline'],f"%{100*e['probability']:.1f}",', '.join(f"{x['scoreline']} (%{100*x['probability']:.1f})" for x in e['alternatives'][1:]),f"{e['meanGoals'][0]:.2f}–{e['meanGoals'][1]:.2f}") for e in saved['predictions']])
     (output/'score-distribution.html').write_text(page('Skor dağılımı deneyi',body))
 
 def settle(output,data):
