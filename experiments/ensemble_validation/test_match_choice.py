@@ -30,3 +30,7 @@ class MatchChoiceTests(unittest.TestCase):
             freeze(a,d);freeze(c,d,a);self.assertEqual((a/'match-choice-before-results.json').read_bytes(),(c/'match-choice-before-results.json').read_bytes())
             for r in d['football']:r['realScore']='LIVE 1-0'
             settle(c,d);r=json.loads((c/'match-choice-evaluation.json').read_text());self.assertIsNone(r['sports'][0]['selectedExploratory'])
+            self.assertEqual([g['plannedCount'] for g in r['sports'][0]['confidenceSubsets']],[2,3,4,5])
+            self.assertTrue(all(g['exploratory'] is None for g in r['sports'][0]['confidenceSubsets']))
+            text=(c/'best-matches.html').read_text();self.assertEqual(text.count('data-confidence='),5)
+            self.assertIn('sort-confidence',text);self.assertIn('Güven sırasına göre alt kümeler',text)
