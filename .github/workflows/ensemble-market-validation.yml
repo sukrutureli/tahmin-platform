@@ -129,10 +129,10 @@ jobs:
           cp reference/manifest.json pipeline-output/reference-manifest.json
       - name: Replay original football models
         working-directory: football
-        run: mvn -B clean compile exec:java -Dexec.mainClass=com.example.experiment.ExperimentReplay -Dexec.args="../pipeline-output/football-inputs.json ../pipeline-output/football-replay.json"
+        run: mvn -B compile exec:java -Dexec.mainClass=com.example.experiment.ExperimentReplay -Dexec.args="../pipeline-output/football-inputs.json ../pipeline-output/football-replay.json"
       - name: Replay original basketball models
         working-directory: basketball
-        run: mvn -B clean compile exec:java -Dexec.mainClass=com.basketbol.experiment.ExperimentReplay -Dexec.args="../pipeline-output/basketball-inputs.json ../pipeline-output/basketball-replay.json"
+        run: mvn -B compile exec:java -Dexec.mainClass=com.basketbol.experiment.ExperimentReplay -Dexec.args="../pipeline-output/basketball-inputs.json ../pipeline-output/basketball-replay.json"
       - name: Add experimental goal and total history features
         run: python experiments/ensemble_validation/history_markets.py --output pipeline-output
       - name: Freeze conditional calibration shadow predictions
