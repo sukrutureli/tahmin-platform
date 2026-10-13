@@ -283,3 +283,8 @@ Test kıyasının modeli/eşikleri değişmez. Test raporundan sonra, seçilen a
 özellik grubu ve regularizasyonla tamamlanmış bütün geçmiş günler üzerinde
 forecastModel yeniden eğitilir; yalnız gelecek gün tahminleri için kullanılır.
 Bu yeniden eğitilmiş modelin kendi eğitim günündeki sonucu bağımsız test sayılmaz.
+
+
+### Fixed top-half selections
+
+`selection.py` ranks immutable pre-kickoff learned forecasts by maximum probability separately for each sport/market and selects `ceil(N/2)` fixtures. This fixed policy never tunes thresholds against current results. Event ID breaks ties. Forecast time and selection time are separate: a subset first selected after kickoff is exploratory even if its underlying forecast was recorded earlier. Same-day selection bytes and their forecast hash are preserved; changed forecasts fail validation. Missing/live results and basketball pushes are excluded. `selection-before-results.json`, `selection-evaluation.json`, `selection-journal.json` and `selection.html` show all versus selected results, main on exactly the selected cohort, Brier/log loss, and preserved score MAE. Confidence filtering need not improve every market. Initial 13 October selection is retrospective research; subsequent pre-kickoff days test the policy prospectively.

@@ -145,6 +145,8 @@ jobs:
         env:
           OPENBLAS_NUM_THREADS: '1'
         run: python experiments/ensemble_validation/outcome_learning.py --dataset pipeline-output/rule-mining-dataset.json --output pipeline-output --previous previous --target-date '${{ steps.cfg.outputs.target_date }}'
+      - name: Freeze top-half confidence selections before refreshing labels
+        run: python experiments/ensemble_validation/selection.py freeze --output pipeline-output --previous previous
       - name: Refresh today's finished football outcomes (artifact only)
         working-directory: football
         run: mvn -B exec:java -Dexec.mainClass=com.example.experiment.OutcomeRefresh -Dexec.args="../pipeline-output/football-replay.json ../pipeline-output/football-outcome-audit.json"
@@ -165,6 +167,8 @@ jobs:
         env:
           OPENBLAS_NUM_THREADS: '1'
         run: python experiments/ensemble_validation/outcome_learning.py --settle --dataset pipeline-output/rule-mining-dataset.json --output pipeline-output --target-date '${{ steps.cfg.outputs.target_date }}'
+      - name: Evaluate selected cohorts without rewriting selections
+        run: python experiments/ensemble_validation/selection.py settle --output pipeline-output --previous previous
       - name: Verify provenance and history boundaries
         env:
           HOLDOUT_DATE: ${{ steps.cfg.outputs.target_date }}
