@@ -1,0 +1,97 @@
+"""One saved best-probability market per fixture, followed by fixed top-half filtering."""
+import argparse,hashlib,html,json,math
+from datetime import datetime,timezone
+from pathlib import Path
+from zoneinfo import ZoneInfo
+from report import GROUPS,result,parse_score
+from prepare import dump
+from outcome_learning import score_metrics
+
+def choices(book,data,now=None):
+    now=now or datetime.now(timezone.utc)
+    inputs={(s,r['date'],str(r['eventId'])):r for s,rs in data.items() for r in rs}
+    entries=[]
+    for e in book['predictions']:
+        if not e.get('prospectiveBeforeKickoff'):continue
+        sport=e['sport'];r=inputs.get((sport,e['date'],str(e['eventId'])),{});options=[]
+        for market,names in GROUPS[sport].items():
+            p=e['markets'].get(market)
+            if not p or len(p)!=len(names) or not all(isinstance(v,(int,float)) and math.isfinite(v) and 0<=v<=1 for v in p) or abs(sum(p)-1)>1e-6:continue
+            line=2.5 if sport=='football' else r.get('odds',{}).get('hOverUnderValue',0)
+            if market=='OU' and (not line or line<=0):continue
+            i=max(range(len(p)),key=lambda i:p[i]);pick=names[i]
+            if market=='OU':pick=f'{line:g} '+pick
+            if market=='BTTS':pick='KG '+pick
+            options.append((max(p),market,i,pick))
+        if not options:continue
+        # Stable market order resolves ties. No outcome, main prediction or score is used to select.
+        confidence,market,index,pick=max(options,key=lambda v:v[0])
+        try:before=now<datetime.fromisoformat(e['date']+'T'+r['time']).replace(tzinfo=ZoneInfo('Europe/Istanbul'))
+        except (KeyError,TypeError,ValueError):before=False
+        score=e.get('score');line=f'{round(score[0])}-{round(score[1])}' if score and len(score)==2 and all(math.isfinite(x) for x in score) else None
+        entries.append({'sport':sport,'date':e['date'],'eventId':str(e['eventId']),'name':e['name'],'time':r.get('time'),'market':market,'optionIndex':index,'pick':pick,'confidence':confidence,'score':score,'scoreline':line,'selectionBeforeKickoff':before,'selected':False})
+    for sport in GROUPS:
+        ranked=sorted([e for e in entries if e['sport']==sport],key=lambda e:(-e['confidence'],e['eventId']))
+        for i,e in enumerate(ranked):e['rank']=i+1;e['selected']=i<math.ceil(len(ranked)/2)
+    return {'targetDate':book['targetDate'],'createdAt':now.isoformat(),'forecastCreatedAt':book['createdAt'],'policy':'One max-probability market per match; top ceil(N/2) per sport; fixed policy independent of outcomes. Probabilities remain experimental.','predictions':entries}
+
+def freeze(output,data,previous=None):
+    source=output/'learned-before-results.json';digest=hashlib.sha256(source.read_bytes()).hexdigest();book=json.loads(source.read_text())
+    old=previous/'match-choice-before-results.json' if previous else None
+    if old and old.exists() and json.loads(old.read_text())['targetDate']==book['targetDate']:
+        assert json.loads(old.read_text())['forecastSha256']==digest
+        (output/'match-choice-before-results.json').write_bytes(old.read_bytes());return
+    saved=choices(book,data);saved['forecastSha256']=digest;dump(output/'match-choice-before-results.json',saved)
+
+def settle(output,data,previous=None):
+    saved=json.loads((output/'match-choice-before-results.json').read_text());source=output/'learned-before-results.json'
+    assert saved['forecastSha256']==hashlib.sha256(source.read_bytes()).hexdigest()
+    forecasts={(e['sport'],e['date'],str(e['eventId'])):e for e in json.loads(source.read_text())['predictions']}
+    labels={(s,r['date'],str(r['eventId'])):r for s,rs in data.items() for r in rs}
+    def evaluate(entries):
+        samples=[];scores=[]
+        for e in entries:
+            key=(e['sport'],e['date'],e['eventId']);r=labels.get(key);y=result(r,e['sport'],e['market']) if r else None
+            if y is None:continue
+            f=forecasts[key];b=f['baselineMarkets'].get(e['market']);mainpick=max(range(len(b)),key=lambda i:b[i]) if b else None
+            samples.append((e['confidence'],int(y==e['optionIndex']),mainpick==y if mainpick is not None else None))
+            actual=parse_score({'scoreline':r.get('realScore')})
+            if actual and e['score'] is not None and f['baselineScore'] is not None:scores.append((actual,e['score'],f['baselineScore']))
+        if not samples:return None
+        main=[h for p,y,h in samples if h is not None]
+        return {'count':len(samples),'hits':sum(y for p,y,h in samples),'accuracy':sum(y for p,y,h in samples)/len(samples),
+                'chosenEventBrier':sum((p-y)**2 for p,y,h in samples)/len(samples),'chosenEventLogLoss':-sum(y*math.log(max(p,1e-12))+(1-y)*math.log(max(1-p,1e-12)) for p,y,h in samples)/len(samples),
+                'mainSameMarkets':{'count':len(main),'hits':sum(main),'accuracy':sum(main)/len(main)} if main else None,
+                'scoreLearned':score_metrics([x[0] for x in scores],[x[1] for x in scores]),'scoreMain':score_metrics([x[0] for x in scores],[x[2] for x in scores])}
+    report={'targetDate':saved['targetDate'],'selectionCreatedAt':saved['createdAt'],'policy':saved['policy'],'sports':[]}
+    for sport in GROUPS:
+        es=[e for e in saved['predictions'] if e['sport']==sport];sel=[e for e in es if e['selected']]
+        report['sports'].append({'sport':sport,'forecastCount':len(es),'selectedCount':len(sel),'all':evaluate(es),'selectedExploratory':evaluate(sel),'selectedProspective':evaluate([e for e in sel if e['selectionBeforeKickoff']])})
+    dump(output/'match-choice-evaluation.json',report)
+    old=previous/'match-choice-journal.json' if previous else None
+    journal=json.loads(old.read_text()) if old and old.exists() else []
+    journal=[x for x in journal if x['targetDate']!=report['targetDate']]+[report];dump(output/'match-choice-journal.json',sorted(journal,key=lambda x:x['targetDate']))
+    def stats(m):return 'Henüz sonuç yok' if m is None else f"{m['hits']}/{m['count']} (%{100*m['accuracy']:.1f})"
+    summary=''.join('<p>'+s['sport']+' · tüm tek tercihler: '+stats(s['all'])+' · seçilen yarı: '+stats(s['selectedExploratory'])+' · maç öncesinden seçilen yarı: '+stats(s['selectedProspective'])+'</p>' for s in report['sports'])
+    ordered=sorted([e for e in saved['predictions'] if e['selected']],key=lambda x:(x['time'] or '99:99',x['eventId']))
+    rows=''.join('<tr data-confidence="'+str(e['confidence'])+'" data-time="'+html.escape(e['time'] or '99:99',quote=True)+'">'+''.join('<td>'+html.escape(str(x))+'</td>' for x in [e['time'] or '—','Futbol' if e['sport']=='football' else 'Basketbol',e['name'],e['pick'],e['scoreline'] or '—',f"%{100*e['confidence']:.1f}",'maç öncesi' if e['selectionBeforeKickoff'] else 'geç seçim / araştırma'])+'</tr>' for e in ordered)
+    controls='<nav aria-label="Maç sıralaması"><button type="button" id="sort-time" aria-pressed="true">Saate göre sırala</button> <button type="button" id="sort-confidence" aria-pressed="false">Güvene göre sırala ↓</button><span id="sort-status" aria-live="polite"> Saat: erkenden geçe</span></nav>'
+    script='''<script>
+    const body=document.getElementById('matches');
+    function order(mode){
+      const rows=Array.from(body.rows);
+      rows.sort((a,b)=>mode==='confidence' ? Number(b.dataset.confidence)-Number(a.dataset.confidence)||a.dataset.time.localeCompare(b.dataset.time) : a.dataset.time.localeCompare(b.dataset.time)||Number(b.dataset.confidence)-Number(a.dataset.confidence));
+      rows.forEach(row=>body.appendChild(row));
+      document.getElementById('sort-time').setAttribute('aria-pressed',String(mode==='time'));
+      document.getElementById('sort-confidence').setAttribute('aria-pressed',String(mode==='confidence'));
+      document.getElementById('sort-status').textContent=mode==='confidence'?' Güven: yüksekten düşüğe':' Saat: erkenden geçe';
+    }
+    document.getElementById('sort-time').addEventListener('click',()=>order('time'));
+    document.getElementById('sort-confidence').addEventListener('click',()=>order('confidence'));
+    </script>'''
+    (output/'best-matches.html').write_text('<!doctype html><html lang="tr"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Tek tercih ve skor</title><style>body{font:16px/1.6 system-ui;max-width:1150px;margin:24px auto;padding:18px;color:#19304a}table{border-collapse:collapse;width:100%}td,th{padding:10px;border-bottom:1px solid #dde3ee;text-align:left}section{overflow:auto}td{white-space:nowrap}nav{margin:20px 0}button{padding:12px 16px;border:1px solid #b5c5d9;border-radius:8px;background:#fff;color:#19304a;font:inherit;cursor:pointer}button[aria-pressed=true]{background:#19304a;color:#fff}#sort-status{display:inline-block;margin:8px}</style><h1>Tek tercih ve skor · '+saved['targetDate']+'</h1><p>Her maç için MS/Alt-Üst/Var-Yok seçeneklerinden modelin en yüksek olasılıklı tek tercihi. Futbol ve basketbolda en yüksek güvenli yarı listelenir. Güven yüzdesi model tahminidir; başarı garantisi değildir. Skor en yakın tam sayıya yuvarlanan tahmindir. Geç oluşturulan seçimler ileriye dönük başarı sayılmaz. Eksik/canlı sonuçlar dışarıda.</p>'+summary+controls+'<section><table><thead><tr><th>Saat</th><th>Spor</th><th>Maç</th><th>Tek tercih</th><th>Skor tahmini</th><th>Model güveni</th><th>Kayıt</th></tr></thead><tbody id="matches">'+rows+'</tbody></table></section>'+script+'</html>')
+
+def main():
+    p=argparse.ArgumentParser();p.add_argument('mode',choices=['freeze','settle']);p.add_argument('--output',type=Path,required=True);p.add_argument('--previous',type=Path);a=p.parse_args()
+    data={s:json.loads((a.output/(s+'-replay.json')).read_text()) for s in GROUPS};(freeze if a.mode=='freeze' else settle)(a.output,data,a.previous)
+if __name__=='__main__':main()
