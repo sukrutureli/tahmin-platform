@@ -145,6 +145,8 @@ jobs:
         env:
           OPENBLAS_NUM_THREADS: '1'
         run: python experiments/ensemble_validation/outcome_learning.py --dataset pipeline-output/rule-mining-dataset.json --output pipeline-output --previous previous --target-date '${{ steps.cfg.outputs.target_date }}'
+      - name: Freeze independently validated football score distribution
+        run: python experiments/ensemble_validation/score_distribution.py freeze --output pipeline-output --previous previous
       - name: Freeze top-half confidence selections before refreshing labels
         run: python experiments/ensemble_validation/selection.py freeze --output pipeline-output --previous previous
       - name: Freeze one market choice and score per match
@@ -173,6 +175,8 @@ jobs:
         run: python experiments/ensemble_validation/selection.py settle --output pipeline-output --previous previous
       - name: Evaluate single-choice shortlist and render sortable HTML
         run: python experiments/ensemble_validation/match_choice.py settle --output pipeline-output --previous previous
+      - name: Evaluate immutable modal football scores
+        run: python experiments/ensemble_validation/score_distribution.py settle --output pipeline-output
       - name: Verify provenance and history boundaries
         env:
           HOLDOUT_DATE: ${{ steps.cfg.outputs.target_date }}

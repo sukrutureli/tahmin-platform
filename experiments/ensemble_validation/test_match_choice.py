@@ -1,4 +1,5 @@
 import copy,json,tempfile,unittest
+import hashlib
 from datetime import datetime,timezone
 from pathlib import Path
 from match_choice import choices,freeze,settle
@@ -34,3 +35,15 @@ class MatchChoiceTests(unittest.TestCase):
             self.assertTrue(all(g['exploratory'] is None for g in r['sports'][0]['confidenceSubsets']))
             text=(c/'best-matches.html').read_text();self.assertEqual(text.count('data-confidence='),5)
             self.assertIn('sort-confidence',text);self.assertIn('Güven sırasına göre alt kümeler',text)
+
+    def test_new_distribution_score_does_not_rewrite_original_or_existing_choice(self):
+        b,d=self.sample()
+        with tempfile.TemporaryDirectory() as x:
+            a=Path(x)/'a';c=Path(x)/'c';a.mkdir();c.mkdir();raw=json.dumps(b).encode()
+            for p in [a,c]:(p/'learned-before-results.json').write_bytes(raw)
+            candidate={'targetDate':b['targetDate'],'meanForecastSha256':hashlib.sha256(raw).hexdigest(),'predictions':[{'sport':'football','date':b['targetDate'],'eventId':'0','score':[1,0],'probability':.2}]}
+            (a/'score-before-results.json').write_text(json.dumps(candidate));freeze(a,d)
+            saved=json.loads((a/'match-choice-before-results.json').read_text());e=next(e for e in saved['predictions'] if e['eventId']=='0')
+            self.assertEqual(e['scoreline'],'1-0');self.assertEqual(e['pick'],'KG Var');self.assertEqual(e['scoreMethod'],'modal_distribution');self.assertEqual(raw,(a/'learned-before-results.json').read_bytes())
+            candidate['predictions'][0]['score']=[9,9];(c/'score-before-results.json').write_text(json.dumps(candidate));freeze(c,d,a)
+            self.assertEqual((a/'match-choice-before-results.json').read_bytes(),(c/'match-choice-before-results.json').read_bytes())
