@@ -1,8 +1,8 @@
 {
   "target_date": "2026-10-14",
-  "published_ref": "0c39673cb88849f975ad91094adb621cb24e57ec",
-  "previous_run_id": "38524883708",
-  "previous_artifact": "ensemble-market-validation-2026-10-13",
-  "control_target_date": "2026-10-13",
-  "control_request_at": "2026-10-14T04:04:16.024Z"
+  "published_ref": "20200d2ddb8e023f8da3f61d6c1e968b6473bc0c",
+  "previous_run_id": "38525707536",
+  "previous_artifact": "ensemble-market-validation-2026-10-14",
+  "control_target_date": "2026-10-14",
+  "control_request_at": "2026-10-14T22:51:53+00:00"
 }
