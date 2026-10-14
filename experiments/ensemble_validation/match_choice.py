@@ -8,6 +8,7 @@ from prepare import dump
 from outcome_learning import score_metrics
 from conditional_score import football_score,basketball_score,basket_covariance
 from score_distribution import forecast
+from responsive_report import mobile_report
 
 def choices(book,data,now=None):
     now=now or datetime.now(timezone.utc)
@@ -131,8 +132,12 @@ def settle(output,data,previous=None):
     </script>'''
     (output/'best-matches.html').write_text('<!doctype html><html lang="tr"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Tek tercih ve skor</title><style>body{font:16px/1.6 system-ui;max-width:1150px;margin:24px auto;padding:18px;color:#19304a}table{border-collapse:collapse;width:100%}td,th{padding:10px;border-bottom:1px solid #dde3ee;text-align:left}section{overflow:auto}td{white-space:nowrap}nav{margin:20px 0}button{padding:12px 16px;border:1px solid #b5c5d9;border-radius:8px;background:#fff;color:#19304a;font:inherit;cursor:pointer}button[aria-pressed=true]{background:#19304a;color:#fff}#sort-status{display:inline-block;margin:8px}</style><h1>Tek tercih ve skor · '+saved['targetDate']+'</h1><p>Tüm maçlar listelenir. Her maç için MS/Alt-Üst/Var-Yok seçeneklerinden modelin en yüksek olasılıklı tek tercihi. Güven yüzdesi model tahminidir; başarı garantisi değildir. Yeni kayıtlarda skor seçilen tercihle uyumlu adaylar arasından hesaplanır; eski kayıtlar değiştirilmez. Tam skor olasılığı ve tercih güveni farklı değerlerdir. Geç oluşturulan seçimler ileriye dönük başarı sayılmaz. Eksik/canlı sonuçlar istatistiklere alınmaz.</p>'+summary+controls+'<section><table><thead><tr><th>Saat</th><th>Spor</th><th>Maç</th><th>Tek tercih</th><th>Skor tahmini</th><th>Tercih güveni</th><th>Tam skor olasılığı</th><th>Gerçek skor</th><th>Tercih sonucu</th><th>Güven grubu</th><th>Kayıt</th></tr></thead><tbody id="matches">'+rows+'</tbody></table></section>'+subset_table+script+'</html>')
 
+    page=output/'best-matches.html'
+    page.write_text(mobile_report(page.read_text()))
+
 def main():
     p=argparse.ArgumentParser();p.add_argument('mode',choices=['freeze','settle']);p.add_argument('--output',type=Path,required=True);p.add_argument('--previous',type=Path);a=p.parse_args()
     data={s:json.loads((a.output/(s+'-replay.json')).read_text()) for s in GROUPS};(freeze if a.mode=='freeze' else settle)(a.output,data,a.previous)
 if __name__=='__main__':main()
+
 
