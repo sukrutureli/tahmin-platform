@@ -14,7 +14,6 @@ def choices(book,data,now=None):
     inputs={(s,r['date'],str(r['eventId'])):r for s,rs in data.items() for r in rs}
     entries=[]
     for e in book['predictions']:
-        if not e.get('prospectiveBeforeKickoff'):continue
         sport=e['sport'];r=inputs.get((sport,e['date'],str(e['eventId'])),{});options=[]
         for market,names in GROUPS[sport].items():
             p=e['markets'].get(market)
@@ -40,9 +39,9 @@ def choices(book,data,now=None):
                 independent=[round(x) for x in mean];scored=basketball_score(mean,e.get('scoreCovariance',[[1.,0.],[0.,1.]]),market,index,total_line)
             score=scored['score']
         line=f'{score[0]}-{score[1]}' if score else None
-        entries.append({'sport':sport,'date':e['date'],'eventId':str(e['eventId']),'name':e['name'],'time':r.get('time'),'market':market,'optionIndex':index,'pick':pick,'confidence':confidence,'score':score,'independentScore':independent,'scoreline':line,'scoreMethod':scored.get('method'),'scoreProbability':scored.get('probability'),'scoreConditionalProbability':scored.get('conditionalProbability'),'scoreConditionMass':scored.get('conditionMass'),'selectionBeforeKickoff':before,'selected':False})
+        entries.append({'sport':sport,'date':e['date'],'eventId':str(e['eventId']),'name':e['name'],'time':r.get('time'),'market':market,'optionIndex':index,'pick':pick,'confidence':confidence,'score':score,'independentScore':independent,'scoreline':line,'scoreMethod':scored.get('method'),'scoreProbability':scored.get('probability'),'scoreConditionalProbability':scored.get('conditionalProbability'),'scoreConditionMass':scored.get('conditionMass'),'forecastBeforeKickoff':bool(e.get('prospectiveBeforeKickoff')),'selectionBeforeKickoff':before,'selected':False,'rank':None})
     for sport in GROUPS:
-        ranked=sorted([e for e in entries if e['sport']==sport],key=lambda e:(-e['confidence'],e['eventId']))
+        ranked=sorted([e for e in entries if e['sport']==sport and e['forecastBeforeKickoff']],key=lambda e:(-e['confidence'],e['eventId']))
         for i,e in enumerate(ranked):e['rank']=i+1;e['selected']=i<math.ceil(len(ranked)/2)
     return {'targetDate':book['targetDate'],'createdAt':now.isoformat(),'forecastCreatedAt':book['createdAt'],'policy':'One max-probability market per match; top ceil(N/2) per sport; fixed policy independent of outcomes. Probabilities remain experimental.','predictions':entries}
 
@@ -74,6 +73,7 @@ def settle(output,data,previous=None):
         samples=[];scores=[]
         for e in entries:
             key=(e['sport'],e['date'],e['eventId']);r=labels.get(key);y=result(r,e['sport'],e['market']) if r else None
+            if not forecasts[key].get('prospectiveBeforeKickoff'):continue
             if y is None:continue
             f=forecasts[key];b=f['baselineMarkets'].get(e['market']);mainpick=max(range(len(b)),key=lambda i:b[i]) if b else None
             samples.append((e['confidence'],int(y==e['optionIndex']),mainpick==y if mainpick is not None else None))
@@ -90,12 +90,12 @@ def settle(output,data,previous=None):
                 'scoreExactHits':sum(list(x[0])==x[1] for x in scores),'scoreIndependentExactHits':sum(list(x[0])==x[3] for x in scores if x[3] is not None)}
     report={'targetDate':saved['targetDate'],'selectionCreatedAt':saved['createdAt'],'policy':saved['policy'],'scorePolicy':'New scores condition on the saved market choice; independent scores remain separately measured. Old snapshots are unchanged.','sports':[]}
     for sport in GROUPS:
-        es=[e for e in saved['predictions'] if e['sport']==sport];sel=[e for e in es if e['selected']]
+        es=[e for e in saved['predictions'] if e['sport']==sport];eligible=[e for e in es if e.get('forecastBeforeKickoff',True)];sel=[e for e in eligible if e['selected']]
         subsets=[]
         for fraction in [.25,.5,.75,1.]:
-            limit=math.ceil(len(es)*fraction);group=[e for e in es if e['rank']<=limit]
+            limit=math.ceil(len(eligible)*fraction);group=[e for e in eligible if e['rank']<=limit]
             subsets.append({'topFraction':fraction,'plannedCount':len(group),'minimumConfidence':min((e['confidence'] for e in group),default=None),'exploratory':evaluate(group),'prospective':evaluate([e for e in group if e['selectionBeforeKickoff']])})
-        report['sports'].append({'sport':sport,'forecastCount':len(es),'selectedCount':len(sel),'all':evaluate(es),'selectedExploratory':evaluate(sel),'selectedProspective':evaluate([e for e in sel if e['selectionBeforeKickoff']]),'confidenceSubsets':subsets})
+        report['sports'].append({'sport':sport,'forecastCount':len(es),'eligibleForecastCount':len(eligible),'lateForecastCount':len(es)-len(eligible),'selectedCount':len(sel),'all':evaluate(eligible),'selectedExploratory':evaluate(sel),'selectedProspective':evaluate([e for e in sel if e['selectionBeforeKickoff']]),'confidenceSubsets':subsets})
     dump(output/'match-choice-evaluation.json',report)
     old=previous/'match-choice-journal.json' if previous else None
     journal=json.loads(old.read_text()) if old and old.exists() else []
@@ -113,7 +113,7 @@ def settle(output,data,previous=None):
     for e in ordered:
         r=labels.get((e['sport'],e['date'],e['eventId']));actual=parse_score({'scoreline':r.get('realScore')}) if r else None;y=result(r,e['sport'],e['market']) if r else None
         status=('✅' if y==e['optionIndex'] else '❌') if y is not None else ('İade / doğrulanmadı' if actual else 'Bekleniyor')
-        values=[e['time'] or '—','Futbol' if e['sport']=='football' else 'Basketbol',e['name'],e['pick'],e['scoreline'] or '—',f"%{100*e['confidence']:.1f}",f"%{100*e['scoreProbability']:.1f}" if e.get('scoreProbability') is not None else '—',f'{int(actual[0])}-{int(actual[1])}' if actual else '—',status,'İlk %50' if e['selected'] else 'Diğer yarı','maç öncesi' if e['selectionBeforeKickoff'] else 'geç seçim / araştırma']
+        values=[e['time'] or '—','Futbol' if e['sport']=='football' else 'Basketbol',e['name'],e['pick'],e['scoreline'] or '—',f"%{100*e['confidence']:.1f}",f"%{100*e['scoreProbability']:.1f}" if e.get('scoreProbability') is not None else '—',f'{int(actual[0])}-{int(actual[1])}' if actual else '—',status,('İlk %50' if e['selected'] else 'Diğer yarı') if e.get('forecastBeforeKickoff',True) else 'Geç tahmin · kapsam dışı','maç öncesi' if e['selectionBeforeKickoff'] else 'geç seçim / araştırma']
         rows+='<tr data-confidence="'+str(e['confidence'])+'" data-time="'+html.escape(e['time'] or '99:99',quote=True)+'">'+''.join('<td>'+html.escape(str(x))+'</td>' for x in values)+'</tr>'
     controls='<nav aria-label="Maç sıralaması"><button type="button" id="sort-time" aria-pressed="true">Saate göre sırala</button> <button type="button" id="sort-confidence" aria-pressed="false">Güvene göre sırala ↓</button><span id="sort-status" aria-live="polite"> Saat: erkenden geçe</span></nav>'
     script='''<script>
@@ -135,3 +135,4 @@ def main():
     p=argparse.ArgumentParser();p.add_argument('mode',choices=['freeze','settle']);p.add_argument('--output',type=Path,required=True);p.add_argument('--previous',type=Path);a=p.parse_args()
     data={s:json.loads((a.output/(s+'-replay.json')).read_text()) for s in GROUPS};(freeze if a.mode=='freeze' else settle)(a.output,data,a.previous)
 if __name__=='__main__':main()
+

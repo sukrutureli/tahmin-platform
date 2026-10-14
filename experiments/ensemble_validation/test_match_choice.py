@@ -6,6 +6,15 @@ from match_choice import choices,freeze,settle
 import test_selection
 
 class MatchChoiceTests(unittest.TestCase):
+    def test_late_fixture_is_visible_but_cannot_change_confidence_subsets_or_success(self):
+        b,d=self.sample();b['predictions'][0]['prospectiveBeforeKickoff']=False;b['predictions'][0]['markets']['BTTS']=[.999,.001]
+        with tempfile.TemporaryDirectory() as x:
+            p=Path(x);(p/'learned-before-results.json').write_text(json.dumps(b));freeze(p,d);settle(p,d)
+            saved=json.loads((p/'match-choice-before-results.json').read_text());late=next(e for e in saved['predictions'] if e['eventId']=='0')
+            self.assertFalse(late['selected']);self.assertIsNone(late['rank']);self.assertEqual(len(saved['predictions']),5)
+            r=json.loads((p/'match-choice-evaluation.json').read_text())['sports'][0]
+            self.assertEqual(r['eligibleForecastCount'],4);self.assertEqual(r['all']['count'],4);self.assertEqual([g['plannedCount'] for g in r['confidenceSubsets']],[1,2,3,4])
+            text=(p/'best-matches.html').read_text();self.assertEqual(text.count('data-confidence='),5);self.assertIn('Geç tahmin · kapsam dışı',text)
     def sample(self):
         b,d=test_selection.SelectionTests().sample()
         for e in b['predictions']:
@@ -47,3 +56,4 @@ class MatchChoiceTests(unittest.TestCase):
             self.assertGreater(min(e['score']),0);self.assertEqual(e['pick'],'KG Var');self.assertEqual(e['scoreMethod'],'conditional_distribution');self.assertEqual(raw,(a/'learned-before-results.json').read_bytes())
             candidate['predictions'][0]['score']=[9,9];(c/'score-before-results.json').write_text(json.dumps(candidate));freeze(c,d,a)
             self.assertEqual((a/'match-choice-before-results.json').read_bytes(),(c/'match-choice-before-results.json').read_bytes())
+
