@@ -57,12 +57,14 @@ def learn(report):
     assert source['validationDate']<source['untouchedTestDate']<report['targetDate']
     assert all(d<source['validationDate'] for d in source['trainingDates'])
     assert all(d<report['targetDate'] for d in source['forecastTrainingDates'])
-    assert all(m['date']==source['validationDate'] for m in source['validation']['matches'])
+    validation_dates=source.get('validationDates',[source['validationDate']])
+    assert all(source['validationDate']<=d<source['untouchedTestDate'] for d in validation_dates)
+    assert all(m['date'] in validation_dates for m in source['validation']['matches'])
     assert all(m['date']==source['untouchedTestDate'] for m in source['test']['matches'])
     candidates=[{'model':m,'validation':measure(source['validation']['matches'],m)} for m in CANDIDATES]
     chosen=min(candidates,key=lambda c:c['validation']['jointLogLoss'])['model']
     return {'targetDate':report['targetDate'],'model':chosen,'meanTrainingDates':source['trainingDates'],
-            'forecastMeanTrainingDates':source['forecastTrainingDates'],'validationDate':source['validationDate'],
+            'forecastMeanTrainingDates':source['forecastTrainingDates'],'validationDate':source['validationDate'],'validationDates':validation_dates,
             'untouchedTestDate':source['untouchedTestDate'],'selectionObjective':'Prior-validation joint score log loss; test results do not select model. Modal score targets exact-score probability, mean remains available for MAE.',
             'candidates':candidates,'validation':measure(source['validation']['matches'],chosen),'test':measure(source['test']['matches'],chosen)}
 

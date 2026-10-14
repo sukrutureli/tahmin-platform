@@ -14,7 +14,7 @@ class MatchChoiceTests(unittest.TestCase):
     def test_one_best_market_and_half_matches_ignore_labels_and_scores(self):
         b,d=self.sample();now=datetime(2026,10,13,7,tzinfo=timezone.utc);a=choices(b,d,now)
         self.assertEqual(len(a['predictions']),5);self.assertEqual(sum(e['selected'] for e in a['predictions']),3)
-        self.assertTrue(all(e['pick']=='KG Var' for e in a['predictions']));self.assertTrue(all(e['scoreline']=='2-1' for e in a['predictions']))
+        self.assertTrue(all(e['pick']=='KG Var' for e in a['predictions']));self.assertTrue(all(min(e['score'])>0 for e in a['predictions']))
         for r in d['football']:r['realScore']='0-9'
         self.assertEqual(a,choices(b,d,now))
         for e in b['predictions']:e['score']=[100,100]
@@ -44,6 +44,6 @@ class MatchChoiceTests(unittest.TestCase):
             candidate={'targetDate':b['targetDate'],'meanForecastSha256':hashlib.sha256(raw).hexdigest(),'predictions':[{'sport':'football','date':b['targetDate'],'eventId':'0','score':[1,0],'probability':.2}]}
             (a/'score-before-results.json').write_text(json.dumps(candidate));freeze(a,d)
             saved=json.loads((a/'match-choice-before-results.json').read_text());e=next(e for e in saved['predictions'] if e['eventId']=='0')
-            self.assertEqual(e['scoreline'],'1-0');self.assertEqual(e['pick'],'KG Var');self.assertEqual(e['scoreMethod'],'modal_distribution');self.assertEqual(raw,(a/'learned-before-results.json').read_bytes())
+            self.assertGreater(min(e['score']),0);self.assertEqual(e['pick'],'KG Var');self.assertEqual(e['scoreMethod'],'conditional_distribution');self.assertEqual(raw,(a/'learned-before-results.json').read_bytes())
             candidate['predictions'][0]['score']=[9,9];(c/'score-before-results.json').write_text(json.dumps(candidate));freeze(c,d,a)
             self.assertEqual((a/'match-choice-before-results.json').read_bytes(),(c/'match-choice-before-results.json').read_bytes())

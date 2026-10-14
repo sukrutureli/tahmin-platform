@@ -4,12 +4,24 @@ on:
     branches: ['experiment/ensemble-market-validation']
     paths: ['experiments/ensemble_validation/**', '**/experiment/*.java', '.github/workflows/ensemble-market-validation.yml']
   workflow_dispatch:
+    inputs:
+      mode:
+        description: 'daily: predictions and training; control: frozen forecasts and HTTP results only'
+        type: choice
+        options: ['daily', 'control']
+        default: daily
+      target_date:
+        description: 'Optional YYYY-MM-DD; defaults to experiment settings'
+        type: string
+      source_run_id:
+        description: 'Optional successful source run; control defaults to latest artifact for the date'
+        type: string
 permissions:
   contents: read
   actions: read
 concurrency:
   group: ensemble-validation-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 jobs:
   benchmark:
     if: github.ref == 'refs/heads/experiment/ensemble-market-validation'
@@ -21,25 +33,21 @@ jobs:
           persist-credentials: false
       - name: Resolve experimental day and frozen source
         id: cfg
-        run: |
-          python - <<'PY'
-          import json, os, re
-          from datetime import date
-          c=json.load(open("experiments/ensemble_validation/experiment-settings.json"))
-          date.fromisoformat(c["target_date"])
-          assert re.fullmatch("[0-9a-f]{40}", c["published_ref"])
-          assert str(c["previous_run_id"]).isdigit()
-          assert re.fullmatch("ensemble-market-validation-[0-9-]+",c["previous_artifact"])
-          with open(os.environ["GITHUB_OUTPUT"],"a") as f:
-              for k,v in c.items(): f.write(f"{k}={v}\n")
-          PY
+        env:
+          GH_TOKEN: ${{ github.token }}
+          INPUT_MODE: ${{ inputs.mode }}
+          INPUT_TARGET_DATE: ${{ inputs.target_date }}
+          INPUT_SOURCE_RUN: ${{ inputs.source_run_id }}
+        run: python experiments/ensemble_validation/control_runtime.py config --settings experiments/ensemble_validation/experiment-settings.json
       - uses: actions/checkout@v4
+        if: steps.cfg.outputs.run_mode != 'control'
         with:
           repository: sukrutureli/fathertahmin
           ref: ${{ steps.cfg.outputs.published_ref }}
           path: published
           persist-credentials: false
       - uses: actions/checkout@v4
+        if: steps.cfg.outputs.run_mode != 'control'
         with:
           repository: sukrutureli/fathertahmin
           ref: '700bc50bd7b63a616a8b9a61d4aa6de2f7e2a14c'
@@ -52,41 +60,42 @@ jobs:
           github-token: ${{ github.token }}
           path: previous
       - uses: actions/download-artifact@v4
-        if: hashFiles('previous/rule-mining-dataset.json') == ''
+        if: steps.cfg.outputs.run_mode != 'control' && (hashFiles('previous/rule-mining-dataset.json') == '')
         with:
           name: ensemble-market-validation-2026-10-03
           run-id: 37182748093
           github-token: ${{ github.token }}
           path: rule-bootstrap/0
       - uses: actions/download-artifact@v4
-        if: hashFiles('previous/rule-mining-dataset.json') == ''
+        if: steps.cfg.outputs.run_mode != 'control' && (hashFiles('previous/rule-mining-dataset.json') == '')
         with:
           name: ensemble-market-validation-2026-10-05
           run-id: 37422557787
           github-token: ${{ github.token }}
           path: rule-bootstrap/1
       - uses: actions/download-artifact@v4
-        if: hashFiles('previous/rule-mining-dataset.json') == ''
+        if: steps.cfg.outputs.run_mode != 'control' && (hashFiles('previous/rule-mining-dataset.json') == '')
         with:
           name: ensemble-market-validation-2026-10-07
           run-id: 37737276785
           github-token: ${{ github.token }}
           path: rule-bootstrap/2
       - uses: actions/download-artifact@v4
-        if: hashFiles('previous/rule-mining-dataset.json') == ''
+        if: steps.cfg.outputs.run_mode != 'control' && (hashFiles('previous/rule-mining-dataset.json') == '')
         with:
           name: ensemble-market-validation-2026-10-08
           run-id: 37892855843
           github-token: ${{ github.token }}
           path: rule-bootstrap/3
       - uses: actions/download-artifact@v4
-        if: hashFiles('previous/rule-mining-dataset.json') == ''
+        if: steps.cfg.outputs.run_mode != 'control' && (hashFiles('previous/rule-mining-dataset.json') == '')
         with:
           name: ensemble-market-validation-2026-10-09
           run-id: 38030605924
           github-token: ${{ github.token }}
           path: rule-bootstrap/4
       - name: Restore frozen history reference from previous artifact
+        if: steps.cfg.outputs.run_mode != 'control'
         id: seed
         run: |
           mkdir -p reference
@@ -98,7 +107,7 @@ jobs:
             echo "available=false" >> "$GITHUB_OUTPUT"
           fi
       - uses: actions/download-artifact@v4
-        if: steps.seed.outputs.available != 'true'
+        if: steps.cfg.outputs.run_mode != 'control' && (steps.seed.outputs.available != 'true')
         with:
           name: balanced-history-comparison-2026-10-01
           run-id: 36802060423
@@ -119,37 +128,58 @@ jobs:
             basketball/pom.xml
       - name: Verify feature and validation rules
         run: python -m unittest discover -s experiments/ensemble_validation -v
+      - name: Restore immutable artifact for experiment control
+        if: steps.cfg.outputs.run_mode == 'control'
+        run: python experiments/ensemble_validation/control_runtime.py begin --previous previous --output pipeline-output --target-date '${{ steps.cfg.outputs.target_date }}' --source-run '${{ steps.cfg.outputs.previous_run_id }}'
+      - name: Compile experiment HTTP refresh tools
+        if: steps.cfg.outputs.run_mode == 'control'
+        run: |
+          mvn -B -f football/pom.xml compile
+          mvn -B -f basketball/pom.xml compile
       - name: Collect daily wide HTTP history (experiment only)
+        if: steps.cfg.outputs.run_mode != 'control'
         run: python experiments/ensemble_validation/live_history.py --published published --previous previous --output pipeline-output --target-date '${{ steps.cfg.outputs.target_date }}'
       - name: Freeze paired inputs and feature ablations
+        if: steps.cfg.outputs.run_mode != 'control'
         run: python experiments/ensemble_validation/prepare.py --published published --archive archive --reference reference --output pipeline-output --holdout '${{ steps.cfg.outputs.target_date }}' --live-history pipeline-output/live-history-journal.json
       - name: Preserve reproducible history seed in artifact
+        if: steps.cfg.outputs.run_mode != 'control'
         run: |
           cp reference/predictions.json pipeline-output/reference-predictions.json
           cp reference/manifest.json pipeline-output/reference-manifest.json
       - name: Replay original football models
+        if: steps.cfg.outputs.run_mode != 'control'
         working-directory: football
         run: mvn -B compile exec:java -Dexec.mainClass=com.example.experiment.ExperimentReplay -Dexec.args="../pipeline-output/football-inputs.json ../pipeline-output/football-replay.json"
       - name: Replay original basketball models
+        if: steps.cfg.outputs.run_mode != 'control'
         working-directory: basketball
         run: mvn -B compile exec:java -Dexec.mainClass=com.basketbol.experiment.ExperimentReplay -Dexec.args="../pipeline-output/basketball-inputs.json ../pipeline-output/basketball-replay.json"
       - name: Add experimental goal and total history features
+        if: steps.cfg.outputs.run_mode != 'control'
         run: python experiments/ensemble_validation/history_markets.py --output pipeline-output
       - name: Freeze conditional calibration shadow predictions
+        if: steps.cfg.outputs.run_mode != 'control'
         run: python experiments/ensemble_validation/conditional_rules.py freeze --output pipeline-output --previous previous
       - name: Freeze earlier-day rule predictions before refreshing labels
+        if: steps.cfg.outputs.run_mode != 'control'
         run: python experiments/ensemble_validation/daybook.py freeze --output pipeline-output --previous previous
       - name: Discover and freeze two-condition history rules (shadow only)
+        if: steps.cfg.outputs.run_mode != 'control'
         run: python experiments/ensemble_validation/mine_rules.py --input pipeline-output --output pipeline-output --previous previous --bootstrap rule-bootstrap --target-date '${{ steps.cfg.outputs.target_date }}'
       - name: Learn outcomes and freeze independent model forecasts
+        if: steps.cfg.outputs.run_mode != 'control'
         env:
           OPENBLAS_NUM_THREADS: '1'
         run: python experiments/ensemble_validation/outcome_learning.py --dataset pipeline-output/rule-mining-dataset.json --output pipeline-output --previous previous --target-date '${{ steps.cfg.outputs.target_date }}'
       - name: Freeze independently validated football score distribution
+        if: steps.cfg.outputs.run_mode != 'control'
         run: python experiments/ensemble_validation/score_distribution.py freeze --output pipeline-output --previous previous
       - name: Freeze top-half confidence selections before refreshing labels
+        if: steps.cfg.outputs.run_mode != 'control'
         run: python experiments/ensemble_validation/selection.py freeze --output pipeline-output --previous previous
       - name: Freeze one market choice and score per match
+        if: steps.cfg.outputs.run_mode != 'control'
         run: python experiments/ensemble_validation/match_choice.py freeze --output pipeline-output --previous previous
       - name: Refresh today's finished football outcomes (artifact only)
         working-directory: football
@@ -158,6 +188,7 @@ jobs:
         working-directory: basketball
         run: mvn -B exec:java -Dexec.mainClass=com.basketbol.experiment.OutcomeRefresh -Dexec.args="../pipeline-output/basketball-replay.json ../pipeline-output/basketball-outcome-audit.json"
       - name: Validate baseline parity and train on earlier days only
+        if: steps.cfg.outputs.run_mode != 'control'
         run: python experiments/ensemble_validation/report.py --output pipeline-output
       - name: Diagnose incorrect forecasts by historical features
         run: python experiments/ensemble_validation/error_diagnostics.py --output pipeline-output
@@ -176,8 +207,10 @@ jobs:
       - name: Evaluate single-choice shortlist and render sortable HTML
         run: python experiments/ensemble_validation/match_choice.py settle --output pipeline-output --previous previous
       - name: Evaluate immutable modal football scores
+        if: hashFiles('pipeline-output/score-before-results.json') != ''
         run: python experiments/ensemble_validation/score_distribution.py settle --output pipeline-output
       - name: Verify provenance and history boundaries
+        if: steps.cfg.outputs.run_mode != 'control'
         env:
           HOLDOUT_DATE: ${{ steps.cfg.outputs.target_date }}
           SOURCE_SHA: ${{ github.sha }}
@@ -199,6 +232,9 @@ jobs:
           manifest.update({"sourceSha": os.environ["SOURCE_SHA"], "runUrl": os.environ["RUN_URL"], "publishedSha": subprocess.check_output(["git", "-C", "published", "rev-parse", "HEAD"], text=True).strip(), "archiveSha": subprocess.check_output(["git", "-C", "archive", "rev-parse", "HEAD"], text=True).strip(), "referenceManifest": json.loads(Path("reference/manifest.json").read_text())})
           (root / "input-manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2))
           PY
+      - name: Prove control preserved forecasts and model parameters
+        if: steps.cfg.outputs.run_mode == 'control'
+        run: python experiments/ensemble_validation/control_runtime.py verify --output pipeline-output
       - name: Render private artifact previews
         run: |
           google-chrome --headless=new --no-sandbox --disable-gpu --screenshot="$PWD/pipeline-output/desktop.png" --window-size=1440,1000 "file://$PWD/pipeline-output/models.html" >/tmp/render.log 2>&1

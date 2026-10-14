@@ -117,8 +117,13 @@ def evaluate(group,sport,market,model):
 def learn(rows,sport,market,target):
     items=samples(rows,sport,market,target);dates=sorted({r['row']['date'] for r in items})
     if len(dates)<4:return {'sport':sport,'market':market,'status':'insufficient dates','model':None}
-    vd,td=dates[-2:];train=[r for r in items if r['row']['date']<vd]
-    val=[r for r in items if r['row']['date']==vd];test=[r for r in items if r['row']['date']==td]
+    td=dates[-1];validation_dates=[dates[-2]]
+    # Sparse days may pool earlier validation dates; never borrow the untouched test day.
+    for d in reversed(dates[:-2]):
+        if sum(r['row']['date'] in validation_dates for r in items)>=20:break
+        validation_dates.insert(0,d)
+    vd=validation_dates[0];train=[r for r in items if r['row']['date']<vd]
+    val=[r for r in items if r['row']['date'] in validation_dates];test=[r for r in items if r['row']['date']==td]
     if len(train)<80 or len(val)<20:return {'sport':sport,'market':market,'status':'insufficient train/validation samples','model':None}
     candidates=[];ablations=[]
     for mode,keys in MODES.items():
@@ -137,7 +142,7 @@ def learn(rows,sport,market,target):
     fw=fit_score(fx,fy,chosen['penalty']) if market=='score' else fit_classifier(fx,fy,len(GROUPS[sport][market]),chosen['penalty'])
     future_model={'mode':chosen['mode'],'penalty':chosen['penalty'],'transform':ft,'weights':fw.tolist()}
     return {'sport':sport,'market':market,'status':'retrospective development; prospective validation required','model':chosen,'forecastModel':future_model,'forecastTrainingDates':dates,
-            'trainingDates':[d for d in dates if d<vd],'validationDate':vd,'untouchedTestDate':td,'ablations':ablations,
+            'trainingDates':[d for d in dates if d<vd],'validationDate':vd,'validationDates':validation_dates,'untouchedTestDate':td,'ablations':ablations,
             'coefficients':[{'feature':name,'standardizedWeights':values} for size,name,values in important],
             'training':evaluate(train,sport,market,chosen),'validation':evaluate(val,sport,market,chosen),'test':evaluate(test,sport,market,chosen)}
 

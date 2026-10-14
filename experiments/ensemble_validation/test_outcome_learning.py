@@ -43,6 +43,13 @@ class OutcomeLearningTests(unittest.TestCase):
         w=fit_classifier(x,y,2,1);p=softmax(x@w)
         self.assertTrue(np.isfinite(p).all());self.assertTrue(np.allclose(p.sum(axis=1),1));self.assertGreater((p.argmax(axis=1)==y).mean(),.95)
 
+    def test_sparse_validation_pools_only_earlier_dates_and_keeps_test_untouched(self):
+        rows=self.dataset();thin=[r for r in rows if r['date']=='2026-10-11'][:4]
+        rows=[r for r in rows if r['date']!='2026-10-11']+thin
+        with patch('outcome_learning.features',side_effect=lambda r,s:r['f']):a=learn(rows,'basketball','MS','2026-10-13')
+        self.assertIsNotNone(a['model']);self.assertEqual(a['validationDates'],['2026-10-10','2026-10-11']);self.assertEqual(a['untouchedTestDate'],'2026-10-12')
+        self.assertTrue(all(d<'2026-10-10' for d in a['trainingDates']))
+
     def test_learned_forecast_and_score_are_saved_and_reused_unchanged(self):
         rows=self.dataset();row=copy.deepcopy(rows[-1]);row['time']='23:59';row['realScore']='LIVE 90-80';row['odds']={'hOverUnderValue':165}
         t,x=fit_transform([{'marketHome':.2},{'marketHome':.8}],['marketHome'])
