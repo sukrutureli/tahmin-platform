@@ -51,11 +51,16 @@ class RateLimitError(RuntimeError):
     pass
 
 
+class RequestBudgetError(RuntimeError):
+    pass
+
+
 class Client:
-    def __init__(self, cache):
+    def __init__(self, cache, deadline=None):
         self.cache = Path(cache)
         self.cache.mkdir(parents=True, exist_ok=True)
         self.last_request = 0
+        self.deadline = deadline
         self.audit = []
 
     def get(self, url, account=None, text=False):
@@ -69,10 +74,13 @@ class Client:
             headers.update({"x-brdg": account, "Origin": "https://istatistik.nesine.com",
                             "Referer": "https://istatistik.nesine.com/"})
         for attempt in range(3):
-            time.sleep(max(0, CONFIG["request_interval_seconds"] - (time.monotonic() - self.last_request)))
+            delay=max(0, CONFIG["request_interval_seconds"] - (time.monotonic() - self.last_request))
+            if self.deadline is not None and time.monotonic()+delay>=self.deadline:
+                raise RequestBudgetError("HTTP collection budget reached")
+            time.sleep(delay)
             self.last_request = time.monotonic()
             try:
-                with urllib.request.urlopen(urllib.request.Request(url, headers=headers), timeout=25) as response:
+                with urllib.request.urlopen(urllib.request.Request(url, headers=headers), timeout=min(25,max(.001,self.deadline-time.monotonic())) if self.deadline is not None else 25) as response:
                     content = response.read().decode("utf-8")
                 value = content if text else json.loads(content)
                 target.write_text(content)
@@ -88,7 +96,7 @@ class Client:
             except (urllib.error.URLError, TimeoutError):
                 if attempt == 2:
                     raise
-            time.sleep(1 + attempt)
+            time.sleep(min(1+attempt,max(0,self.deadline-time.monotonic())) if self.deadline is not None else 1+attempt)
         raise RuntimeError("Unreachable retry state")
 
 
@@ -133,7 +141,9 @@ def schedule_row(row, cutoff, sport):
             "for": gf, "against": ga, "finalFor": ff, "finalAgainst": fa,
             "win": int(win_for > win_against), "draw": int(win_for == win_against), "regulationKnown": True,
             "tournament": tournament.get("name", ""), "tournamentId": tournament.get("id"),
-            "opponent": row.get("team", {}).get("name", ""), "source": "broadage-team-schedule"}
+            "opponent": row.get("team", {}).get("name", ""), "opponentId": row.get("team", {}).get("id"),
+            "seasonId": row.get("season", {}).get("id") if isinstance(row.get("season"),dict) else None,
+            "identityNamespace": "broadage", "source": "broadage-team-schedule"}
 
 
 def archived_rows(rows, team, cutoff, sport):
@@ -232,6 +242,8 @@ class Collector:
                                          "regulationKnown":True,"tournament":row.get("LG",{}).get("N",""),
                                          "tournamentId":row.get("LG",{}).get("TID"),
                                          "opponent":row.get("AT" if side=="home" else "HT",{}).get("N",""),
+                                         "opponentId":row.get("AT" if side=="home" else "HT",{}).get("TID"),
+                                         "identityNamespace":"nesine",
                                          "source":"nesine-summary-general-and-venue"})
             output.append({"rows":unique(rows),"source":"nesine-summary-general-and-venue","teamId":tid,
                            "targetTournamentId":header.get("TOUR",{}).get("TID")})
@@ -375,3 +387,4 @@ if __name__ == '__main__':
     result=collect_day(a.published,a.previous,a.output,a.target_date,a.max_seconds)
     print(json.dumps({'fixtures':len(result['fixtures']),'errors':len(result['errors']),
                       'stoppedEarly':result.get('stoppedEarly',False)}))
+

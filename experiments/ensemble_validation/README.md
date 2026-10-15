@@ -319,3 +319,76 @@ GitHub's manual workflow input supports `mode=control`, optional `target_date`, 
 ### 14 October: display late fixtures without counting them as prospective
 
 The single-choice HTML also displays fixtures whose saved forecasts were created after kickoff, marked as late/out of cohort. Those rows receive no confidence rank and cannot change the fixed top 25/50/75/100% sample sizes or success metrics. Market and score settlement evaluate original pre-kickoff forecasts only; selection timing remains independently tracked. Existing same-day snapshots are still reused byte-for-byte. This fixes the visible omission of early-morning fixtures without retrospectively turning them into forward predictions.
+
+
+### 15 October: opponent strength / competition ablations (no promotion)
+
+`context_features.py` keeps provider/sport/team IDs, raw season IDs when supplied,
+and a separate deduplicated finished-match ledger. Old `live-history*.json` and
+native forecasts are never rewritten. Current raw cached team schedules hydrate
+missing opponent IDs; no team-name joins are permitted. Broadage and Nesine IDs
+are different namespaces. Conflicting copies of a match are quarantined, with
+persistent tombstones; missing IDs remain missing. Historical context rebuilt
+from later collections is explicitly retrospective, even though every feature
+uses outcomes strictly before its fixture date. Same-day outcomes are excluded;
+Elo changes are batched per calendar day, never dependent on same-day ordering.
+
+An optional one-hop scan uses the existing verified endpoint/account and a shared
+serial 500ms client. It first resolves at most 60 exact old training-fixture IDs
+for sports with sparse context; p1 sport/home/away IDs are verified and no names
+are used to match teams. These retrospective bindings and timestamps persist
+separately. It then alternates sports, at most 8 sparse opponent nodes and two
+endpoint-supplied calendar pages per node, with a 90-second request deadline.
+No recursive crawl or guessed pagination; a 429 stops all extra requests. Cache,
+identity mismatches, coverage gaps and request errors are saved in the artifact.
+The extra scan's actual collection timestamp is retained; it is not backdated.
+
+Four arms are retained: unchanged independent learner (`baseline`), opponent-only,
+competition-only, and both; production `main` is a fifth comparison, not a training
+input. Opponent context is date-causal Elo (fixed K=.15, sparse shrinkage 5),
+opponent-adjusted goal/point margin and historical opponent strength. Competition
+context uses trailing-365-day goal/point totals, home advantage, variability and
+football KG/Over rates, shrunk by 30 prior observations towards the available
+sport pool. Season IDs are not guessed when absent; this is a rolling-window
+competition feature, not a claim of complete season data. Baseline native model
+selection is unchanged. Each new arm uses its own prior validation for feature
+mode/L2 selection and retains the same untouched chronological test.
+
+A context head requires at least 30 training and 10 validation fixtures with its
+required context features. Otherwise it copies the unchanged baseline model and
+explicitly records `fallback-insufficient-context`. A fully covered new day does
+not imply sufficient historical training coverage. Candidate results and failures
+remain visible; no winning backtest arm is automatically promoted to native HTML,
+main, production daily/control workflows or Telegram.
+
+`context_experiment.py prepare` runs before outcome refresh, in both experiment
+daily and experiment control. Same-date candidate forecasts, model reports,
+feature bank and ledger are copied byte-for-byte, protected by hashes. Existing
+native model/snapshot hashes remain separately checked by control_runtime.
+`context_experiment.py settle` evaluates only completed common outcomes; live,
+missing and pushes are excluded. `context-before-results.json`,
+`context-learning.json`, `context-features.json`, `context-ledger.json`,
+`context-enrichment.json` and `context-evaluation.json` provide provenance.
+The first development day is 15 October; old-day tests and same-day results are
+research. Future pre-kickoff snapshots are tracked separately; benefit must repeat
+prospectively before activation is considered.
+
+**Default system comparison:** each system independently picks its own maximum
+probability market (MS/OU/KG football, MS/OU basketball), then ranks its own matches
+by that confidence. Compare all fixtures and fixed top 25/50/75% separately per
+sport, with N, hits, Wilson interval, chosen-event binary Brier/log loss and score
+MAE. Ranks include pending matches; measurement uses common completed fixtures.
+All-fixture cohorts match, while confidence subsets may contain different matches.
+Do not describe `mainSameMarkets` from the old single-choice report as main's own
+selection performance: it is a separate conditional diagnostic. The new default
+comparison is `context-comparison.html` / `context-evaluation.json`, retaining all
+candidate arms and unchanged baseline/main.
+
+Score diagnostics retain mean and conditional scores separately. Football exact
+score distribution selection uses prior validation only; untouched-test exact
+hits, modal concentration, joint log loss, 4+ goal observed/predicted frequency
+and Brier are saved. Basketball high totals use the training 90th-percentile
+threshold and validation residual scale; both sports report untouched-test
+coverage of a validation-derived total interval. Large scores are never injected
+for cosmetic variety. Kadro/sakatlik and xG are not added: no verified historical
+pre-kickoff source is currently available.

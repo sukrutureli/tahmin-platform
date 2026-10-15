@@ -181,6 +181,10 @@ jobs:
       - name: Freeze one market choice and score per match
         if: steps.cfg.outputs.run_mode != 'control'
         run: python experiments/ensemble_validation/match_choice.py freeze --output pipeline-output --previous previous
+      - name: Prepare separate opponent and competition research candidates
+        env:
+          OPENBLAS_NUM_THREADS: '1'
+        run: python experiments/ensemble_validation/context_experiment.py prepare --output pipeline-output --previous previous --target-date '${{ steps.cfg.outputs.target_date }}'
       - name: Refresh today's finished football outcomes (artifact only)
         working-directory: football
         run: mvn -B exec:java -Dexec.mainClass=com.example.experiment.OutcomeRefresh -Dexec.args="../pipeline-output/football-replay.json ../pipeline-output/football-outcome-audit.json"
@@ -206,6 +210,10 @@ jobs:
         run: python experiments/ensemble_validation/selection.py settle --output pipeline-output --previous previous
       - name: Evaluate single-choice shortlist and render sortable HTML
         run: python experiments/ensemble_validation/match_choice.py settle --output pipeline-output --previous previous
+      - name: Compare each system's own market and confidence subsets
+        env:
+          OPENBLAS_NUM_THREADS: '1'
+        run: python experiments/ensemble_validation/context_experiment.py settle --output pipeline-output --target-date '${{ steps.cfg.outputs.target_date }}'
       - name: Evaluate immutable modal football scores
         if: hashFiles('pipeline-output/score-before-results.json') != ''
         run: python experiments/ensemble_validation/score_distribution.py settle --output pipeline-output
@@ -253,3 +261,4 @@ jobs:
           path: pipeline-output/
           if-no-files-found: ignore
           retention-days: 7
+

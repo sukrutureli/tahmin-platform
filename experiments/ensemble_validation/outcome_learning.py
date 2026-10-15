@@ -77,12 +77,12 @@ def fit_score(x,y,penalty):
     return np.linalg.solve(x.T@x+regularizer,x.T@y)
 
 
-def samples(rows,sport,market,target):
+def samples(rows,sport,market,target,feature_function=None):
     items=[]
     for row in rows:
         if row['date']>=target:continue
         y=parse_score({'scoreline':row.get('realScore')}) if market=='score' else result(row,sport,market)
-        if y is not None:items.append({'row':row,'f':features(row,sport),'y':y})
+        if y is not None:items.append({'row':row,'f':(feature_function or features)(row,sport),'y':y})
     return items
 
 
@@ -114,8 +114,9 @@ def evaluate(group,sport,market,model):
                         'actual':r['y'],'learned':p.tolist()} for r,p in zip(group,predictions)]}
 
 
-def learn(rows,sport,market,target):
-    items=samples(rows,sport,market,target);dates=sorted({r['row']['date'] for r in items})
+def learn(rows,sport,market,target,feature_function=None,extra_keys=()):
+    modes={name:keys+list(extra_keys) for name,keys in MODES.items()}
+    items=samples(rows,sport,market,target,feature_function);dates=sorted({r['row']['date'] for r in items})
     if len(dates)<4:return {'sport':sport,'market':market,'status':'insufficient dates','model':None}
     td=dates[-1];validation_dates=[dates[-2]]
     # Sparse days may pool earlier validation dates; never borrow the untouched test day.
@@ -126,7 +127,7 @@ def learn(rows,sport,market,target):
     val=[r for r in items if r['row']['date'] in validation_dates];test=[r for r in items if r['row']['date']==td]
     if len(train)<80 or len(val)<20:return {'sport':sport,'market':market,'status':'insufficient train/validation samples','model':None}
     candidates=[];ablations=[]
-    for mode,keys in MODES.items():
+    for mode,keys in modes.items():
         t,x=fit_transform([r['f'] for r in train],keys);y=np.array([r['y'] for r in train])
         for penalty in PENALTIES:
             w=fit_score(x,y,penalty) if market=='score' else fit_classifier(x,y,len(GROUPS[sport][market]),penalty)
@@ -138,7 +139,7 @@ def learn(rows,sport,market,target):
     w=np.array(chosen['weights']);names=['intercept']+chosen['transform']['keys']+['missing:'+k for k in chosen['transform']['keys']]
     important=sorted([(float(np.linalg.norm(w[i])),names[i],w[i].tolist()) for i in range(1,len(names))],reverse=True)[:12]
     # Only after immutable test evaluation: refit chosen settings on completed past rows for future forecasts.
-    ft,fx=fit_transform([r['f'] for r in items],MODES[chosen['mode']]);fy=np.array([r['y'] for r in items])
+    ft,fx=fit_transform([r['f'] for r in items],modes[chosen['mode']]);fy=np.array([r['y'] for r in items])
     fw=fit_score(fx,fy,chosen['penalty']) if market=='score' else fit_classifier(fx,fy,len(GROUPS[sport][market]),chosen['penalty'])
     future_model={'mode':chosen['mode'],'penalty':chosen['penalty'],'transform':ft,'weights':fw.tolist()}
     return {'sport':sport,'market':market,'status':'retrospective development; prospective validation required','model':chosen,'forecastModel':future_model,'forecastTrainingDates':dates,
@@ -220,3 +221,4 @@ def main():
     print(json.dumps([{'sport':m['sport'],'market':m['market'],'mode':m['model']['mode'] if m['model'] else None} for m in report['models']]))
 
 if __name__=='__main__':main()
+
