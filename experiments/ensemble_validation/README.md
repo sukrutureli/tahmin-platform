@@ -392,3 +392,19 @@ threshold and validation residual scale; both sports report untouched-test
 coverage of a validation-derived total interval. Large scores are never injected
 for cosmetic variety. Kadro/sakatlik and xG are not added: no verified historical
 pre-kickoff source is currently available.
+
+#### Optional squad / injury / xG source check (15 October)
+
+Official provider documentation was reviewed, not assumed from endpoint names:
+- Lineups: https://www.broadage.com/developers/developers/soccer-api/match-lineup
+  documents a subscription key, a ±7-day window, and release 45–60 minutes before
+  kickoff. Daily morning forecasts cannot assume these future lineups are known.
+- Missing players: https://www.broadage.com/developers/soccer-api/missing-players-list
+  documents injured/suspended players, a subscription key and ±7-day access.
+  An endpoint returning today's corrected information is not an archived as-of
+  snapshot for an old morning forecast. Actual access and historical timestamped
+  coverage through the connected data source remain unverified.
+- Match statistics: https://www.broadage.com/developers/developers/soccer-api/match-statistics
+  has no documented xG field in the inspected schema; no usable xG feed has yet
+  been verified for this experiment. These features remain disabled, with no
+  account creation/purchase, synthetic values, or retroactive lineup inference.
