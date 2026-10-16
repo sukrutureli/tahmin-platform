@@ -32,24 +32,24 @@ public class LastPredictionManager {
 	}
 
 	public void fillPredictions() {
-		for (int i = 0; i < historyManager.getTeamHistories().size(); i++) {
-			TeamMatchHistory th = historyManager.getTeamHistories().get(i);
+		for (MatchInfo info : matchInfo) {
+			TeamMatchHistory th = FixtureIdentity.historyFor(info, historyManager.getTeamHistories());
+			PredictionResult prediction = FixtureIdentity.resultFor(info, historyManager.getTeamHistories(), predictionResults);
+			if (th == null || prediction == null) continue;
 
-			LastPrediction tempLastPrediction = new LastPrediction(matchInfo.get(i).getName(),
-					matchInfo.get(i).getTime());
+			LastPrediction tempLastPrediction = new LastPrediction(info.getName(), info.getTime());
 
-			tempLastPrediction.setEventId(FixtureIdentity.eventId(matchInfo.get(i).getDetailUrl()));
-			tempLastPrediction.setScore(predictionResults.get(i).getScoreline());
+			tempLastPrediction.setEventId(FixtureIdentity.eventId(info.getDetailUrl()));
+			tempLastPrediction.setScore(prediction.getScoreline());
 
-			List<String> tahminList = calculatePrediction(th, predictionResults.get(i), matchInfo.get(i),
-					predictionResults.get(i).getPick());
+			List<String> tahminList = calculatePrediction(th, prediction, info, prediction.getPick());
 
 			for (String s : tahminList) {
 				String t = s;
 				if (!s.startsWith("MS")) {
-					t = matchInfo.get(i).getOdds().gethOverUnderValue() + " " + s;
+					t = info.getOdds().gethOverUnderValue() + " " + s;
 				}
-				String withOdd = t + getOddsAndPercentage(s, matchInfo.get(i), predictionResults.get(i));
+				String withOdd = t + getOddsAndPercentage(s, info, prediction);
 				tempLastPrediction.getPredictions().add(withOdd);
 			}
 
@@ -155,3 +155,4 @@ public class LastPredictionManager {
 		return predictionData;
 	}
 }
+

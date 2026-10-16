@@ -37,6 +37,37 @@ public final class FixtureIdentity {
         return found == null ? null : eventId(found.getDetailUrl());
     }
 
+    private static int historyIndex(MatchInfo match, List<TeamMatchHistory> histories) {
+        String id = match == null ? null : eventId(match.getDetailUrl());
+        if (id == null || histories == null) return -1;
+        int found = -1;
+        for (int i = 0; i < histories.size(); i++) {
+            TeamMatchHistory h = histories.get(i);
+            if (h != null && id.equals(eventId(h.getDetailUrl()))) {
+                if (found >= 0) return -1;
+                found = i;
+            }
+        }
+        return found;
+    }
+
+    public static TeamMatchHistory historyFor(MatchInfo match, List<TeamMatchHistory> histories) {
+        int i = historyIndex(match, histories);
+        return i < 0 ? null : histories.get(i);
+    }
+
+    /** Results follow successfully created histories, not the unfiltered fixture list. */
+    public static PredictionResult resultFor(MatchInfo match, List<TeamMatchHistory> histories,
+            List<PredictionResult> results) {
+        int i = historyIndex(match, histories);
+        if (i < 0 || results == null || results.size() != histories.size()) return null;
+        TeamMatchHistory h = histories.get(i);
+        PredictionResult p = results.get(i);
+        // Refuse stale/misaligned saved arrays; provider names may differ from fixture labels.
+        return p != null && h.getTeamEv() != null && h.getTeamDep() != null
+                && h.getTeamEv().equals(p.getHomeTeam()) && h.getTeamDep().equals(p.getAwayTeam()) ? p : null;
+    }
+
     public static void bindPredictions(List<PredictionData> data, List<MatchInfo> matches) {
         if (data == null) return;
         for (PredictionData p : data) {
@@ -106,3 +137,4 @@ public final class FixtureIdentity {
         results.add(r);
     }
 }
+

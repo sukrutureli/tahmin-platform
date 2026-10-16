@@ -61,8 +61,70 @@ public final class FixtureIdentityRegression {
         check(" (⏳)".equals(FixtureIdentity.realScore(List.of(old), youth)), "ambiguous legacy result ignored");
         FixtureIdentity.bindScores(List.of(old), List.of(senior));
         check(" (4-0)".equals(FixtureIdentity.realScore(List.of(old), senior)), "old result unique migration");
+        reportGaps();
         if (args.length > 0) integration(matches);
         System.out.println("Fixture identity regression passed: basketball");
+    }
+
+    private static void reportGaps() throws Exception {
+        List<MatchInfo> fixtures = new ArrayList<>();
+        com.basketbol.MatchHistoryManager manager = new com.basketbol.MatchHistoryManager();
+        List<PredictionResult> forecasts = new ArrayList<>();
+        for (int i = 0; i < 56; i++) {
+            Odds odds = new Odds(1.5, 2.0, -5.5, 1.5, 1.5, 5.5, 1.5, 200.5, 1.5);
+            MatchInfo fixture = new MatchInfo("Home " + i + " - Away " + i, "20:00",
+                    "https://istatistik.nesine.com/" + (5000+i) + "/ozet", odds, i);
+            fixtures.add(fixture);
+            if (i == 17) continue; // Failed history in the middle, not only a missing final item.
+            String home = "Provider home " + i, away = "Provider away " + i;
+            TeamMatchHistory h = new TeamMatchHistory(fixture.getName(), home, away, fixture.getDetailUrl(), odds);
+            for (int j = 0; j < 2; j++) {
+                h.addSonMacMatch(new MatchResult(home, "Opponent", 90, 70, "2026-10-01", "League", "son-maclar"), 1);
+                h.addSonMacMatch(new MatchResult(away, "Opponent", 70, 90, "2026-10-01", "League", "son-maclar"), 2);
+            }
+            manager.addTeamHistory(h);
+            forecasts.add(new PredictionResult("regression", home, away, .9, 0, .1, .2, 0,
+                    "MS1", .9, (90+i) + "-70"));
+        }
+        check(FixtureIdentity.historyFor(fixtures.get(17), manager.getTeamHistories()) == null, "missing history stays missing");
+        check(FixtureIdentity.resultFor(fixtures.get(55), manager.getTeamHistories(), forecasts) == forecasts.get(54), "last forecast survives compact list");
+        check(FixtureIdentity.resultFor(fixtures.get(18), manager.getTeamHistories(), forecasts) == forecasts.get(17), "gap does not shift forecast");
+        check(FixtureIdentity.resultFor(fixtures.get(18), manager.getTeamHistories(), forecasts.subList(0,54)) == null, "unequal saved arrays not guessed");
+        List<PredictionResult> swapped = new ArrayList<>(forecasts);
+        Collections.swap(swapped, 17, 18);
+        check(FixtureIdentity.resultFor(fixtures.get(18), manager.getTeamHistories(), swapped) == null, "wrong team pair rejected");
+        List<TeamMatchHistory> duplicates = new ArrayList<>(manager.getTeamHistories());
+        duplicates.add(duplicates.get(17));
+        check(FixtureIdentity.historyFor(fixtures.get(18), duplicates) == null, "duplicate fixture histories rejected");
+        MatchInfo noUrl = new MatchInfo("No detail available", "20:00", null, fixtures.get(0).getOdds(), 56);
+        fixtures.add(0, noUrl);
+        // Match labels can coincide; fixture IDs, rather than labels or positions, must decide.
+        fixtures.get(20).setName(fixtures.get(19).getName());
+        com.basketbol.LastPredictionManager coupons = new com.basketbol.LastPredictionManager(manager, forecasts, fixtures);
+        coupons.fillPredictions();
+        check(coupons.getLastPrediction().size() == 55, "coupons contain only successful histories");
+        check(coupons.getLastPrediction().stream().noneMatch(c -> "5017".equals(c.getEventId())), "failed fixture gets no borrowed coupon");
+        LastPrediction after = coupons.getLastPrediction().stream().filter(c -> "5018".equals(c.getEventId())).findFirst().orElseThrow();
+        check("108-70".equals(after.getScore()), "coupon after gap has own score");
+        String outputName = "fixture-gap-regression.html";
+        java.nio.file.Path output = java.nio.file.Path.of("public/basketbol", outputName);
+        try {
+            com.basketbol.html.CombinedHtmlReportGenerator.generateCombinedHtml(coupons.getLastPrediction(), fixtures,
+                    manager, List.of(), forecasts, coupons.getPredictionData(), outputName, "2026-10-16", null);
+            String report = java.nio.file.Files.readString(output);
+            String[] cards = report.split("<div class='match(?: insufficient)?'>");
+            check(cards.length-1 == 57, "all fixtures rendered including unavailable history and URL");
+            check(cards[1].contains("Bu maç için geçmiş veri bulunamadı"), "no-URL card rendered");
+            check(cards[19].contains("Bu maç için geçmiş veri bulunamadı"), "missing middle card rendered without forecast");
+            check(cards[20].contains("108-70"), "report after gap has own score");
+            check(cards[57].contains("145-70"), "last fixture rendered correctly");
+            // Same saved histories are valid for a control render even when MatchInfo order changes.
+            Collections.reverse(fixtures);
+            com.basketbol.LastPredictionManager control = new com.basketbol.LastPredictionManager(manager, forecasts, fixtures);
+            control.fillPredictions();
+            check(control.getLastPrediction().get(0).getEventId().equals("5055"), "control restored by fixture ID");
+            check(control.getLastPrediction().get(0).getScore().equals("145-70"), "control score order independent");
+        } finally { java.nio.file.Files.deleteIfExists(output); }
     }
 
     private static void integration(List<MatchInfo> matches) throws Exception {
@@ -88,3 +150,4 @@ public final class FixtureIdentityRegression {
         check(old.getEventId() == null, "old JSON readable");
     }
 }
+

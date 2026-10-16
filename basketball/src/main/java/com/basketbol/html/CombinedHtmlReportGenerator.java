@@ -231,13 +231,11 @@ public class CombinedHtmlReportGenerator {
 		// Maçlar
 		for (int i = 0; i < matches.size(); i++) {
 			MatchInfo match = matches.get(i);
-			TeamMatchHistory teamHistory = historyManager.getTeamHistories().get(i);
+			TeamMatchHistory teamHistory = FixtureIdentity.historyFor(match, historyManager.getTeamHistories());
+			PredictionResult prediction = FixtureIdentity.resultFor(match, historyManager.getTeamHistories(), results);
 
 			boolean insufficient = (teamHistory != null && !teamHistory.isInfoEnough()
 					&& !teamHistory.isInfoEnoughWithoutRekabet());
-
-			String homeStr = match.getName().split(" - ")[0];
-			String awayStr = match.getName().split(" - ")[1];
 
 			html.append("<div class='match").append(insufficient ? " insufficient" : "").append("'>");
 
@@ -307,24 +305,24 @@ public class CombinedHtmlReportGenerator {
 				int home = teamHistory.getSonMaclarHome().size();
 				int away = teamHistory.getSonMaclarAway().size();
 
-				if (home > 0 && away > 0 && i < results.size()) {
+				if (home > 0 && away > 0 && prediction != null) {
 					html.append("<div class='quick-summary'>");
 					html.append("<table class='qs'><thead><tr>");
 					html.append(
 							"<th>MS1</th><th>MS2</th><th>Alt</th><th>Üst</th><th>Tahmin</th><th>Skor</th><th>Güven</th>");
 					html.append("</tr></thead><tbody><tr>");
-					html.append("<td class='qs-odd'>").append(MathUtils.fmtPct(results.get(i).getpHome()))
+					html.append("<td class='qs-odd'>").append(MathUtils.fmtPct(prediction.getpHome()))
 							.append("</td>");
-					html.append("<td class='qs-odd'>").append(MathUtils.fmtPct(results.get(i).getpAway()))
+					html.append("<td class='qs-odd'>").append(MathUtils.fmtPct(prediction.getpAway()))
 							.append("</td>");
-					html.append("<td class='qs-odd'>").append(MathUtils.fmtPct(1 - results.get(i).getpOver25()))
+					html.append("<td class='qs-odd'>").append(MathUtils.fmtPct(1 - prediction.getpOver25()))
 							.append("</td>");
-					html.append("<td class='qs-odd'>").append(MathUtils.fmtPct(results.get(i).getpOver25()))
+					html.append("<td class='qs-odd'>").append(MathUtils.fmtPct(prediction.getpOver25()))
 							.append("</td>");
-					html.append("<td class='qs-pick'><span class='pick'>").append(results.get(i).getPick())
+					html.append("<td class='qs-pick'><span class='pick'>").append(prediction.getPick())
 							.append("</span></td>");
-					html.append("<td class='qs-score'>").append(results.get(i).getScoreline()).append("</td>");
-					html.append("<td class='qs-odd'>").append(MathUtils.fmtPct(results.get(i).getConfidence()))
+					html.append("<td class='qs-score'>").append(prediction.getScoreline()).append("</td>");
+					html.append("<td class='qs-odd'>").append(MathUtils.fmtPct(prediction.getConfidence()))
 							.append("</td>");
 					html.append("</tr></tbody></table></div>");
 				}
@@ -371,10 +369,11 @@ public class CombinedHtmlReportGenerator {
 		try (FileWriter fw = new FileWriter(output)) {
 			fw.write(html.toString());
 		} catch (IOException e) {
-			e.printStackTrace();
+			throw new IllegalStateException("Cannot write basketball report: " + output, e);
 		}
 
 		System.out.println("✅ Birleşik basketbol HTML üretildi: " + output.getAbsolutePath());
 	}
 
 }
+

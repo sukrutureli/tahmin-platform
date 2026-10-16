@@ -57,8 +57,9 @@ public class Application {
                         if (url == null || !url.startsWith("http")) continue;
                         TeamMatchHistory teamHistory = scraper.scrapeTeamHistory(url, match.getName(), match.getOdds());
                         if (teamHistory != null) {
+                            Match stats = teamHistory.createStats(match);
                             historyManager.addTeamHistory(teamHistory);
-                            matchStats.add(teamHistory.createStats(match));
+                            matchStats.add(stats);
                         }
 
                     } catch (Exception e) {
@@ -89,6 +90,7 @@ public class Application {
             System.out.println("GENEL HATA: " + e.getMessage());
             e.printStackTrace();
             if (e instanceof HistoryApiClient.RateLimitException) throw (HistoryApiClient.RateLimitException) e;
+            throw new IllegalStateException("Basketball daily failed; output will not be published", e);
         } finally {
             if (scraper != null) scraper.close();
         }
@@ -114,12 +116,7 @@ public class Application {
             Map<String, String> updatedScores = scraper.fetchFinishedScoresFromDetails(rsList, matches);
             List<PredictionData> predictions = PredictionUpdater.updateFromGithub(updatedScores, "PredictionData-", matches, controlDate);
 
-            for (int i = 0; i < matches.size(); i++) {
-                MatchInfo match = matches.get(i);
-                if (match.hasDetailUrl() && i < teamHistoryList.size()) {
-                    historyManager.addTeamHistory(teamHistoryList.get(i));
-                }
-            }
+            for (TeamMatchHistory history : teamHistoryList) historyManager.addTeamHistory(history);
 
             LastPredictionManager lastPredictionManager = new LastPredictionManager(historyManager, results, matches);
             lastPredictionManager.fillPredictions();
@@ -147,3 +144,4 @@ System.out.println("GENEL HATA: " + e.getMessage());
         return day;
     }
 }
+
