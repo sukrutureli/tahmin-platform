@@ -5,6 +5,7 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+  actions: read
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -17,6 +18,37 @@ jobs:
           python-version: '3.11'
       - run: python -m pip install cryptography==46.0.3 PyYAML==6.0.3
       - run: python -m unittest discover -s tests/privacy -v
+  transport:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Generate disposable key and synthetic fixture
+        run: |
+          python3 - <<'PYFIXTURE'
+          import base64, os, secrets
+          from pathlib import Path
+          key=base64.b64encode(secrets.token_bytes(32)).decode()
+          print('::add-mask::'+key)
+          with open(os.environ['GITHUB_ENV'],'a') as output:
+              output.write('PRIVATE_TEST_KEY='+key+'\n')
+          Path('fixture/data').mkdir(parents=True)
+          Path('fixture/data/example.json').write_text('{"synthetic":true}')
+          PYFIXTURE
+      - uses: ./.github/actions/private-upload
+        with:
+          name: private-transport-synthetic-test
+          path: fixture
+          key: ${{ env.PRIVATE_TEST_KEY }}
+          retention-days: '1'
+      - uses: ./.github/actions/private-download
+        with:
+          name: private-transport-synthetic-test
+          path: restored
+          key: ${{ env.PRIVATE_TEST_KEY }}
+          github-token: ${{ github.token }}
+      - run: cmp fixture/data/example.json restored/data/example.json
   compile:
     runs-on: ubuntu-latest
     steps:
