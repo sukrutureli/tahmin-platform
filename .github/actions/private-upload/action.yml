@@ -1,0 +1,38 @@
+name: Upload encrypted artifact
+description: Encrypt files before storing them in public GitHub Actions artifacts
+inputs:
+  name:
+    required: true
+    description: Artifact name
+  path:
+    required: true
+    description: Input directory
+  key:
+    required: true
+    description: Base64 encoded 32-byte AES key from a GitHub secret
+  retention-days:
+    default: '7'
+    description: Artifact retention
+runs:
+  using: composite
+  steps:
+    - name: Install encryption dependency
+      shell: bash
+      run: python3 -m pip install --quiet --target "$RUNNER_TEMP/tahmin-crypto" cryptography==46.0.3
+    - name: Encrypt artifact
+      shell: bash
+      env:
+        PRIVATE_ARTIFACT_KEY: ${{ inputs.key }}
+        PRIVATE_SOURCE: ${{ inputs.path }}
+        PYTHONPATH: ${{ runner.temp }}/tahmin-crypto
+      run: python3 "$GITHUB_ACTION_PATH/../../../scripts/privacy/artifact.py" pack "$PRIVATE_SOURCE" "$RUNNER_TEMP/private-upload/payload.enc"
+    - uses: actions/upload-artifact@v4
+      with:
+        name: ${{ inputs.name }}
+        path: ${{ runner.temp }}/private-upload/payload.enc
+        if-no-files-found: error
+        retention-days: ${{ inputs.retention-days }}
+    - name: Remove upload staging
+      if: always()
+      shell: bash
+      run: rm -rf "$RUNNER_TEMP/private-upload"

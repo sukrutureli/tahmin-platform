@@ -1,0 +1,52 @@
+name: Private data readiness
+on:
+  push:
+    branches: ['prepare/private-fathertahmin']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install cryptography==46.0.3 PyYAML==6.0.3
+      - run: python -m unittest discover -s tests/privacy -v
+  compile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - run: mvn -B -f football/pom.xml compile
+      - run: mvn -B -f basketball/pom.xml compile
+  export-panel:
+    if: github.event_name == 'workflow_dispatch'
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: sukrutureli/fathertahmin
+          ref: main
+          path: published
+          token: ${{ secrets.FATHERTAHMIN_READ_TOKEN || secrets.ADMIN_USER }}
+          persist-credentials: false
+      - name: Export browser reports without publishing
+        run: python3 scripts/privacy/build_panel.py --source published --output private-panel
+      - uses: ./.github/actions/private-upload
+        with:
+          name: private-browser-panel
+          path: private-panel
+          key: ${{ secrets.PRIVATE_ARTIFACT_KEY }}
+          retention-days: '7'

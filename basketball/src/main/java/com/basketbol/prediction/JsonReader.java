@@ -66,8 +66,8 @@ public class JsonReader {
         String branch = "main";
 
         String url = String.format(
-                "https://raw.githubusercontent.com/%s/%s/%s/%s/data/%s-%s.json",
-                user, repo, branch, folderName, prefix, date);
+                "https://api.github.com/repos/%s/%s/contents/%s/data/%s-%s.json?ref=%s",
+                user, repo, folderName, prefix, date, branch);
 
         System.out.println("📥 GitHub'dan indiriliyor: " + url);
 
@@ -75,12 +75,17 @@ public class JsonReader {
         String token = System.getenv("GITHUB_TOKEN");
         HttpURLConnection conn = (HttpURLConnection) new URL(url).openConnection();
         conn.setRequestMethod("GET");
+        conn.setConnectTimeout(15000);
+        conn.setReadTimeout(30000);
         if (token != null && !token.isEmpty()) {
             conn.setRequestProperty("Authorization", "token " + token);
         }
-        conn.setRequestProperty("Accept", "application/vnd.github.v3.raw");
+        conn.setRequestProperty("Accept", "application/vnd.github.raw+json");
 
         int status = conn.getResponseCode();
+        if (status == 401 || status == 403) {
+            throw new IOException("GitHub access denied: HTTP " + status);
+        }
         if (status != 200) {
         	System.out.println(String.format("⚠️ Dosya bulunamadı: %d", status));
         	return List.of();

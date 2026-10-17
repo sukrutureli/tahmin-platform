@@ -1,0 +1,41 @@
+name: Download encrypted artifact
+description: Download and authenticate encrypted artifact without plaintext fallback
+inputs:
+  name:
+    required: true
+    description: Artifact name
+  path:
+    required: true
+    description: Destination directory
+  key:
+    required: true
+    description: Base64 encoded 32-byte AES key from a GitHub secret
+  run-id:
+    default: ${{ github.run_id }}
+    description: Source workflow run
+  github-token:
+    required: true
+    description: Token allowed to read source artifacts
+runs:
+  using: composite
+  steps:
+    - uses: actions/download-artifact@v4
+      with:
+        name: ${{ inputs.name }}
+        path: ${{ runner.temp }}/private-download
+        run-id: ${{ inputs.run-id }}
+        github-token: ${{ inputs.github-token }}
+    - name: Install encryption dependency
+      shell: bash
+      run: python3 -m pip install --quiet --target "$RUNNER_TEMP/tahmin-crypto" cryptography==46.0.3
+    - name: Decrypt artifact
+      shell: bash
+      env:
+        PRIVATE_ARTIFACT_KEY: ${{ inputs.key }}
+        PRIVATE_DESTINATION: ${{ inputs.path }}
+        PYTHONPATH: ${{ runner.temp }}/tahmin-crypto
+      run: python3 "$GITHUB_ACTION_PATH/../../../scripts/privacy/artifact.py" unpack "$RUNNER_TEMP/private-download/payload.enc" "$PRIVATE_DESTINATION"
+    - name: Remove download staging
+      if: always()
+      shell: bash
+      run: rm -rf "$RUNNER_TEMP/private-download"

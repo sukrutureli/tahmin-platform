@@ -1,126 +1,243 @@
 name: Control
-
-on:
+'on':
   workflow_dispatch:
     inputs:
       control_date:
-        description: 'Optional control date (YYYY-MM-DD)'
+        description: Optional control date (YYYY-MM-DD)
         required: false
         type: string
-
 permissions:
   contents: read
-
 jobs:
   seed-production-data:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-        with:
-          repository: sukrutureli/fathertahmin
-          ref: main
-          path: published
-      - uses: actions/upload-artifact@v4
-        with:
-          name: football-control-seed
-          path: published/futbol/data/
-          if-no-files-found: error
-      - uses: actions/upload-artifact@v4
-        with:
-          name: basketball-control-seed
-          path: published/basketbol/data/
-          if-no-files-found: error
-
+    - uses: actions/checkout@v4
+      with:
+        persist-credentials: false
+    - name: Require private artifact key
+      env:
+        PRIVATE_ARTIFACT_KEY: ${{ secrets.PRIVATE_ARTIFACT_KEY }}
+      run: |
+        python3 - <<'PYKEY'
+        import os, base64
+        try:
+         k=base64.b64decode(os.environ.get("PRIVATE_ARTIFACT_KEY", ""),validate=True)
+         assert len(k)==32
+        except Exception:
+         raise SystemExit("Configure PRIVATE_ARTIFACT_KEY before enabling this workflow")
+        PYKEY
+    - uses: actions/checkout@v4
+      with:
+        repository: sukrutureli/fathertahmin
+        ref: main
+        path: published
+        persist-credentials: false
+        token: ${{ secrets.FATHERTAHMIN_READ_TOKEN || secrets.ADMIN_USER }}
+    - uses: ./.github/actions/private-upload
+      with:
+        name: football-control-seed
+        path: published/futbol/data/
+        key: ${{ secrets.PRIVATE_ARTIFACT_KEY }}
+    - uses: ./.github/actions/private-upload
+      with:
+        name: basketball-control-seed
+        path: published/basketbol/data/
+        key: ${{ secrets.PRIVATE_ARTIFACT_KEY }}
+    - name: Prepare private diagnostic directory
+      if: always()
+      run: mkdir -p "$RUNNER_TEMP/tahmin-private-logs"
+    - name: Upload encrypted application diagnostics
+      if: always()
+      uses: ./.github/actions/private-upload
+      with:
+        name: private-logs-seed-production-data-${{ github.run_id }}
+        path: ${{ runner.temp }}/tahmin-private-logs
+        key: ${{ secrets.PRIVATE_ARTIFACT_KEY }}
+        retention-days: '7'
   football-control:
     name: Football CONTROL
     needs: seed-production-data
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '17'
-          cache: maven
-          cache-dependency-path: football/pom.xml
-      - uses: actions/download-artifact@v4
-        with:
-          name: football-control-seed
-          path: football/public/data
-      - name: Run football CONTROL
-        working-directory: football
-        env:
-          GITHUB_TOKEN: ${{ secrets.ADMIN_USER }}
-          CONTROL_DATE: ${{ github.event.inputs.control_date }}
-        run: |
-          if [ -n "$CONTROL_DATE" ]; then
-            mvn clean compile exec:java -Dexec.args="kontrol $CONTROL_DATE"
-          else
-            mvn clean compile exec:java -Dexec.args="kontrol"
-          fi
-      - uses: actions/upload-artifact@v4
-        with:
-          name: football-control-public
-          path: football/public/
-          if-no-files-found: error
-
+    - uses: actions/checkout@v4
+      with:
+        persist-credentials: false
+    - name: Require private artifact key
+      env:
+        PRIVATE_ARTIFACT_KEY: ${{ secrets.PRIVATE_ARTIFACT_KEY }}
+      run: |
+        python3 - <<'PYKEY'
+        import os, base64
+        try:
+         k=base64.b64decode(os.environ.get("PRIVATE_ARTIFACT_KEY", ""),validate=True)
+         assert len(k)==32
+        except Exception:
+         raise SystemExit("Configure PRIVATE_ARTIFACT_KEY before enabling this workflow")
+        PYKEY
+    - uses: actions/setup-java@v4
+      with:
+        distribution: temurin
+        java-version: '17'
+        cache: maven
+        cache-dependency-path: football/pom.xml
+    - uses: ./.github/actions/private-download
+      with:
+        name: football-control-seed
+        path: football/public/data
+        key: ${{ secrets.PRIVATE_ARTIFACT_KEY }}
+        github-token: ${{ github.token }}
+    - name: Run football CONTROL
+      working-directory: football
+      env:
+        GITHUB_TOKEN: ${{ secrets.FATHERTAHMIN_READ_TOKEN || secrets.ADMIN_USER }}
+        CONTROL_DATE: ${{ github.event.inputs.control_date }}
+      run: |
+        python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<'PRIVATE_COMMAND'
+        if [ -n "$CONTROL_DATE" ]; then
+          mvn clean compile exec:java -Dexec.args="kontrol $CONTROL_DATE"
+        else
+          mvn clean compile exec:java -Dexec.args="kontrol"
+        fi
+        PRIVATE_COMMAND
+    - uses: ./.github/actions/private-upload
+      with:
+        name: football-control-public
+        path: football/public/
+        key: ${{ secrets.PRIVATE_ARTIFACT_KEY }}
+    - name: Prepare private diagnostic directory
+      if: always()
+      run: mkdir -p "$RUNNER_TEMP/tahmin-private-logs"
+    - name: Upload encrypted application diagnostics
+      if: always()
+      uses: ./.github/actions/private-upload
+      with:
+        name: private-logs-football-control-${{ github.run_id }}
+        path: ${{ runner.temp }}/tahmin-private-logs
+        key: ${{ secrets.PRIVATE_ARTIFACT_KEY }}
+        retention-days: '7'
   basketball-control:
     name: Basketball CONTROL
     needs: seed-production-data
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '17'
-          cache: maven
-          cache-dependency-path: basketball/pom.xml
-      - uses: actions/download-artifact@v4
-        with:
-          name: basketball-control-seed
-          path: basketball/public/data
-      - name: Run basketball CONTROL
-        working-directory: basketball
-        env:
-          GITHUB_TOKEN: ${{ secrets.ADMIN_USER }}
-        run: mvn clean compile exec:java -Dexec.args="kontrol"
-      - uses: actions/upload-artifact@v4
-        with:
-          name: basketball-control-public
-          path: basketball/public/
-          if-no-files-found: error
-
+    - uses: actions/checkout@v4
+      with:
+        persist-credentials: false
+    - name: Require private artifact key
+      env:
+        PRIVATE_ARTIFACT_KEY: ${{ secrets.PRIVATE_ARTIFACT_KEY }}
+      run: |
+        python3 - <<'PYKEY'
+        import os, base64
+        try:
+         k=base64.b64decode(os.environ.get("PRIVATE_ARTIFACT_KEY", ""),validate=True)
+         assert len(k)==32
+        except Exception:
+         raise SystemExit("Configure PRIVATE_ARTIFACT_KEY before enabling this workflow")
+        PYKEY
+    - uses: actions/setup-java@v4
+      with:
+        distribution: temurin
+        java-version: '17'
+        cache: maven
+        cache-dependency-path: basketball/pom.xml
+    - uses: ./.github/actions/private-download
+      with:
+        name: basketball-control-seed
+        path: basketball/public/data
+        key: ${{ secrets.PRIVATE_ARTIFACT_KEY }}
+        github-token: ${{ github.token }}
+    - name: Run basketball CONTROL
+      working-directory: basketball
+      env:
+        GITHUB_TOKEN: ${{ secrets.FATHERTAHMIN_READ_TOKEN || secrets.ADMIN_USER }}
+      run: |
+        python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<'PRIVATE_COMMAND'
+        mvn clean compile exec:java -Dexec.args="kontrol"
+        PRIVATE_COMMAND
+    - uses: ./.github/actions/private-upload
+      with:
+        name: basketball-control-public
+        path: basketball/public/
+        key: ${{ secrets.PRIVATE_ARTIFACT_KEY }}
+    - name: Prepare private diagnostic directory
+      if: always()
+      run: mkdir -p "$RUNNER_TEMP/tahmin-private-logs"
+    - name: Upload encrypted application diagnostics
+      if: always()
+      uses: ./.github/actions/private-upload
+      with:
+        name: private-logs-basketball-control-${{ github.run_id }}
+        path: ${{ runner.temp }}/tahmin-private-logs
+        key: ${{ secrets.PRIVATE_ARTIFACT_KEY }}
+        retention-days: '7'
   publish:
     if: github.ref == 'refs/heads/main'
     name: Publish CONTROL updates
-    needs: [football-control, basketball-control]
+    needs:
+    - football-control
+    - basketball-control
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/download-artifact@v4
-        with:
-          name: football-control-public
-          path: publish/football-root
-      - uses: actions/download-artifact@v4
-        with:
-          name: basketball-control-public
-          path: publish/basketball-root
-      - name: Publish atomically to fathertahmin
-        env:
-          TOKEN: ${{ secrets.ADMIN_USER }}
-        run: |
-          test -n "$TOKEN" || { echo "ADMIN_USER secret is missing."; exit 1; }
-          git clone "https://x-access-token:${TOKEN}@github.com/sukrutureli/fathertahmin.git" target-repo
-          cp -r publish/football-root/* target-repo/
-          cp -r publish/basketball-root/* target-repo/
-          rm -rf target-repo/futbol/futbol target-repo/basketbol/basketbol
-          cd target-repo
-          git config user.name "Şükrü Türeli"
-          git config user.email "sukrutureli@gmail.com"
-          git add -A futbol basketbol
-          if git diff --cached --quiet; then
-            echo "No CONTROL changes to publish."
-            exit 0
-          fi
-          git commit -m "📦 [TAHMIN-PLATFORM] CONTROL update ($(date +'%Y-%m-%d %H:%M'))"
-          git push origin main
+    - uses: actions/checkout@v4
+      with:
+        persist-credentials: false
+    - name: Require private artifact key
+      env:
+        PRIVATE_ARTIFACT_KEY: ${{ secrets.PRIVATE_ARTIFACT_KEY }}
+      run: |
+        python3 - <<'PYKEY'
+        import os, base64
+        try:
+         k=base64.b64decode(os.environ.get("PRIVATE_ARTIFACT_KEY", ""),validate=True)
+         assert len(k)==32
+        except Exception:
+         raise SystemExit("Configure PRIVATE_ARTIFACT_KEY before enabling this workflow")
+        PYKEY
+    - uses: ./.github/actions/private-download
+      with:
+        name: football-control-public
+        path: publish/football-root
+        key: ${{ secrets.PRIVATE_ARTIFACT_KEY }}
+        github-token: ${{ github.token }}
+    - uses: ./.github/actions/private-download
+      with:
+        name: basketball-control-public
+        path: publish/basketball-root
+        key: ${{ secrets.PRIVATE_ARTIFACT_KEY }}
+        github-token: ${{ github.token }}
+    - name: Publish atomically to fathertahmin
+      env:
+        TOKEN: ${{ secrets.FATHERTAHMIN_WRITE_TOKEN || secrets.ADMIN_USER }}
+      run: |
+        python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<'PRIVATE_COMMAND'
+        test -n "$TOKEN" || { echo "ADMIN_USER secret is missing."; exit 1; }
+        git clone "https://x-access-token:${TOKEN}@github.com/sukrutureli/fathertahmin.git" target-repo
+        cp -r publish/football-root/* target-repo/
+        cp -r publish/basketball-root/* target-repo/
+        rm -rf target-repo/futbol/futbol target-repo/basketbol/basketbol
+        cd target-repo
+        git config user.name "Şükrü Türeli"
+        git config user.email "sukrutureli@gmail.com"
+        git add -A futbol basketbol
+        if git diff --cached --quiet; then
+          echo "No CONTROL changes to publish."
+          exit 0
+        fi
+        git commit -m "📦 [TAHMIN-PLATFORM] CONTROL update ($(date +'%Y-%m-%d %H:%M'))"
+        git push origin main
+        PRIVATE_COMMAND
+    - name: Prepare private diagnostic directory
+      if: always()
+      run: mkdir -p "$RUNNER_TEMP/tahmin-private-logs"
+    - name: Upload encrypted application diagnostics
+      if: always()
+      uses: ./.github/actions/private-upload
+      with:
+        name: private-logs-publish-${{ github.run_id }}
+        path: ${{ runner.temp }}/tahmin-private-logs
+        key: ${{ secrets.PRIVATE_ARTIFACT_KEY }}
+        retention-days: '7'
+env:
+  GITHUB_TOKEN: ${{ secrets.FATHERTAHMIN_READ_TOKEN || secrets.ADMIN_USER }}
