@@ -1,6 +1,8 @@
 {
   "target_date": "2026-10-18",
   "published_ref": "7a428f2200b14710d2866f8dbec9de2724c77b35",
-  "previous_run_id": "39071460438",
-  "previous_artifact": "ensemble-market-validation-2026-10-17"
+  "previous_run_id": "39072707141",
+  "previous_artifact": "ensemble-market-validation-2026-10-18",
+  "control_target_date": "2026-10-18",
+  "control_request_at": "2026-10-17T22:30:30.159841+00:00"
 }

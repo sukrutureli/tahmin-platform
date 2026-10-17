@@ -408,3 +408,41 @@ Official provider documentation was reviewed, not assumed from endpoint names:
   has no documented xG field in the inspected schema; no usable xG feed has yet
   been verified for this experiment. These features remain disabled, with no
   account creation/purchase, synthetic values, or retroactive lineup inference.
+
+
+### 18 October decision: fixed-weight opponent-strength stability protocol
+
+`stability-settings.json` defines `opponent-locked-v1`: opponent strength only
+(no league feature arm), source model date 18 October, first prospective date
+19 October, at least 14 observed days, primary top 50% and secondary top
+25/75/100% separately for football and basketball. The decision is made after
+17 October outcomes; neither 17 nor 18 October is credited to this new protocol.
+
+`locked_stability.py` extracts the exact opponent arm's forecast weights,
+training medians/scales/missingness schema, chosen feature mode/L2 settings,
+football score-distribution parameters and basketball residual covariance from
+the successful 18 October artifact. It never calls a fit/learn function. The
+serialized `stability-model.json` is copied byte-for-byte through future
+artifacts; pipeline/config hashes reject silent changes. New daily history and
+initial odds are still date-causal inputs; missing opponent context is exposed
+and uses the frozen training imputation. Insufficient-context fallback heads
+from the source report stay explicitly marked and are themselves frozen.
+
+Before refreshing labels, `stability-before-results.json` records each match's
+probabilities, compatible score, actual creation time and paired main snapshot.
+Every system chooses its own highest-probability market and its own confidence
+ranking. Pending fixtures retain their ranks; only common settled outcomes are
+measured, with live/missing/push and late snapshots excluded from the primary
+comparison. Same-date forecasts are never rewritten by control. Model bytes,
+source SHA references, coverage and snapshot hashes remain auditable.
+
+`stability-evaluation.json`, `stability-journal.json` and `stability.html` retain
+daily and cumulative own-pick accuracy, N, Brier/log loss, mean confidence and
+compatible-score MAE. They track won/tied/lost days and chronological halves.
+The 14-day minimum counts dates with measured samples for both systems, not
+empty calendar dates. Nested confidence cohorts are not independent; pooled
+Wilson intervals are descriptive and do not replace a repeated-day assessment.
+Reaching 14 days does not automatically declare stability or promote to main.
+Other research arms may keep retraining separately; they cannot change this
+locked candidate. Native best-matches HTML, main, production daily/control and
+Telegram remain unchanged.
