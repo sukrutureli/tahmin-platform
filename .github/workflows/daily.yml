@@ -2,8 +2,6 @@ name: Daily Prediction
 
 on:
   workflow_dispatch:
-  schedule:
-    - cron: '0 21 * * *'
 
 permissions:
   contents: read
