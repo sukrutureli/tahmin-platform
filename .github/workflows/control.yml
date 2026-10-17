@@ -7,8 +7,6 @@ on:
         description: 'Optional control date (YYYY-MM-DD)'
         required: false
         type: string
-  schedule:
-    - cron: '0 23,4,16,19 * * *'
 
 permissions:
   contents: read
