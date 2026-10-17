@@ -2,6 +2,10 @@
 
 Durum: hazırlık branch'i. Main, çalışan deney branch'i, Telegram ve repo görünürlüğü değiştirilmedi. Bu değişiklik tek başına gizlilik sağlamaz; aşağıdaki geçiş tamamlanmalıdır. Hesaplama kodu public kalır.
 
+## Kartsız yol seçildi
+
+Kullanıcı kart bilgisi vermek istemediği için önerilen panel artık `cloudflare-panel/README.md` içindeki **Workers Free + sunucuda şifreli giriş** sürümüdür. Aşağıdaki Cloudflare Access/Pages adımı alternatif olarak korunmuştur; Workers yolunda uygulanmaz. Gerçek panel `fathertahmin`dan yetkili HTTP okuması yapar, ayrıca rapor export/deploy gerekmez. Hesapta mevcut Hello World Worker kullanılabilir. E-posta allowlist yerine güçlü bir parola kullanılır. GitHub Secrets/şifreli artifact/migration gereklilikleri aynen devam eder.
+
 ## Ne hazır?
 
 - Daily/Control üretimleri ve kontrol seed'leri public artifact'e çıkmadan AES-256-GCM ile şifrelenir. Job'lar aynı dosyaları doğrulayarak çözer. Anahtar eksik/yanlışsa veya içerik bozulmuşsa plaintext'e dönülmez.
