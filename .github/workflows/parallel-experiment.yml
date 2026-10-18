@@ -1,0 +1,53 @@
+name: Parallel experimental reports
+on:
+  workflow_run:
+    workflows: [Daily Prediction, Control]
+    types: [completed]
+    branches: [main]
+  push:
+    branches: [main]
+    paths: ['.github/parallel-experiment-request.json']
+  workflow_dispatch:
+    inputs:
+      production_run_id:
+        description: Successful existing Daily Prediction or Control run ID
+        required: true
+        type: string
+permissions:
+  contents: read
+  actions: write
+concurrency:
+  group: parallel-experiment-orchestration
+  cancel-in-progress: false
+jobs:
+  coordinate:
+    if: github.ref == 'refs/heads/main' && (github.event_name != 'workflow_run' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main' && github.event.workflow_run.head_repository.full_name == github.repository))
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          persist-credentials: false
+      - name: Resolve trusted production run
+        id: request
+        env:
+          EVENT_RUN: ${{ github.event.workflow_run.id }}
+          INPUT_RUN: ${{ inputs.production_run_id }}
+        run: |
+          python3 - <<'PY'
+          import json,os
+          v=os.environ.get('EVENT_RUN') or os.environ.get('INPUT_RUN')
+          if not v:v=str(json.load(open('.github/parallel-experiment-request.json'))['production_run_id'])
+          assert v.isdigit()
+          with open(os.environ['GITHUB_OUTPUT'],'a') as f:f.write('run_id='+v+'\n')
+          PY
+      - name: Verify orchestration and panel routing
+        run: |
+          python3 -m unittest discover -s tests -p test_parallel_experiments.py -v
+          node --test cloudflare-panel/worker.test.mjs
+      - name: Run shadow control/daily after production success
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FATHER_READ_TOKEN: ${{ secrets.FATHERTAHMIN_READ_TOKEN || secrets.FATHERTAHMIN_WRITE_TOKEN || secrets.ADMIN_USER }}
+        run: python3 scripts/parallel_experiments.py --production-run '${{ steps.request.outputs.run_id }}'

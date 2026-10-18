@@ -1,6 +1,34 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import worker from './worker.mjs';
+
+test('home offers four authenticated legacy and new reports',async()=>{
+  const r=await worker.fetch(get('/',await cookie()),env),s=await r.text();
+  for(const slug of ['futbol','basketbol','futbol-yeni','basketbol-yeni'])assert.ok(s.includes('href="/'+slug+'/?date='));
+});
+test('new report requires login before reading private dated files',async()=>{
+  const old=globalThis.fetch;globalThis.fetch=async()=>{throw Error('unexpected upstream')};
+  try{assert.equal((await worker.fetch(get('/futbol-yeni/'),env)).status,303)}finally{globalThis.fetch=old;}
+});
+test('new report reads its exact dated snapshot and keeps new-system day navigation',async()=>{
+  const old=globalThis.fetch,oldNow=Date.now;const calls=[];
+  try{
+    Date.now=()=>Date.parse('2026-10-18T08:00:00Z');const session=await cookie();
+    globalThis.fetch=async(url)=>{calls.push(url);return url.includes('new-report-manifest')?Response.json({targetDate:'2026-10-18',reports:{futbol:{file:'futbol-yeni.html'}}}):new Response('<body>new frozen report</body>')};
+    const r=await worker.fetch(get('/futbol-yeni/',session),env),s=await r.text();assert.equal(r.status,200);
+    assert.ok(calls.every(x=>x.includes('/deney/reports/2026-10-18/')));assert.ok(s.includes('/futbol-yeni/?date=2026-10-17'));assert.ok(s.includes('new frozen report'));
+  }finally{globalThis.fetch=old;Date.now=oldNow;}
+});
+test('missing or wrong-date new report cannot fall back to old or another day',async()=>{
+  const old=globalThis.fetch,oldNow=Date.now;
+  try{
+    Date.now=()=>Date.parse('2026-10-18T08:00:00Z');const session=await cookie();
+    globalThis.fetch=async()=>new Response('secret-upstream',{status:404});
+    let r=await worker.fetch(get('/basketbol-yeni/',session),env);assert.equal(r.status,404);assert.ok(!(await r.text()).includes('secret-upstream'));
+    globalThis.fetch=async()=>Response.json({targetDate:'2026-10-17',reports:{basketbol:{file:'basketbol-yeni.html'}}});
+    r=await worker.fetch(get('/basketbol-yeni/',session),env);assert.equal(r.status,502);
+  }finally{globalThis.fetch=old;Date.now=oldNow;}
+});
 const env = {PANEL_PASSWORD: 'Synthetic-password-123456', SESSION_SECRET: 'synthetic-session-secret-of-32-chars-minimum', GITHUB_TOKEN: 'synthetic-github-secret'};
 const origin = 'https://example.workers.dev';
 let ip = 0;
@@ -152,3 +180,4 @@ test('invalid duplicate or out-of-range date rejected without upstream access',a
   for(const path of ['/futbol/?date=invalid','/futbol/?date=2000-01-01','/futbol/?date=2026-10-18&date=2026-10-17'])
     assert.equal((await worker.fetch(get(path,session),env)).status,404);
 });
+

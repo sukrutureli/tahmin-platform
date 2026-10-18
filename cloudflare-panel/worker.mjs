@@ -121,8 +121,9 @@ export default {
       }
       // Every report and JSON request passes authentication before any upstream call.
       if (!loggedIn) return redirect('/login');
+      const newSport = path.match(/^\/(futbol|basketbol)-yeni\/?$/)?.[1];
       const file = reportPath(path);
-      if (path !== '/' && !file) return response('Bulunamadı.', 404, 'text/plain; charset=utf-8');
+      if (path !== '/' && !file && !newSport) return response('Bulunamadı.', 404, 'text/plain; charset=utf-8');
       if ([...url.searchParams.keys()].some(key => key !== 'date') || url.searchParams.getAll('date').length > 1)
         return response('Geçersiz tarih isteği.', 404, 'text/plain; charset=utf-8');
       const fileDate = file?.match(/-(\d{4}-\d{2}-\d{2})\.(json|html)$/)?.[1];
@@ -131,7 +132,23 @@ export default {
         return response('Bu panel bugün ve dünün raporlarını gösterir.', 404, 'text/plain; charset=utf-8');
       if (path === '/') return response(request.method === 'HEAD' ? null : page('<h1>Tahminlerim</h1><small>' + date + '</small>' +
         '<a href="/futbol/?date=' + date + '">⚽ Futbol</a><a href="/basketbol/?date=' + date + '">🏀 Basketbol</a>' +
+        '<a href="/futbol-yeni/?date=' + date + '">⚽ Futbol Yeni</a><a href="/basketbol-yeni/?date=' + date + '">🏀 Basketbol Yeni</a>' +
         '<form method="post" action="/logout"><button>Çıkış yap</button></form>'));
+      if (newSport) {
+        const base = 'deney/reports/' + date + '/';
+        const metadata = await github('contents/' + base + 'new-report-manifest.json?ref=main', env, true);
+        if (metadata.status === 404)
+          return response(page('<h1>' + date + '</h1><p>Yeni sistemin bu gün için raporu henüz hazır değil.</p><a href="/">Ana sayfa</a>'), 404);
+        if (metadata.status !== 200) return response('Yeni rapor kaydı okunamadı.', 502, 'text/plain; charset=utf-8');
+        const record = await metadata.json();
+        if (record.targetDate !== date || record.reports?.[newSport]?.file !== newSport + '-yeni.html')
+          return response('Yeni raporun tarihi doğrulanamadı.', 502, 'text/plain; charset=utf-8');
+        const upstream = await github('contents/' + base + newSport + '-yeni.html?ref=main', env, true);
+        if (upstream.status !== 200) return response('Yeni rapor okunamadı.', 502, 'text/plain; charset=utf-8');
+        if (request.method === 'HEAD') return response(null);
+        const html = await upstream.text(), bar = navigation(newSport + '-yeni', date);
+        return response(/<body[^>]*>/i.test(html) ? html.replace(/<body[^>]*>/i, match => match + bar) : bar + html);
+      }
       const sport = file.split('/')[0];
       // Choose the latest update of this day's predictions, not a different day's root HTML.
       const history = await github('commits?sha=main&path=' + encodeURIComponent(sport + '/data/PredictionData-' + date + '.json') + '&per_page=1', env);
@@ -156,3 +173,4 @@ export default {
     }
   }
 };
+
