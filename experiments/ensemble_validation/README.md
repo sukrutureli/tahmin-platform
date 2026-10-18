@@ -446,3 +446,31 @@ Reaching 14 days does not automatically declare stability or promote to main.
 Other research arms may keep retraining separately; they cannot change this
 locked candidate. Native best-matches HTML, main, production daily/control and
 Telegram remain unchanged.
+
+
+### Private report checkpoint (18 October)
+
+The full artifact and diagnostic logs are AES-GCM encrypted with PRIVATE_ARTIFACT_KEY.
+Only bounded report copies are written to the private sukrutureli/fathertahmin
+repository under deney/current/. The destination must be private before any write.
+The exporter touches no production HTML, JSON, workflows, algorithms or Telegram.
+It writes no raw HTTP, replay inputs or rule-mining dataset. Snapshot contents and
+models stay encrypted; snapshot-index.json retains their source dates and hashes.
+
+checkpoint-manifest.json binds every copy to a source run/SHA, encrypted artifact,
+original file hash and copied report hash. context-evaluation event membership
+arrays are omitted; all metric counts and scores are preserved. Diagnostic JSON
+keeps all aggregate feature comparisons and the first five error examples per
+block, explicitly recording the full example count. Full details stay encrypted.
+Per-file limit 512 KiB; package limit 3 MiB. Missing mandatory reports, invalid
+source dates and public destinations fail. Identical exports do not create commits.
+
+Future successful artifact uploads export these reports automatically. The
+export-private-experiment-reports workflow can restore an existing successful
+artifact and copy reports without recomputing forecasts, labels or models; the
+request is .github/private-report-export.json on this experiment branch.
+
+Daily evaluation should read the private checkpoint first and verify its source
+run is successful and its hashes/date match. Do not treat the unencrypted preview
+as a new forecast snapshot. The opponent-locked-v1 parameters/pipeline are unchanged;
+first prospective date remains 19 October, minimum 14 observed days, no promotion.

@@ -394,6 +394,14 @@ jobs:
         path: pipeline-output/
         retention-days: 30
         key: ${{ secrets.PRIVATE_ARTIFACT_KEY }}
+    - name: Save bounded reports to private repository
+      env:
+        PRIVATE_REPORT_TOKEN: ${{ secrets.FATHERTAHMIN_WRITE_TOKEN || secrets.ADMIN_USER }}
+        REPORT_SOURCE_TOKEN: ${{ github.token }}
+      run: |
+        python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<'PRIVATE_COMMAND'
+        python experiments/ensemble_validation/private_reports.py --root pipeline-output --source-run '${{ github.run_id }}' --target-date '${{ steps.cfg.outputs.target_date }}'
+        PRIVATE_COMMAND
     - name: Upload failed-run diagnostics
       if: failure()
       uses: ./.github/actions/private-upload

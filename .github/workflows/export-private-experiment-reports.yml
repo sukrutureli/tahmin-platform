@@ -1,0 +1,60 @@
+name: Export private experiment reports
+on:
+  push:
+    branches: ['experiment/ensemble-market-validation']
+    paths: ['.github/private-report-export.json']
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: private-experiment-report-export
+  cancel-in-progress: false
+jobs:
+  export:
+    if: github.ref == 'refs/heads/experiment/ensemble-market-validation'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Read export-only request
+        id: cfg
+        run: |
+          python3 - <<'PY'
+          import json,os,re
+          d=json.load(open('.github/private-report-export.json'))
+          assert str(d['source_run_id']).isdigit()
+          assert re.fullmatch(r'\d{4}-\d{2}-\d{2}',d['target_date'])
+          with open(os.environ['GITHUB_OUTPUT'],'a') as f:
+              f.write('run_id='+str(d['source_run_id'])+'\n')
+              f.write('target_date='+d['target_date']+'\n')
+          PY
+      - uses: ./.github/actions/private-download
+        with:
+          name: ensemble-market-validation-${{ steps.cfg.outputs.target_date }}
+          run-id: ${{ steps.cfg.outputs.run_id }}
+          github-token: ${{ github.token }}
+          path: restored
+          key: ${{ secrets.PRIVATE_ARTIFACT_KEY }}
+      - name: Verify and export existing reports without refreshing forecasts or results
+        env:
+          PRIVATE_REPORT_TOKEN: ${{ secrets.FATHERTAHMIN_WRITE_TOKEN || secrets.ADMIN_USER }}
+          REPORT_SOURCE_TOKEN: ${{ github.token }}
+        run: |
+          python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<'PRIVATE_COMMAND'
+          python -m unittest discover -s experiments/ensemble_validation -p test_private_reports.py -v
+          python experiments/ensemble_validation/private_reports.py --root restored --source-run '${{ steps.cfg.outputs.run_id }}' --target-date '${{ steps.cfg.outputs.target_date }}'
+          PRIVATE_COMMAND
+      - name: Prepare private diagnostics
+        if: always()
+        run: mkdir -p "$RUNNER_TEMP/tahmin-private-logs"
+      - name: Save encrypted diagnostics
+        if: always()
+        uses: ./.github/actions/private-upload
+        with:
+          name: private-report-export-logs-${{ github.run_id }}
+          path: ${{ runner.temp }}/tahmin-private-logs
+          key: ${{ secrets.PRIVATE_ARTIFACT_KEY }}
+          retention-days: '7'
