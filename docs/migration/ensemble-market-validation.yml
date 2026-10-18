@@ -67,7 +67,7 @@ jobs:
         ref: ${{ steps.cfg.outputs.published_ref }}
         path: published
         persist-credentials: false
-        token: ${{ secrets.FATHERTAHMIN_READ_TOKEN || secrets.ADMIN_USER }}
+        token: ${{ secrets.FATHERTAHMIN_READ_TOKEN || secrets.FATHERTAHMIN_WRITE_TOKEN || secrets.ADMIN_USER }}
     - uses: actions/checkout@v4
       if: steps.cfg.outputs.run_mode != 'control'
       with:
@@ -75,7 +75,7 @@ jobs:
         ref: 700bc50bd7b63a616a8b9a61d4aa6de2f7e2a14c
         path: archive
         persist-credentials: false
-        token: ${{ secrets.FATHERTAHMIN_READ_TOKEN || secrets.ADMIN_USER }}
+        token: ${{ secrets.FATHERTAHMIN_READ_TOKEN || secrets.FATHERTAHMIN_WRITE_TOKEN || secrets.ADMIN_USER }}
     - uses: ./.github/actions/private-download
       with:
         name: ${{ steps.cfg.outputs.previous_artifact }}
@@ -414,4 +414,4 @@ jobs:
         key: ${{ secrets.PRIVATE_ARTIFACT_KEY }}
         retention-days: '7'
 env:
-  GITHUB_TOKEN: ${{ secrets.FATHERTAHMIN_READ_TOKEN || secrets.ADMIN_USER }}
+  GITHUB_TOKEN: ${{ secrets.FATHERTAHMIN_READ_TOKEN || secrets.FATHERTAHMIN_WRITE_TOKEN || secrets.ADMIN_USER }}

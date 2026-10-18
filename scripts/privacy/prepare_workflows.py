@@ -18,7 +18,7 @@ def multiline(dumper, value):
     return dumper.represent_scalar('tag:yaml.org,2002:str', value, style='|' if '\n' in value else None)
 Dumper.add_representer(str, multiline)
 
-READ = '${{ secrets.FATHERTAHMIN_READ_TOKEN || secrets.ADMIN_USER }}'
+READ = '${{ secrets.FATHERTAHMIN_READ_TOKEN || secrets.FATHERTAHMIN_WRITE_TOKEN || secrets.ADMIN_USER }}'
 WRITE = '${{ secrets.FATHERTAHMIN_WRITE_TOKEN || secrets.ADMIN_USER }}'
 KEY = '${{ secrets.PRIVATE_ARTIFACT_KEY }}'
 

@@ -82,7 +82,7 @@ jobs:
           repository: sukrutureli/fathertahmin
           ref: main
           path: published
-          token: ${{ secrets.FATHERTAHMIN_READ_TOKEN || secrets.ADMIN_USER }}
+          token: ${{ secrets.FATHERTAHMIN_READ_TOKEN || secrets.FATHERTAHMIN_WRITE_TOKEN || secrets.ADMIN_USER }}
           persist-credentials: false
       - name: Export browser reports without publishing
         run: python3 scripts/privacy/build_panel.py --source published --output private-panel

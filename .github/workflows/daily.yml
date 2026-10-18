@@ -260,4 +260,4 @@ jobs:
         key: ${{ secrets.PRIVATE_ARTIFACT_KEY }}
         retention-days: '7'
 env:
-  GITHUB_TOKEN: ${{ secrets.FATHERTAHMIN_READ_TOKEN || secrets.ADMIN_USER }}
+  GITHUB_TOKEN: ${{ secrets.FATHERTAHMIN_READ_TOKEN || secrets.FATHERTAHMIN_WRITE_TOKEN || secrets.ADMIN_USER }}

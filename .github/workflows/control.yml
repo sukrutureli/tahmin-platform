@@ -33,7 +33,7 @@ jobs:
         ref: main
         path: published
         persist-credentials: false
-        token: ${{ secrets.FATHERTAHMIN_READ_TOKEN || secrets.ADMIN_USER }}
+        token: ${{ secrets.FATHERTAHMIN_READ_TOKEN || secrets.FATHERTAHMIN_WRITE_TOKEN || secrets.ADMIN_USER }}
     - uses: ./.github/actions/private-upload
       with:
         name: football-control-seed
@@ -90,7 +90,7 @@ jobs:
     - name: Run football CONTROL
       working-directory: football
       env:
-        GITHUB_TOKEN: ${{ secrets.FATHERTAHMIN_READ_TOKEN || secrets.ADMIN_USER }}
+        GITHUB_TOKEN: ${{ secrets.FATHERTAHMIN_READ_TOKEN || secrets.FATHERTAHMIN_WRITE_TOKEN || secrets.ADMIN_USER }}
         CONTROL_DATE: ${{ github.event.inputs.control_date }}
       run: |
         python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<'PRIVATE_COMMAND'
@@ -151,7 +151,7 @@ jobs:
     - name: Run basketball CONTROL
       working-directory: basketball
       env:
-        GITHUB_TOKEN: ${{ secrets.FATHERTAHMIN_READ_TOKEN || secrets.ADMIN_USER }}
+        GITHUB_TOKEN: ${{ secrets.FATHERTAHMIN_READ_TOKEN || secrets.FATHERTAHMIN_WRITE_TOKEN || secrets.ADMIN_USER }}
       run: |
         python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<'PRIVATE_COMMAND'
         mvn clean compile exec:java -Dexec.args="kontrol"
@@ -240,4 +240,4 @@ jobs:
         key: ${{ secrets.PRIVATE_ARTIFACT_KEY }}
         retention-days: '7'
 env:
-  GITHUB_TOKEN: ${{ secrets.FATHERTAHMIN_READ_TOKEN || secrets.ADMIN_USER }}
+  GITHUB_TOKEN: ${{ secrets.FATHERTAHMIN_READ_TOKEN || secrets.FATHERTAHMIN_WRITE_TOKEN || secrets.ADMIN_USER }}
