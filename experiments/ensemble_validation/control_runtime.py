@@ -14,7 +14,7 @@ def api(path):
 def select_source(runs,target,artifacts):
     name='ensemble-market-validation-'+target
     for r in runs:
-        if r.get('head_branch')!=BRANCH or r.get('conclusion')!='success' or not r.get('name','').startswith('Ensemble Market Validation'):continue
+        if r.get('head_branch')!=BRANCH or r.get('conclusion')!='success' or not (r.get('path')=='.github/workflows/ensemble-market-validation.yml' or (not r.get('path') and r.get('name','').startswith('Ensemble Market Validation'))):continue
         if any(a['name']==name and not a.get('expired') for a in artifacts(r['id'])):return str(r['id']),name
     return None
 
@@ -70,7 +70,7 @@ def main():
             source_run=api('actions/runs/'+run)
             available=api(f'actions/runs/{run}/artifacts')['artifacts']
             candidates=sorted([x['name'] for x in available if x['name'].startswith('ensemble-market-validation-') and re.fullmatch(r'ensemble-market-validation-\d{4}-\d{2}-\d{2}',x['name']) and x['name'][-10:]<target and not x.get('expired')],reverse=True)
-            if source_run.get('head_branch')!=BRANCH or source_run.get('conclusion')!='success' or not source_run.get('name','').startswith('Ensemble Market Validation') or not candidates:raise ValueError('No verified earlier-day daily source')
+            if source_run.get('head_branch')!=BRANCH or source_run.get('conclusion')!='success' or source_run.get('path')!='.github/workflows/ensemble-market-validation.yml' or not candidates:raise ValueError('No verified earlier-day daily source')
             source=(run,candidates[0])
         resolved=configure(c,inputs,source)
         with open(os.environ['GITHUB_OUTPUT'],'a') as f:

@@ -474,3 +474,7 @@ Daily evaluation should read the private checkpoint first and verify its source
 run is successful and its hashes/date match. Do not treat the unencrypted preview
 as a new forecast snapshot. The opponent-locked-v1 parameters/pipeline are unchanged;
 first prospective date remains 19 October, minimum 14 observed days, no promotion.
+
+
+## Paralel özel raporlar
+Başarılı üretim Daily/Control sonrası main koordinatörü bu branchi dispatch eder. İki ayrı HTML ve tarihli değerlendirmeler private fathertahmin `deney/reports/YYYY-MM-DD/` yolunda tutulur. `current` son kontrol edilen gündür, takvimde bugün olmayabilir. Geç biten maçlar nedeniyle 14 günlük karşılaştırmada her tarihin en güncel stability-evaluation.json dosyasını kullanın; sonraki güne taşınan journal eski sonuçları içerebilir. Sabit model değişmez; 18 Ekim ön izleme, 19 Ekim ilk bağımsız gündür.

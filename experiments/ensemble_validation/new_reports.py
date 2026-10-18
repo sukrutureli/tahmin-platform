@@ -16,6 +16,7 @@ def reports(root):
     model=root/'stability-model.json'
     if not model.exists():raise ValueError('Missing frozen model')
     model_hash=sha(model)
+    if preview and sha(source)!=read(model)['sourceSnapshotSha256']:raise ValueError('Source-day snapshot differs from the locked model source')
     if not preview and book['modelSha256']!=model_hash:raise ValueError('Frozen model hash mismatch')
     before={p.name:sha(p) for p in root.glob('*before-results*.json')};before[model.name]=model_hash
     config=read(model)['protocol'];payload=read(model)['payload'];summary={}

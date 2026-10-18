@@ -40,14 +40,15 @@ class PrivateReportTests(unittest.TestCase):
         from private_reports import encoded
         files={'daily-evaluation.json':'{}'};manifest={'targetDate':'2026-10-18','sourceRunId':'1'}
         allfiles=files|{'checkpoint-manifest.json':encoded(manifest)}
+        allfiles=allfiles|{"DATED/"+n:s for n,s in allfiles.items() if n in ['daily-evaluation.json','checkpoint-manifest.json']}
         entries=[]
         for n,s in allfiles.items():
-            b=s.encode();entries.append({'path':PREFIX+n,'sha':hashlib.sha1(b'blob '+str(len(b)).encode()+b'\0'+b).hexdigest()})
+            b=s.encode();entries.append({'path':('deney/reports/2026-10-18/'+n[6:]) if n.startswith('DATED/') else PREFIX+n,'sha':hashlib.sha1(b'blob '+str(len(b)).encode()+b'\0'+b).hexdigest()})
         api=FakeApi(entries=entries);self.assertFalse(publish(api,files,manifest));self.assertEqual(api.writes,[])
     def test_owned_paths_only_and_one_atomic_ref_update(self):
         api=FakeApi(entries=[{'path':'futbol/futbol.html','sha':'keep'},{'path':PREFIX+'stability-evaluation.json','sha':'old'}])
         self.assertTrue(publish(api,{'daily-evaluation.json':'{}'},{'targetDate':'2026-10-18','sourceRunId':'1'}))
-        updates=api.writes[0][2]['tree'];self.assertTrue(all(x['path'].startswith(PREFIX) for x in updates))
+        updates=api.writes[0][2]['tree'];self.assertTrue(all(x['path'].startswith(PREFIX) or x['path'].startswith('deney/reports/2026-10-18/') for x in updates))
         self.assertTrue(any(x.get('sha','') is None for x in updates))
         self.assertEqual(sum(method=='PATCH' for _,method,_ in api.writes),1)
 

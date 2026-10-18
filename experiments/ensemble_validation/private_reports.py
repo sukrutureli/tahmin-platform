@@ -87,7 +87,7 @@ def publish(api,files,manifest):
         owned=set(JSON_FILES+HTML_FILES+['snapshot-index.json','history-coverage.json','checkpoint-manifest.json'])
         paths={x['path']:x for x in entries['tree'] if x['path'].startswith(PREFIX)}
         files=dict(files);files['checkpoint-manifest.json']=encoded(manifest)
-        dated={name:files[name] for name in ['futbol-yeni.html','basketbol-yeni.html','new-report-manifest.json'] if name in files}
+        dated={name:files[name] for name in ['futbol-yeni.html','basketbol-yeni.html','new-report-manifest.json','checkpoint-manifest.json','stability-evaluation.json','context-evaluation.json','daily-evaluation.json'] if name in files}
         # Git blob hashes make identical reruns a no-op.
         def blob(text):
             b=text.encode();return hashlib.sha1(b'blob '+str(len(b)).encode()+b'\0'+b).hexdigest()
