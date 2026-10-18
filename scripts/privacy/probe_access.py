@@ -45,6 +45,15 @@ def main():
             stage = 'authenticated Git clone' if index == 0 else 'Git push dry-run'
             result = subprocess.run(command, env=env, capture_output=True, timeout=120)
             if result.returncode:
+                message = result.stderr.decode('utf-8', errors='replace')
+                if '403' in message or 'Permission' in message or 'denied' in message:
+                    print('GitHub rejected the write handshake: check Contents read/write on the selected repository.')
+                elif 'workflow' in message.lower():
+                    print('GitHub reported a workflow-permission restriction during the dry-run.')
+                elif 'rejected' in message.lower() or 'fetch first' in message.lower():
+                    print('Remote head changed or push policy rejected this dry-run.')
+                else:
+                    print('Git transport failed before a write handshake could be verified.')
                 raise ValueError('Repository access/push handshake failed')
     print('Configured key accepted; both reports readable; git push dry-run accepted. No repository data changed.')
 
