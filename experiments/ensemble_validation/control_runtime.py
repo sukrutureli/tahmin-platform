@@ -5,7 +5,7 @@ from pathlib import Path
 from urllib.request import Request,urlopen
 
 BRANCH='experiment/ensemble-market-validation'
-PROTECTED=['before-results-predictions.json','conditional-before-results.json','mined-before-results.json','learned-before-results.json','selection-before-results.json','match-choice-before-results.json','score-before-results.json','frozen-today-rules.json','outcome-learning.json','score-distribution.json','input-manifest.json']
+PROTECTED=['priced-before-results.json','before-results-predictions.json','conditional-before-results.json','mined-before-results.json','learned-before-results.json','selection-before-results.json','match-choice-before-results.json','score-before-results.json','frozen-today-rules.json','outcome-learning.json','score-distribution.json','input-manifest.json']
 
 def api(path):
     req=Request('https://api.github.com/repos/'+os.environ['GITHUB_REPOSITORY']+'/'+path,headers={'Authorization':'Bearer '+os.environ['GH_TOKEN'],'Accept':'application/vnd.github+json'})

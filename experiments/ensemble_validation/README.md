@@ -478,3 +478,11 @@ first prospective date remains 19 October, minimum 14 observed days, no promotio
 
 ## Paralel özel raporlar
 Başarılı üretim Daily/Control sonrası main koordinatörü bu branchi dispatch eder. İki ayrı HTML ve tarihli değerlendirmeler private fathertahmin `deney/reports/YYYY-MM-DD/` yolunda tutulur. `current` son kontrol edilen gündür, takvimde bugün olmayabilir. Geç biten maçlar nedeniyle 14 günlük karşılaştırmada her tarihin en güncel stability-evaluation.json dosyasını kullanın; sonraki güne taşınan journal eski sonuçları içerebilir. Sabit model değişmez; 18 Ekim ön izleme, 19 Ekim ilk bağımsız gündür.
+
+
+## Oranı bulunan tercih ve HTML filtresi
+18 Ekim kullanıcı isteği: `available-price-v1`, sabit modelin tüm pazar/seçenek olasılıkları içinden ilk kayıtta sayısal, sonlu ve 1'den büyük oranı bulunan en yüksek güvenli tercihi seçer. Oransız maç silinmez; tercih yok olarak gösterilir ve paydadan çıkarılır. Basketbol Alt/Üst için pozitif çizgi zorunludur. Seçime uygun skor aynı kilitli dağılımla hesaplanır; model yeniden eğitilmez.
+
+`priced_choices.py freeze` sonuç HTTP çağrılarından ÖNCE `priced-before-results.json` kaydeder. Control aynı kaydı aynen kullanır. Orijinal stability tahminleri ve model dosyaları değiştirilmez. Yeni HTML'lerde görünen seçimlerin doğru karşılaştırması `priced-evaluation.json` dosyasıdır; her sistem için aynı oran uygunluk kuralı uygulanır, kendi maksimum adayı ve güven alt kümeleri kullanılır. Kaydın kendi oluşturulma saati esas alınır; geç ve 18 Ekim ön izleme örnekleri bağımsız ölçüm değildir. Eski stability-evaluation özgün politika için ayrı tutulur.
+
+Futbol Yeni / Basketbol Yeni HTML'lerinde en düşük oran filtresi ve temizleme düğmesi vardır. Filtre yalnız görünümü değiştirir, kayıtlı tercihleri/rankleri veya değerlendirme kohortunu değiştirmez. Cloudflare yeniden dağıtımı gerektirmez.

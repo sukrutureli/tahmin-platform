@@ -284,6 +284,11 @@ jobs:
         python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<'PRIVATE_COMMAND'
         python experiments/ensemble_validation/locked_stability.py freeze --output pipeline-output --previous previous --target-date '${{ steps.cfg.outputs.target_date }}'
         PRIVATE_COMMAND
+    - name: Freeze choices with available initial prices before results
+      run: |
+        python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<'PRIVATE_COMMAND'
+        python experiments/ensemble_validation/priced_choices.py freeze --output pipeline-output
+        PRIVATE_COMMAND
     - name: Refresh today's finished football outcomes (artifact only)
       working-directory: football
       run: |

@@ -47,6 +47,7 @@ jobs:
           python -m pip install numpy==2.3.5
           python -m unittest discover -s experiments/ensemble_validation -p test_private_reports.py -v
           python -m unittest discover -s experiments/ensemble_validation -p test_new_reports.py -v
+          python -m unittest discover -s experiments/ensemble_validation -p test_priced_choices.py -v
           python -m unittest discover -s experiments/ensemble_validation -p test_control_runtime.py -v
           python -m unittest discover -s experiments/ensemble_validation -p test_display_odds.py -v
           python experiments/ensemble_validation/display_odds.py --output restored
