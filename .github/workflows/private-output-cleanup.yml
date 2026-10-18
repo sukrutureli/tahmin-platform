@@ -27,6 +27,7 @@ jobs:
         id: plan
         env:
           GH_TOKEN: ${{ github.token }}
+          LEGACY_TOKEN: ${{ secrets.ADMIN_USER }}
         run: python3 scripts/privacy/cleanup_public_outputs.py plan
   backup-and-delete:
     if: needs.plan.outputs.execute == 'true'
@@ -45,6 +46,7 @@ jobs:
       - name: Encrypt source archives and verify exact roundtrip
         env:
           GH_TOKEN: ${{ github.token }}
+          LEGACY_TOKEN: ${{ secrets.ADMIN_USER }}
           PRIVATE_ARTIFACT_KEY: ${{ secrets.PRIVATE_ARTIFACT_KEY }}
           ITEMS: ${{ toJSON(matrix.items) }}
         run: python3 scripts/privacy/cleanup_public_outputs.py backup --items "$ITEMS" --root backup
@@ -60,6 +62,7 @@ jobs:
       - name: Verify uploaded ciphertext and delete only backed-up public sources
         env:
           GH_TOKEN: ${{ github.token }}
+          LEGACY_TOKEN: ${{ secrets.ADMIN_USER }}
           BATCH_NUMBER: ${{ matrix.batch }}
           BACKUP_ID: ${{ steps.remote.outputs.artifact-id }}
         run: python3 scripts/privacy/cleanup_public_outputs.py delete --root backup --remote-id "$BACKUP_ID"

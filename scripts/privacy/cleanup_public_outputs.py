@@ -28,27 +28,41 @@ class Api:
         if self.repo != 'sukrutureli/tahmin-platform':
             raise ValueError('Unexpected repository')
         self.token = os.environ['GH_TOKEN']
+        self.legacy = os.environ.get('LEGACY_TOKEN', '')
+        self.disabled_legacy = set()
+        self.reported = set()
         self.opener = urllib.request.build_opener(NoRedirect())
     def request(self, path, method='GET', missing_ok=False):
-        req = urllib.request.Request('https://api.github.com/repos/' + self.repo + '/' + path,
-            headers={'Authorization': 'Bearer '+self.token, 'Accept':'application/vnd.github+json',
-                     'User-Agent':'private-output-cleanup', 'X-GitHub-Api-Version':'2022-11-28'},method=method)
         for attempt in range(6):
-            try:
-                return self.opener.open(req,timeout=120)
-            except urllib.error.HTTPError as error:
-                if error.code in (301,302,303,307,308):
-                    return error
-                if missing_ok and error.code in (404,410):
-                    return None
-                exhausted = error.headers.get('X-RateLimit-Remaining') == '0'
-                if error.code == 429 or (error.code == 403 and exhausted):
-                    delay=int(error.headers.get('Retry-After','30'))
-                    if exhausted:
-                        delay=max(delay,int(error.headers.get('X-RateLimit-Reset','0'))-int(time.time())+2)
-                    time.sleep(max(1,min(delay,3700)))
-                    continue
-                raise RuntimeError('GitHub API operation failed with HTTP '+str(error.code)) from None
+            primary=self.legacy if self.legacy and method not in self.disabled_legacy else self.token
+            tokens=list(dict.fromkeys([primary,self.token]))
+            delays=[];permission_failed=False
+            for token in tokens:
+                req=urllib.request.Request('https://api.github.com/repos/'+self.repo+'/'+path,
+                    headers={'Authorization':'Bearer '+token,'Accept':'application/vnd.github+json',
+                             'User-Agent':'private-output-cleanup','X-GitHub-Api-Version':'2022-11-28'},method=method)
+                try:
+                    response=self.opener.open(req,timeout=120)
+                    if permission_failed and token==self.token:self.disabled_legacy.add(method)
+                    if method not in self.reported:
+                        print('API_ACCESS='+method+' '+('stored-token' if token==self.legacy else 'workflow-token')+
+                              ' remaining='+response.headers.get('X-RateLimit-Remaining','unknown'))
+                        self.reported.add(method)
+                    return response
+                except urllib.error.HTTPError as error:
+                    if error.code in (301,302,303,307,308):return error
+                    exhausted=error.headers.get('X-RateLimit-Remaining')=='0'
+                    if error.code==429 or (error.code==403 and exhausted):
+                        delay=int(error.headers.get('Retry-After','30'))
+                        if exhausted:delay=max(delay,int(error.headers.get('X-RateLimit-Reset','0'))-int(time.time())+2)
+                        delays.append(max(1,min(delay,3700)));continue
+                    if token!=tokens[-1] and error.code in (401,403,404):
+                        permission_failed=True;continue
+                    if missing_ok and error.code in (404,410):return None
+                    raise RuntimeError('GitHub API operation failed with HTTP '+str(error.code)) from None
+            if delays:
+                print('GitHub API limit reached; waiting for reset without deleting unverified data.')
+                time.sleep(min(delays));continue
         raise RuntimeError('GitHub rate limit persisted')
     def json(self,path,missing_ok=False):
         response=self.request(path,missing_ok=missing_ok)
