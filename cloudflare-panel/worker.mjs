@@ -87,6 +87,46 @@ async function github(path, env, raw = false) {
     redirect: 'manual', signal: AbortSignal.timeout(20000)
   });
 }
+function escapeHTML(s) { return String(s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function reportName(name) { return name.replace(/\.html$/i,'').replace(/[-_]+/g,' ').replace(/\b\w/g,c=>c.toLocaleUpperCase('tr')); }
+async function directory(path,env) {
+  const r=await github('contents/'+path+'?ref=main',env);
+  if(r.status===404)return [];
+  if(r.status!==200)throw Error('directory unavailable');
+  const rows=await r.json();if(!Array.isArray(rows))throw Error('invalid directory');return rows;
+}
+async function archivePage(request,url,env) {
+  if([...url.searchParams.keys()].some(k=>k!=='date') || url.searchParams.getAll('date').length>1)return response('Geçersiz tarih.',404,'text/plain; charset=utf-8');
+  const date=url.searchParams.get('date'),keep=[istanbulDay(),istanbulDay(-1)];
+  if(date && !keep.includes(date))return response('Bu tarih arşivde tutulmuyor.',404,'text/plain; charset=utf-8');
+  let content='<h1>Tahminlerim</h1>';
+  if(!date) {
+    const rows=await directory('raporlar',env);
+    const dates=rows.filter(x=>x.type==='dir' && keep.includes(x.name)).map(x=>x.name).sort().reverse();
+    content+='<p>Görüntülemek istediğin tarihi seç.</p>';
+    content+=dates.map(d=>'<a href="/?date='+d+'">'+(d===keep[0]?'Bugün':'Dün')+' · '+d+'</a>').join('') || '<p>Raporlar henüz hazır değil.</p>';
+    content+='<small>Bugün ve dünün raporları saklanır.</small>';
+  } else {
+    content+='<a href="/">← Tarihler</a><h2>'+date+'</h2>';
+    const rows=await directory('raporlar/'+date,env);
+    const files=rows.filter(x=>x.type==='file' && safeHTML(x.name)).sort((a,b)=>a.name.localeCompare(b.name,'tr'));
+    content+=files.map(x=>'<a href="/raporlar/'+date+'/'+encodeURIComponent(x.name)+'">'+escapeHTML(reportName(x.name))+'</a>').join('') || '<p>Bu gün için rapor henüz hazır değil.</p>';
+  }
+  content+='<form method="post" action="/logout"><button>Çıkış yap</button></form>';
+  return response(request.method==='HEAD'?null:page(content));
+}
+function safeHTML(name) {return typeof name==='string' && /^[\p{L}\p{N}_ -]+\.html$/iu.test(name) && name.length<180;}
+async function archiveReport(request,url,env) {
+  if(url.search)return response('Geçersiz istek.',404,'text/plain; charset=utf-8');
+  const m=url.pathname.match(/^\/raporlar\/(\d{4}-\d{2}-\d{2})\/([^/]+)$/);
+  if(!m || ![istanbulDay(),istanbulDay(-1)].includes(m[1]))return response('Bulunamadı.',404,'text/plain; charset=utf-8');
+  const name=decodeURIComponent(m[2]);if(!safeHTML(name))return response('Bulunamadı.',404,'text/plain; charset=utf-8');
+  const r=await github('contents/raporlar/'+m[1]+'/'+encodeURIComponent(name)+'?ref=main',env,true);
+  if(r.status!==200)return response('Rapor henüz hazır değil.',r.status===404?404:502,'text/plain; charset=utf-8');
+  if(request.method==='HEAD')return response(null);
+  const text=await r.text(),bar='<nav style="padding:12px;background:#18283f;font:16px system-ui"><a style="color:white" href="/?date='+m[1]+'">← '+m[1]+' raporları</a></nav>';
+  return response(/<body[^>]*>/i.test(text)?text.replace(/<body[^>]*>/i,m=>m+bar):bar+text);
+}
 export default {
   async fetch(request, env) {
     try {
@@ -121,6 +161,8 @@ export default {
       }
       // Every report and JSON request passes authentication before any upstream call.
       if (!loggedIn) return redirect('/login');
+      if (path === '/') return await archivePage(request,url,env);
+      if (path.startsWith('/raporlar/')) return await archiveReport(request,url,env);
       const newSport = path.match(/^\/(futbol|basketbol)-yeni\/?$/)?.[1];
       const file = reportPath(path);
       if (path !== '/' && !file && !newSport) return response('Bulunamadı.', 404, 'text/plain; charset=utf-8');
@@ -130,10 +172,6 @@ export default {
       const date = url.searchParams.get('date') || fileDate || istanbulDay();
       if (![istanbulDay(), istanbulDay(-1)].includes(date) || (fileDate && fileDate !== date))
         return response('Bu panel bugün ve dünün raporlarını gösterir.', 404, 'text/plain; charset=utf-8');
-      if (path === '/') return response(request.method === 'HEAD' ? null : page('<h1>Tahminlerim</h1><small>' + date + '</small>' +
-        '<a href="/futbol/?date=' + date + '">⚽ Futbol</a><a href="/basketbol/?date=' + date + '">🏀 Basketbol</a>' +
-        '<a href="/futbol-yeni/?date=' + date + '">⚽ Futbol Yeni</a><a href="/basketbol-yeni/?date=' + date + '">🏀 Basketbol Yeni</a>' +
-        '<form method="post" action="/logout"><button>Çıkış yap</button></form>'));
       if (newSport) {
         const base = 'deney/reports/' + date + '/';
         const metadata = await github('contents/' + base + 'new-report-manifest.json?ref=main', env, true);

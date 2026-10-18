@@ -2,10 +2,6 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import worker from './worker.mjs';
 
-test('home offers four authenticated legacy and new reports',async()=>{
-  const r=await worker.fetch(get('/',await cookie()),env),s=await r.text();
-  for(const slug of ['futbol','basketbol','futbol-yeni','basketbol-yeni'])assert.ok(s.includes('href="/'+slug+'/?date='));
-});
 test('new report requires login before reading private dated files',async()=>{
   const old=globalThis.fetch;globalThis.fetch=async()=>{throw Error('unexpected upstream')};
   try{assert.equal((await worker.fetch(get('/futbol-yeni/'),env)).status,303)}finally{globalThis.fetch=old;}
@@ -70,8 +66,8 @@ test('correct password creates secure cookie and opens dashboard', async () => {
   const response = await worker.fetch(post(env.PANEL_PASSWORD), env);
   const header = response.headers.get('Set-Cookie');
   for (const option of ['Secure', 'HttpOnly', 'SameSite=Strict', 'Path=/']) assert.ok(header.includes(option));
-  const home = await worker.fetch(get('/', header.split(';')[0]), env);
-  assert.equal(home.status, 200);assert.ok((await home.text()).includes('Basketbol'));
+  const old=globalThis.fetch;globalThis.fetch=async()=>Response.json([]);
+  try {const home=await worker.fetch(get('/',header.split(';')[0]),env);assert.equal(home.status,200);assert.ok((await home.text()).includes('Tahminlerim'));}finally{globalThis.fetch=old;}
 });
 test('tampered cookie and password/session rotation revoke access', async () => {
   const session = await cookie();
@@ -181,3 +177,20 @@ test('invalid duplicate or out-of-range date rejected without upstream access',a
     assert.equal((await worker.fetch(get(path,session),env)).status,404);
 });
 
+
+test('dynamic archive discovers new HTML without worker edits and keeps only today yesterday',async()=>{
+ const old=globalThis.fetch,now=Date.now;try{
+ Date.now=()=>Date.parse('2026-10-18T08:00:00Z');const session=await cookie();let calls=[];
+ globalThis.fetch=async(url)=>{calls.push(url);return Response.json(url.includes('/2026-10-18?')?[{name:'yeni-deneme.html',type:'file'},{name:'secret.json',type:'file'},{name:'fake.html',type:'symlink'}]:['2026-10-16','2026-10-17','2026-10-18'].map(name=>({name,type:'dir'})))};
+ let r=await worker.fetch(get('/',session),env),html=await r.text();assert.ok(html.includes('2026-10-18'));assert.ok(html.includes('2026-10-17'));assert.ok(!html.includes('2026-10-16'));
+ r=await worker.fetch(get('/?date=2026-10-18',session),env);html=await r.text();assert.ok(html.includes('/raporlar/2026-10-18/yeni-deneme.html'));assert.ok(!html.includes('secret.json'));assert.ok(!html.includes('fake.html'));
+ }finally{globalThis.fetch=old;Date.now=now;}
+});
+test('dynamic HTML proxy is authenticated date scoped and supports inline report controls',async()=>{
+ const old=globalThis.fetch,now=Date.now;try{
+ Date.now=()=>Date.parse('2026-10-18T08:00:00Z');let calls=[];globalThis.fetch=async(url)=>{calls.push(url);return new Response('<body><script>function sort(){}</script>custom report</body>')};
+ assert.equal((await worker.fetch(get('/raporlar/2026-10-18/new.html'),env)).status,303);assert.equal(calls.length,0);
+ const session=await cookie();for(const p of ['/raporlar/2026-10-16/new.html','/raporlar/2026-10-18/secret.json','/raporlar/2026-10-18/a%2Fb.html','/raporlar/2026-10-18/a.html?ref=other'])assert.equal((await worker.fetch(get(p,session),env)).status,404);
+ assert.equal(calls.length,0);const r=await worker.fetch(get('/raporlar/2026-10-18/new.html',session),env);assert.equal(r.status,200);assert.ok((await r.text()).includes('<script>function sort()'));assert.ok(calls[0].includes('contents/raporlar/2026-10-18/new.html?ref=main'));
+ }finally{globalThis.fetch=old;Date.now=now;}
+});

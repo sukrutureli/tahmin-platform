@@ -1,0 +1,45 @@
+name: Prepare dynamic private report archive
+on:
+  push:
+    branches: [main]
+    paths: ['.github/report-archive-request.json']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: private-report-archive
+  cancel-in-progress: false
+jobs:
+  archive:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Test archive retention and authenticated dynamic panel
+        run: |
+          python3 -m unittest discover -s tests -p test_archive_reports.py -v
+          node --test cloudflare-panel/worker.test.mjs
+      - uses: actions/checkout@v4
+        with:
+          repository: sukrutureli/fathertahmin
+          ref: main
+          path: target-repo
+          fetch-depth: 0
+          persist-credentials: false
+          token: ${{ secrets.FATHERTAHMIN_WRITE_TOKEN || secrets.ADMIN_USER }}
+      - name: Archive verified dated HTML and prune old folders
+        env:
+          TOKEN: ${{ secrets.FATHERTAHMIN_WRITE_TOKEN || secrets.ADMIN_USER }}
+        run: |
+          python3 scripts/privacy/run_private.py <<'PRIVATE_COMMAND'
+          python3 scripts/archive_reports.py target-repo --history
+          cd target-repo
+          git config user.name 'Şükrü Türeli'
+          git config user.email '73479522+sukrutureli@users.noreply.github.com'
+          git add -A raporlar
+          if [ -d deney/reports ]; then git add -A deney/reports; fi
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m 'Organize private dated HTML with two-day retention'
+          git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $(printf 'x-access-token:%s' "$TOKEN" | base64 -w0)" push origin HEAD:main
+          PRIVATE_COMMAND

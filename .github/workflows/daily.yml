@@ -240,10 +240,12 @@ jobs:
         rm -rf target-repo/futbol/futbol target-repo/basketbol/basketbol
         cp -r publish/football-root/* target-repo/
         cp -r publish/basketball-root/* target-repo/
+        python3 scripts/archive_reports.py target-repo
         cd target-repo
         git config user.name "Şükrü Türeli"
         git config user.email "sukrutureli@gmail.com"
-        git add -A futbol basketbol
+        git add -A futbol basketbol raporlar
+        if [ -d deney/reports ]; then git add -A deney/reports; fi
         if git diff --cached --quiet; then exit 0; fi
         git commit -m "📦 [TAHMIN-PLATFORM] Daily update ($(date +'%Y-%m-%d %H:%M'))"
         git push origin main
