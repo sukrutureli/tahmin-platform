@@ -8,7 +8,7 @@ const STYLE = 'body{font:17px system-ui;background:#0d1523;color:#edf4ff;margin:
 function response(body, status = 200, type = 'text/html; charset=utf-8', extra = {}) {
   return new Response(body, {status, headers: {
     'Content-Type': type, 'Cache-Control': 'private, no-store',
-    'X-Robots-Tag': 'noindex, nofollow, noarchive', 'Referrer-Policy': 'no-referrer',
+    'X-Robots-Tag': 'noindex, nofollow, noarchive', 'Referrer-Policy': 'same-origin',
     'X-Content-Type-Options': 'nosniff', 'X-Frame-Options': 'DENY',
     'Content-Security-Policy': "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
     ...extra
@@ -18,7 +18,7 @@ function page(content) {
   return '<!doctype html><html lang="tr"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Tahminlerim</title><style>' + STYLE + '</style><main>' + content + '</main></html>';
 }
 function redirect(path, cookie) {
-  return response(null, 303, 'text/plain', {...(cookie ? {'Set-Cookie': cookie} : {}), Location: path});
+  return response(null, 303, 'text/plain; charset=utf-8', {...(cookie ? {'Set-Cookie': cookie} : {}), Location: path});
 }
 function b64(bytes) {
   return btoa(String.fromCharCode(...new Uint8Array(bytes))).replaceAll('+', '-').replaceAll('/', '_').replaceAll('=', '');
@@ -77,22 +77,22 @@ export default {
         return response(page('<h1>Kurulum eksik</h1><p>PANEL_PASSWORD en az 12, SESSION_SECRET en az 32 karakter olmalı. GITHUB_TOKEN Secret olarak eklenmeli.</p>'), 503);
       }
       const url = new URL(request.url), path = url.pathname;
-      if (url.protocol !== 'https:') return response('HTTPS gerekli.', 400, 'text/plain');
+      if (url.protocol !== 'https:') return response('HTTPS gerekli.', 400, 'text/plain; charset=utf-8');
       if (request.method === 'POST') {
-        if (request.headers.get('Origin') !== url.origin) return response('İstek reddedildi.', 403, 'text/plain');
+        if (request.headers.get('Origin') !== url.origin) return response('İstek reddedildi.', 403, 'text/plain; charset=utf-8');
         if (path === '/logout') return redirect('/login', COOKIE + '=; Path=/; Max-Age=0; Secure; HttpOnly; SameSite=Strict');
-        if (path !== '/login') return response('Bulunamadı.', 404, 'text/plain');
+        if (path !== '/login') return response('Bulunamadı.', 404, 'text/plain; charset=utf-8');
         if (!allowAttempt(request.headers.get('CF-Connecting-IP') || 'unknown'))
-          return response('Çok fazla deneme. Bir dakika sonra tekrar dene.', 429, 'text/plain', {'Retry-After': '60'});
-        if (!(request.headers.get('Content-Type') || '').startsWith('application/x-www-form-urlencoded')) return response('Geçersiz form.', 400, 'text/plain');
-        if (Number(request.headers.get('Content-Length')) > 4096) return response('Form çok büyük.', 413, 'text/plain');
+          return response('Çok fazla deneme. Bir dakika sonra tekrar dene.', 429, 'text/plain; charset=utf-8', {'Retry-After': '60'});
+        if (!(request.headers.get('Content-Type') || '').startsWith('application/x-www-form-urlencoded')) return response('Geçersiz form.', 400, 'text/plain; charset=utf-8');
+        if (Number(request.headers.get('Content-Length')) > 4096) return response('Form çok büyük.', 413, 'text/plain; charset=utf-8');
         const body = await request.text();
-        if (body.length > 4096) return response('Form çok büyük.', 413, 'text/plain');
+        if (body.length > 4096) return response('Form çok büyük.', 413, 'text/plain; charset=utf-8');
         const password = new URLSearchParams(body).get('password') || '';
         if (!await passwordMatches(password, env.PANEL_PASSWORD)) return redirect('/login?error=1');
         return redirect('/', COOKIE + '=' + await session(env) + '; Path=/; Max-Age=' + TTL + '; Secure; HttpOnly; SameSite=Strict');
       }
-      if (request.method !== 'GET' && request.method !== 'HEAD') return response('Yöntem desteklenmiyor.', 405, 'text/plain');
+      if (request.method !== 'GET' && request.method !== 'HEAD') return response('Yöntem desteklenmiyor.', 405, 'text/plain; charset=utf-8');
       const loggedIn = await authorized(request, env);
       if (path === '/login') {
         if (loggedIn) return redirect('/');
@@ -104,20 +104,20 @@ export default {
       if (!loggedIn) return redirect('/login');
       if (path === '/') return response(request.method === 'HEAD' ? null : page('<h1>Tahminlerim</h1><small>Raporu seç</small><a href="/futbol/">⚽ Futbol</a><a href="/basketbol/">🏀 Basketbol</a><form method="post" action="/logout"><button>Çıkış yap</button></form>'));
       const file = reportPath(path);
-      if (!file || url.search) return response('Bulunamadı.', 404, 'text/plain');
+      if (!file || url.search) return response('Bulunamadı.', 404, 'text/plain; charset=utf-8');
       const upstream = await fetch(REPO + file + '?ref=main', {
         headers: {Authorization: 'Bearer ' + env.GITHUB_TOKEN, Accept: 'application/vnd.github.raw+json',
           'User-Agent': 'private-tahmin-panel', 'X-GitHub-Api-Version': '2022-11-28', 'Cache-Control': 'no-cache'},
         redirect: 'manual', signal: AbortSignal.timeout(20000)
       });
       if (upstream.status !== 200) {
-        return response('Rapor okunamadı. GitHub token yetkisini ve dosyanın varlığını kontrol et.', 502, 'text/plain');
+        return response('Rapor okunamadı. GitHub token yetkisini ve dosyanın varlığını kontrol et.', 502, 'text/plain; charset=utf-8');
       }
       return response(request.method === 'HEAD' ? null : upstream.body, 200,
         file.endsWith('.json') ? 'application/json; charset=utf-8' : 'text/html; charset=utf-8');
     } catch {
       // Never echo upstream bodies, request passwords or tokens into responses or logs.
-      return response('Panel şu an yanıt veremiyor. Biraz sonra tekrar dene.', 503, 'text/plain');
+      return response('Panel şu an yanıt veremiyor. Biraz sonra tekrar dene.', 503, 'text/plain; charset=utf-8');
     }
   }
 };

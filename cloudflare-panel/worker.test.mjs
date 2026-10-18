@@ -107,3 +107,13 @@ test('same-IP rapid attempts are throttled', async () => {
   for (let i = 0; i < 11; i++) response = await worker.fetch(post('wrong', {'CF-Connecting-IP': 'rate-limit-test'}), env);
   assert.equal(response.status, 429);
 });
+
+test('form pages preserve same-origin POST Origin and error text declares UTF-8', async () => {
+  const login = await worker.fetch(get('/login'), env);
+  assert.equal(login.headers.get('Referrer-Policy'), 'same-origin');
+  const rejected = await worker.fetch(post('wrong', {Origin: 'null'}), env);
+  assert.equal(rejected.status, 403);
+  assert.equal(rejected.headers.get('Content-Type'), 'text/plain; charset=utf-8');
+  assert.equal(rejected.headers.get('Referrer-Policy'), 'same-origin');
+  assert.equal(await rejected.text(), 'İstek reddedildi.');
+});
