@@ -1,0 +1,65 @@
+name: Encrypt and retire old public outputs
+on:
+  push:
+    branches: ['maintenance/private-output-cleanup']
+    paths: ['.github/private-output-cleanup-request.json', 'scripts/privacy/cleanup_public_outputs.py', '.github/workflows/private-output-cleanup.yml', 'tests/privacy/test_cleanup.py']
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: write
+concurrency:
+  group: private-output-cleanup
+  cancel-in-progress: false
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    outputs:
+      execute: ${{ steps.plan.outputs.execute }}
+      matrix: ${{ steps.plan.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - run: python3 -m pip install cryptography==46.0.3
+      - run: python3 -m unittest discover -s tests/privacy -p test_cleanup.py -v
+      - name: Inventory old public outputs
+        id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/privacy/cleanup_public_outputs.py plan
+  backup-and-delete:
+    if: needs.plan.outputs.execute == 'true'
+    needs: plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - run: python3 -m pip install cryptography==46.0.3
+      - name: Encrypt source archives and verify exact roundtrip
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PRIVATE_ARTIFACT_KEY: ${{ secrets.PRIVATE_ARTIFACT_KEY }}
+          ITEMS: ${{ toJSON(matrix.items) }}
+        run: python3 scripts/privacy/cleanup_public_outputs.py backup --items "$ITEMS" --root backup
+      - name: Store encrypted backup bundle
+        id: remote
+        uses: actions/upload-artifact@v4
+        with:
+          name: private-backup-${{ github.run_id }}-${{ matrix.batch }}
+          path: backup/
+          compression-level: 0
+          if-no-files-found: error
+          retention-days: 90
+      - name: Verify uploaded ciphertext and delete only backed-up public sources
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BATCH_NUMBER: ${{ matrix.batch }}
+          BACKUP_ID: ${{ steps.remote.outputs.artifact-id }}
+        run: python3 scripts/privacy/cleanup_public_outputs.py delete --root backup --remote-id "$BACKUP_ID"

@@ -1,0 +1,6 @@
+{
+  "mode": "plan",
+  "request": 1,
+  "cutoff": "2026-10-18T00:43:00Z",
+  "purpose": "Encrypted backup, roundtrip verification, remote ciphertext verification, then source deletion"
+}
