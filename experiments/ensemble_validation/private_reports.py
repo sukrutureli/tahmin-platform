@@ -1,6 +1,8 @@
 """Publish bounded experiment reports to one private repo; never publish datasets."""
 import argparse,hashlib,json,os,re,urllib.request,urllib.error
 from pathlib import Path
+from datetime import datetime,timedelta
+from zoneinfo import ZoneInfo
 
 DEST='sukrutureli/fathertahmin'
 SOURCE='sukrutureli/tahmin-platform'
@@ -75,7 +77,9 @@ class Api:
         except urllib.error.HTTPError as e:
             raise RuntimeError('GitHub request failed with HTTP '+str(e.code)) from None
 
-def publish(api,files,manifest):
+def publish(api,files,manifest,today=None):
+    today=today or datetime.now(ZoneInfo("Europe/Istanbul")).date()
+    keep={today.isoformat(),(today-timedelta(days=1)).isoformat()}
     if not re.fullmatch(r'\d{4}-\d{2}-\d{2}',manifest['targetDate']):raise ValueError('Invalid private report date')
     # Check immediately before every mutation attempt, not only at setup time.
     for attempt in range(3):
@@ -88,12 +92,23 @@ def publish(api,files,manifest):
         paths={x['path']:x for x in entries['tree'] if x['path'].startswith(PREFIX)}
         files=dict(files);files['checkpoint-manifest.json']=encoded(manifest)
         dated={name:files[name] for name in ['futbol-yeni.html','basketbol-yeni.html','new-report-manifest.json','checkpoint-manifest.json','stability-evaluation.json','context-evaluation.json','daily-evaluation.json'] if name in files}
+        if manifest['targetDate'] not in keep:dated={n:v for n,v in dated.items() if not n.endswith('.html')}
         # Git blob hashes make identical reruns a no-op.
         def blob(text):
             b=text.encode();return hashlib.sha1(b'blob '+str(len(b)).encode()+b'\0'+b).hexdigest()
         updates=[{'path':PREFIX+n,'mode':'100644','type':'blob','content':s} for n,s in files.items() if paths.get(PREFIX+n,{}).get('sha')!=blob(s)]
         updates += [{'path':'deney/reports/'+manifest['targetDate']+'/'+n,'mode':'100644','type':'blob','content':v} for n,v in dated.items() if not any(x['path']=='deney/reports/'+manifest['targetDate']+'/'+n and x['sha']==blob(v) for x in entries['tree'])]
         updates += [{'path':p,'mode':'100644','type':'blob','sha':None} for p in paths if p[len(PREFIX):] in owned and p[len(PREFIX):] not in files]
+        if manifest['targetDate'] in keep:
+            for n,v in files.items():
+                if n.endswith('.html'):
+                    p='raporlar/'+manifest['targetDate']+'/'+n
+                    if not any(x['path']==p and x['sha']==blob(v) for x in entries['tree']):updates.append({'path':p,'mode':'100644','type':'blob','content':v})
+        for entry in entries['tree']:
+            p=entry['path'];m=re.fullmatch(r'raporlar/(\d{4}-\d{2}-\d{2})/.+',p)
+            old_html=re.fullmatch(r'deney/reports/(\d{4}-\d{2}-\d{2})/[^/]+\.html',p)
+            if entry.get('type')=='blob' and ((m and m[1]<min(keep)) or (old_html and old_html[1]<min(keep))):
+                updates.append({'path':p,'mode':'100644','type':'blob','sha':None})
         if not updates:return False
         newtree=api.call(DEST+'/git/trees','POST',{'base_tree':tree,'tree':updates})['sha']
         commit=api.call(DEST+'/git/commits','POST',{'message':'Update private experiment reports '+manifest['targetDate']+' (source '+str(manifest['sourceRunId'])+')','tree':newtree,'parents':[head]})['sha']

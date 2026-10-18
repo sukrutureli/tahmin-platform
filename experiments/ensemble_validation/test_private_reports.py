@@ -52,4 +52,22 @@ class PrivateReportTests(unittest.TestCase):
         self.assertTrue(any(x.get('sha','') is None for x in updates))
         self.assertEqual(sum(method=='PATCH' for _,method,_ in api.writes),1)
 
+class RetentionTests(unittest.TestCase):
+    def test_archive_removes_old_html_but_preserves_historical_evaluation(self):
+        from datetime import date
+        entries=[{'path':p,'type':'blob','sha':'old'} for p in ['raporlar/2026-10-16/x.html','raporlar/2026-10-17/x.html','deney/reports/2026-10-16/x.html','deney/reports/2026-10-16/stability-evaluation.json']]
+        api=FakeApi(entries=entries)
+        publish(api,{'daily-evaluation.json':'{}','futbol-yeni.html':'<body>new</body>'},{'targetDate':'2026-10-18','sourceRunId':'1'},date(2026,10,18))
+        updates=api.writes[0][2]['tree'];deleted={x['path'] for x in updates if x.get('sha','') is None}
+        self.assertEqual(deleted,{'raporlar/2026-10-16/x.html','deney/reports/2026-10-16/x.html'})
+        self.assertTrue(any(x['path']=='raporlar/2026-10-18/futbol-yeni.html' and 'content' in x for x in updates))
+    def test_old_recheck_does_not_recreate_expired_html_folder(self):
+        from datetime import date
+        api=FakeApi();publish(api,{'futbol-yeni.html':'old','daily-evaluation.json':'{}'},{'targetDate':'2026-10-16','sourceRunId':'1'},date(2026,10,18))
+        paths={x['path'] for x in api.writes[0][2]['tree']}
+        self.assertNotIn('raporlar/2026-10-16/futbol-yeni.html',paths)
+        self.assertNotIn('deney/reports/2026-10-16/futbol-yeni.html',paths)
+        self.assertIn('deney/reports/2026-10-16/daily-evaluation.json',paths)
+
 if __name__=='__main__':unittest.main()
+
