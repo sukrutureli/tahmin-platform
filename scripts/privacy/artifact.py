@@ -10,7 +10,7 @@ import zipfile
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 MAGIC = b'TAHMIN-PRIVATE-1\n'
-LIMIT = 1024 * 1024 * 1024
+LIMIT = 2 * 1024 * 1024 * 1024
 
 
 def key():
@@ -29,11 +29,15 @@ def pack(source, target):
     if not root.is_dir():
         raise ValueError('Artifact source directory is missing')
     buffer = io.BytesIO()
+    expanded = 0
     with zipfile.ZipFile(buffer, 'w', zipfile.ZIP_DEFLATED) as archive:
         for path in sorted(root.rglob('*')):
             if path.is_symlink():
                 raise ValueError('Symlinks are not allowed in private artifacts')
             if path.is_file():
+                expanded += path.stat().st_size
+                if expanded > LIMIT:
+                    raise ValueError('Expanded artifact too large')
                 archive.write(path, path.relative_to(root).as_posix())
     if len(buffer.getvalue()) > LIMIT:
         raise ValueError('Artifact too large')

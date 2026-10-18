@@ -35,6 +35,11 @@ class PrivacyTests(unittest.TestCase):
         artifact.unpack(packed,self.root/'restored')
         for path in source.rglob('*'):
             if path.is_file():self.assertEqual(path.read_bytes(),(self.root/'restored'/path.relative_to(source)).read_bytes())
+    def test_expanded_size_is_limited_before_encryption(self):
+        source=self.sample()
+        with patch.object(artifact,'LIMIT',10):
+            with self.assertRaises(ValueError):artifact.pack(source,self.root/'out')
+        self.assertFalse((self.root/'out').exists())
     def test_missing_key_fails_without_output(self):
         os.environ['PRIVATE_ARTIFACT_KEY']=''
         with self.assertRaises(ValueError):artifact.pack(self.sample(),self.root/'out')
