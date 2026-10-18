@@ -2,7 +2,6 @@
 const encoder = new TextEncoder();
 const COOKIE = '__Host-tahmin_session';
 const TTL = 7 * 24 * 60 * 60;
-const REPO = 'https://api.github.com/repos/sukrutureli/fathertahmin/contents/';
 const attempts = new Map(); // Best-effort per-isolate throttle; not a global rate limiter.
 const STYLE = 'body{font:17px system-ui;background:#0d1523;color:#edf4ff;margin:0;padding:24px}main{max-width:600px;margin:6vh auto}a,button{display:block;box-sizing:border-box;background:#264d85;color:white;text-decoration:none;padding:20px;margin:16px 0;border:0;border-radius:14px;font:inherit;width:100%;cursor:pointer}input{box-sizing:border-box;width:100%;padding:16px;border-radius:12px;border:1px solid #667b99;font:inherit;background:#18283f;color:white}small{color:#b9c9de}';
 function response(body, status = 200, type = 'text/html; charset=utf-8', extra = {}) {
@@ -68,6 +67,26 @@ function reportPath(path) {
   // Only these report/data paths are readable; never an arbitrary URL or repository.
   return /^\/(futbol|basketbol)\/(?:[A-Za-z0-9_-]+\.html|data\/[A-Za-z0-9_-]+\.(?:json|html))$/.test(path) ? path.slice(1) : null;
 }
+const dateFormatter = new Intl.DateTimeFormat('en', {timeZone: 'Europe/Istanbul', year: 'numeric', month: '2-digit', day: '2-digit'});
+function istanbulDay(offset = 0) {
+  const date = new Date(Date.now() + offset * 86400000);
+  const parts = Object.fromEntries(dateFormatter.formatToParts(date).map(part => [part.type, part.value]));
+  return parts.year + '-' + parts.month + '-' + parts.day;
+}
+function navigation(sport, date) {
+  return '<nav style="padding:12px;display:flex;flex-wrap:wrap;gap:16px;background:#18283f;color:white;font:16px system-ui">' +
+    '<a style="color:white" href="/">Ana sayfa</a><strong>' + date + '</strong>' +
+    '<a style="color:white" href="/' + sport + '/?date=' + istanbulDay() + '">Bugün</a>' +
+    '<a style="color:white" href="/' + sport + '/?date=' + istanbulDay(-1) + '">Dün</a></nav>';
+}
+async function github(path, env, raw = false) {
+  return fetch('https://api.github.com/repos/sukrutureli/fathertahmin/' + path, {
+    headers: {Authorization: 'Bearer ' + env.GITHUB_TOKEN,
+      Accept: raw ? 'application/vnd.github.raw+json' : 'application/vnd.github+json',
+      'User-Agent': 'private-tahmin-panel', 'X-GitHub-Api-Version': '2022-11-28', 'Cache-Control': 'no-cache'},
+    redirect: 'manual', signal: AbortSignal.timeout(20000)
+  });
+}
 export default {
   async fetch(request, env) {
     try {
@@ -102,19 +121,36 @@ export default {
       }
       // Every report and JSON request passes authentication before any upstream call.
       if (!loggedIn) return redirect('/login');
-      if (path === '/') return response(request.method === 'HEAD' ? null : page('<h1>Tahminlerim</h1><small>Raporu seç</small><a href="/futbol/">⚽ Futbol</a><a href="/basketbol/">🏀 Basketbol</a><form method="post" action="/logout"><button>Çıkış yap</button></form>'));
       const file = reportPath(path);
-      if (!file || url.search) return response('Bulunamadı.', 404, 'text/plain; charset=utf-8');
-      const upstream = await fetch(REPO + file + '?ref=main', {
-        headers: {Authorization: 'Bearer ' + env.GITHUB_TOKEN, Accept: 'application/vnd.github.raw+json',
-          'User-Agent': 'private-tahmin-panel', 'X-GitHub-Api-Version': '2022-11-28', 'Cache-Control': 'no-cache'},
-        redirect: 'manual', signal: AbortSignal.timeout(20000)
-      });
-      if (upstream.status !== 200) {
+      if (path !== '/' && !file) return response('Bulunamadı.', 404, 'text/plain; charset=utf-8');
+      if ([...url.searchParams.keys()].some(key => key !== 'date') || url.searchParams.getAll('date').length > 1)
+        return response('Geçersiz tarih isteği.', 404, 'text/plain; charset=utf-8');
+      const fileDate = file?.match(/-(\d{4}-\d{2}-\d{2})\.(json|html)$/)?.[1];
+      const date = url.searchParams.get('date') || fileDate || istanbulDay();
+      if (![istanbulDay(), istanbulDay(-1)].includes(date) || (fileDate && fileDate !== date))
+        return response('Bu panel bugün ve dünün raporlarını gösterir.', 404, 'text/plain; charset=utf-8');
+      if (path === '/') return response(request.method === 'HEAD' ? null : page('<h1>Tahminlerim</h1><small>' + date + '</small>' +
+        '<a href="/futbol/?date=' + date + '">⚽ Futbol</a><a href="/basketbol/?date=' + date + '">🏀 Basketbol</a>' +
+        '<a href="/?date=' + istanbulDay() + '">Bugün</a><a href="/?date=' + istanbulDay(-1) + '">Dün</a>' +
+        '<form method="post" action="/logout"><button>Çıkış yap</button></form>'));
+      const sport = file.split('/')[0];
+      // Choose the latest update of this day's predictions, not a different day's root HTML.
+      const history = await github('commits?sha=main&path=' + encodeURIComponent(sport + '/data/PredictionData-' + date + '.json') + '&per_page=1', env);
+      if (history.status !== 200) return response('Rapor geçmişi okunamadı. GitHub token yetkisini kontrol et.', 502, 'text/plain; charset=utf-8');
+      const commits = await history.json();
+      if (!Array.isArray(commits) || !commits.length)
+        return response(page('<h1>' + date + '</h1><p>Bu gün için rapor henüz hazır değil.</p><a href="/">Ana sayfa</a>'), 404);
+      const ref = commits[0].sha;
+      if (!/^[0-9a-f]{40}$/.test(ref || '')) return response('Rapor kaydı doğrulanamadı.', 502, 'text/plain; charset=utf-8');
+      const upstream = await github('contents/' + file + '?ref=' + ref, env, true);
+      if (upstream.status !== 200)
         return response('Rapor okunamadı. GitHub token yetkisini ve dosyanın varlığını kontrol et.', 502, 'text/plain; charset=utf-8');
-      }
-      return response(request.method === 'HEAD' ? null : upstream.body, 200,
-        file.endsWith('.json') ? 'application/json; charset=utf-8' : 'text/html; charset=utf-8');
+      if (request.method === 'HEAD') return response(null, 200, file.endsWith('.json') ? 'application/json; charset=utf-8' : 'text/html; charset=utf-8');
+      if (file.endsWith('.json')) return response(upstream.body, 200, 'application/json; charset=utf-8');
+      const html = await upstream.text();
+      const bar = navigation(sport, date);
+      return response(/<body[^>]*>/i.test(html) ? html.replace(/<body[^>]*>/i, match => match + bar) : bar + html);
+
     } catch {
       // Never echo upstream bodies, request passwords or tokens into responses or logs.
       return response('Panel şu an yanıt veremiyor. Biraz sonra tekrar dene.', 503, 'text/plain; charset=utf-8');

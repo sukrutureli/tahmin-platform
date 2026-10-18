@@ -26,8 +26,12 @@ Bu dağıtım private veriyi statik asset olarak barındırmadığından Free li
 
 Test: `node --test cloudflare-panel/worker.test.mjs`
 
-14 test; sentetik env/token kullanır. Cloudflare hesabındaki gerçek secret'ları, private repo erişimini veya mobil tarayıcı davranışını bu testler doğrulamaz.
+17 test; sentetik env/token kullanır. Cloudflare hesabındaki gerçek secret'ları, private repo erişimini veya mobil tarayıcı davranışını bu testler doğrulamaz.
 
 ## Mobil form düzeltmesi
 
 Login yanıtlarında Referrer-Policy `same-origin` olmalıdır. `no-referrer` normal HTML form POST isteğinin Origin bilgisini null yapabilir ve aynı-kaynak kontrolü haklı olarak isteği reddeder. Null veya yabancı Origin kabul edilmez; tarayıcıya doğru policy verilir. Plain-text yanıtlar UTF-8 belirtir. Deploy sonrası eski giriş sayfasını yenileyin.
+
+## Gün seçimi
+
+Varsayılan gün Europe/Istanbul tarihidir. Panel bugün/dün arasında geçiş verir. Her spor için seçilen günün PredictionData dosyasını en son değiştiren main commit seçilir ve HTML o commit üzerinden okunur. Böylece gecenin Control çalışmasının dünün sonuçlarını ana HTML üzerine yazması bugünün raporunu gizlemez. Bugünün kaydı yoksa dünün raporu bugünmüş gibi sunulmaz. Bugün/dün sınırı mevcut cleanup saklama süresiyle uyumludur.

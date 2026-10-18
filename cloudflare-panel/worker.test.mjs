@@ -67,8 +67,9 @@ test('cross-origin login and logout rejected', async () => {
 test('authenticated fixed report proxy sends token upstream only', async () => {
   const session = await cookie(), old = globalThis.fetch; let called = false;
   globalThis.fetch = async (url, options) => {
+    if (url.includes('/commits?')) return Response.json([{sha:'a'.repeat(40)}]);
     called = true;
-    assert.equal(url, 'https://api.github.com/repos/sukrutureli/fathertahmin/contents/futbol/futbol.html?ref=main');
+    assert.equal(url, 'https://api.github.com/repos/sukrutureli/fathertahmin/contents/futbol/futbol.html?ref='+'a'.repeat(40));
     assert.equal(options.headers.Authorization, 'Bearer ' + env.GITHUB_TOKEN);
     assert.equal(options.redirect, 'manual');
     return new Response('<html>Synthetic report</html>');
@@ -76,7 +77,8 @@ test('authenticated fixed report proxy sends token upstream only', async () => {
   try {
     const response = await worker.fetch(get('/futbol/', session), env);
     assert.equal(response.status, 200);assert.ok(called);
-    assert.equal(await response.text(), '<html>Synthetic report</html>');
+    const html=await response.text();
+    assert.ok(html.includes('Synthetic report'));assert.ok(html.includes('Bugün'));assert.ok(html.includes('Dün'));
     assert.ok(!JSON.stringify([...response.headers]).includes(env.GITHUB_TOKEN));
     assert.equal(response.headers.get('Cache-Control'), 'private, no-store');
   } finally { globalThis.fetch = old; }
@@ -116,4 +118,37 @@ test('form pages preserve same-origin POST Origin and error text declares UTF-8'
   assert.equal(rejected.headers.get('Content-Type'), 'text/plain; charset=utf-8');
   assert.equal(rejected.headers.get('Referrer-Policy'), 'same-origin');
   assert.equal(await rejected.text(), 'İstek reddedildi.');
+});
+
+test('Istanbul midnight selects today snapshot even when latest root report is yesterday', async () => {
+  const oldNow=Date.now, oldFetch=globalThis.fetch;let calls=[];
+  try {
+    Date.now=()=>Date.parse('2026-10-17T21:05:00Z');
+    const session=await cookie();
+    globalThis.fetch=async(url)=>{
+      calls.push(url);
+      if(url.includes('/commits?'))return Response.json([{sha:'b'.repeat(40)}]);
+      return new Response('<body><div class="day-title">2026-10-18</div></body>');
+    };
+    let result=await worker.fetch(get('/basketbol/',session),env);
+    assert.equal(result.status,200);assert.ok((await result.text()).includes('2026-10-18'));
+    assert.ok(decodeURIComponent(calls[0]).includes('PredictionData-2026-10-18.json'));
+    assert.ok(calls[1].endsWith('ref='+'b'.repeat(40)));
+    calls=[];
+    result=await worker.fetch(get('/basketbol/?date=2026-10-17',session),env);
+    assert.equal(result.status,200);assert.ok(decodeURIComponent(calls[0]).includes('PredictionData-2026-10-17.json'));
+  }finally{Date.now=oldNow;globalThis.fetch=oldFetch;}
+});
+test('missing current-day input never silently falls back to yesterday', async()=>{
+  const oldFetch=globalThis.fetch,session=await cookie();
+  try{
+    globalThis.fetch=async()=>Response.json([]);
+    const result=await worker.fetch(get('/futbol/',session),env);
+    assert.equal(result.status,404);assert.ok((await result.text()).includes('henüz hazır değil'));
+  }finally{globalThis.fetch=oldFetch;}
+});
+test('invalid duplicate or out-of-range date rejected without upstream access',async()=>{
+  const session=await cookie();
+  for(const path of ['/futbol/?date=invalid','/futbol/?date=2000-01-01','/futbol/?date=2026-10-18&date=2026-10-17'])
+    assert.equal((await worker.fetch(get(path,session),env)).status,404);
 });
