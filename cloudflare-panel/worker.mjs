@@ -131,7 +131,6 @@ export default {
         return response('Bu panel bugün ve dünün raporlarını gösterir.', 404, 'text/plain; charset=utf-8');
       if (path === '/') return response(request.method === 'HEAD' ? null : page('<h1>Tahminlerim</h1><small>' + date + '</small>' +
         '<a href="/futbol/?date=' + date + '">⚽ Futbol</a><a href="/basketbol/?date=' + date + '">🏀 Basketbol</a>' +
-        '<a href="/?date=' + istanbulDay() + '">Bugün</a><a href="/?date=' + istanbulDay(-1) + '">Dün</a>' +
         '<form method="post" action="/logout"><button>Çıkış yap</button></form>'));
       const sport = file.split('/')[0];
       // Choose the latest update of this day's predictions, not a different day's root HTML.
