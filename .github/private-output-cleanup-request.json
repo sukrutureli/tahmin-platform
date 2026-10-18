@@ -1,6 +1,6 @@
 {
-  "mode": "execute",
-  "request": 2,
+  "mode": "plan",
+  "request": 3,
   "cutoff": "2026-10-18T00:43:00Z",
-  "purpose": "Encrypted backup, roundtrip verification, remote ciphertext verification, then source deletion"
+  "purpose": "Post-cleanup audit: verify no eligible plaintext artifacts or old logs remain"
 }
