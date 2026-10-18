@@ -7,6 +7,17 @@ permissions:
   contents: read
   actions: read
 jobs:
+  configured-access:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Probe configured key and scoped repository access
+        env:
+          FATHERTAHMIN_WRITE_TOKEN: ${{ secrets.FATHERTAHMIN_WRITE_TOKEN }}
+          PRIVATE_ARTIFACT_KEY: ${{ secrets.PRIVATE_ARTIFACT_KEY }}
+        run: python3 scripts/privacy/probe_access.py
   test:
     runs-on: ubuntu-latest
     steps:
