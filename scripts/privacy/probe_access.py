@@ -8,15 +8,21 @@ import tempfile
 from urllib.request import Request, urlopen
 
 
+stage = "key validation"
+
 def main():
+    global stage
     key = base64.b64decode(os.environ.get('PRIVATE_ARTIFACT_KEY', ''), validate=True)
     if len(key) != 32:
         raise ValueError('Configure a valid PRIVATE_ARTIFACT_KEY')
+    print('Artifact key format accepted.')
+    stage = 'write token presence'
     token = os.environ.get('FATHERTAHMIN_WRITE_TOKEN', '')
     if not token:
         raise ValueError('Configure FATHERTAHMIN_WRITE_TOKEN')
     headers = {'Authorization': 'Bearer ' + token, 'Accept': 'application/vnd.github+json',
                'User-Agent': 'tahmin-private-readiness'}
+    stage = 'GitHub Contents API read'
     for path in ('futbol/futbol.html', 'basketbol/basketbol.html'):
         request = Request('https://api.github.com/repos/sukrutureli/fathertahmin/contents/' + path + '?ref=main', headers=headers)
         with urlopen(request, timeout=30) as response:
@@ -24,6 +30,8 @@ def main():
                 raise ValueError('Source report not readable')
             # Consume metadata locally; never print response body or data.
             response.read()
+    print('Both source reports readable.')
+    stage = 'authenticated Git clone'
     with tempfile.TemporaryDirectory() as folder:
         env = dict(os.environ)
         env.update({'GIT_TERMINAL_PROMPT': '0', 'GIT_CONFIG_COUNT': '1',
@@ -33,7 +41,8 @@ def main():
             ['git', 'clone', '--quiet', '--filter=blob:none', '--no-checkout', '--depth=1',
              'https://github.com/sukrutureli/fathertahmin.git', folder + '/repo'],
             ['git', '-C', folder + '/repo', 'push', '--dry-run', '--quiet', 'origin', 'HEAD:refs/heads/main']]
-        for command in commands:
+        for index, command in enumerate(commands):
+            stage = 'authenticated Git clone' if index == 0 else 'Git push dry-run'
             result = subprocess.run(command, env=env, capture_output=True, timeout=120)
             if result.returncode:
                 raise ValueError('Repository access/push handshake failed')
@@ -44,4 +53,4 @@ if __name__ == '__main__':
     try:
         main()
     except Exception:
-        raise SystemExit('Private readiness probe failed. Check configured token/key; no secret values are printed.') from None
+        raise SystemExit('Private readiness probe failed at: ' + stage + '. No secret values are printed.') from None
