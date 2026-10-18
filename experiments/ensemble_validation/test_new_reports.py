@@ -25,3 +25,27 @@ class NewReportTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError,'Missing locked'):reports(root)
 
 if __name__=='__main__':unittest.main()
+
+class FilterTests(unittest.TestCase):
+    def test_odds_finished_and_clock_filters_work_together(self):
+        import subprocess
+        from new_reports import FILTER_SCRIPT
+        script=FILTER_SCRIPT.replace('<script>','').replace('</script>','')
+        harness="""
+import vm from 'node:vm';import assert from 'node:assert/strict';
+const input={value:'',addEventListener(t,f){this.run=f}},finished={checked:false,addEventListener(t,f){this.run=f}},started={checked:false,addEventListener(t,f){this.run=f}},clear={addEventListener(t,f){this.run=f}},count={};
+const rows=[
+{dataset:{odds:'1.8',finished:'1',kickoff:'2026-10-18T13:00:00+03:00'}},
+{dataset:{odds:'1.8',finished:'0',kickoff:'2026-10-18T14:00:00+03:00'}},
+{dataset:{odds:'1.4',finished:'0',kickoff:'2026-10-18T15:00:00+03:00'}},
+{dataset:{odds:'2.0',finished:'0',kickoff:'2026-10-18T15:00:00+03:00'}},
+{dataset:{odds:'1.9',finished:'0',kickoff:''}}];let clock=Date.parse('2026-10-18T11:00:00Z'),timer;
+const ctx={Date:class extends Date{static now(){return clock}},Number,document:{getElementById:id=>({'min-odds':input,'hide-finished':finished,'hide-started':started,'clear-odds':clear,'filter-count':count}[id]),querySelectorAll:()=>rows},window:{addEventListener(){}},setInterval(f){timer=f}};
+vm.runInNewContext(SCRIPT,ctx);
+finished.checked=true;finished.run();assert.deepEqual(rows.map(r=>r.hidden),[true,false,false,false,false]);
+started.checked=true;started.run();assert.deepEqual(rows.map(r=>r.hidden),[true,true,false,false,false]);
+input.value='1.50';input.run();assert.deepEqual(rows.map(r=>r.hidden),[true,true,true,false,false]);assert.equal(count.textContent,'2 / 5 maç');
+clock=Date.parse('2026-10-18T12:00:00Z');timer();assert.deepEqual(rows.map(r=>r.hidden),[true,true,true,true,false]);
+clear.run();assert.ok(rows.every(r=>!r.hidden));assert.equal(finished.checked,false);assert.equal(started.checked,false);
+""".replace('SCRIPT',json.dumps(script))
+        subprocess.run(['node','--input-type=module'],input=harness,text=True,check=True,capture_output=True)
