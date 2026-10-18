@@ -1,4 +1,5 @@
 name: Ensemble Market Validation (Artifacts Only)
+run-name: Ensemble ${{ inputs.mode || 'auto' }} ${{ inputs.target_date || 'settings' }} [${{ inputs.production_run_id || 'manual' }}]
 'on':
   push:
     branches:
@@ -21,6 +22,12 @@ name: Ensemble Market Validation (Artifacts Only)
         type: string
       source_run_id:
         description: Optional successful source run; control defaults to latest artifact for the date
+        type: string
+      published_ref:
+        description: Verified private input commit SHA
+        type: string
+      production_run_id:
+        description: Idempotent production run key
         type: string
 permissions:
   contents: read
@@ -56,6 +63,7 @@ jobs:
         INPUT_MODE: ${{ inputs.mode }}
         INPUT_TARGET_DATE: ${{ inputs.target_date }}
         INPUT_SOURCE_RUN: ${{ inputs.source_run_id }}
+        INPUT_PUBLISHED_REF: ${{ inputs.published_ref }}
       run: |
         python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<'PRIVATE_COMMAND'
         python experiments/ensemble_validation/control_runtime.py config --settings experiments/ensemble_validation/experiment-settings.json
@@ -388,10 +396,24 @@ jobs:
         google-chrome --headless=new --no-sandbox --disable-gpu --screenshot="$PWD/pipeline-output/desktop.png" --window-size=1440,1000 "file://$PWD/pipeline-output/models.html" >/tmp/render.log 2>&1
         google-chrome --headless=new --no-sandbox --disable-gpu --screenshot="$PWD/pipeline-output/mobile.png" --window-size=390,844 "file://$PWD/pipeline-output/index.html" >>/tmp/render.log 2>&1
         PRIVATE_COMMAND
+    - name: Record production trigger without changing frozen forecast files
+      env:
+        PRODUCTION_KEY: ${{ inputs.production_run_id }}
+      run: |
+        python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<'PRIVATE_COMMAND'
+        python3 - <<'PY'
+        import json,os,re
+        from pathlib import Path
+        key=os.environ.get('PRODUCTION_KEY','')
+        if key and not re.fullmatch(r'\d+(?:-previous)?',key):raise ValueError('Invalid production request key')
+        Path('pipeline-output/production-trigger.json').write_text(json.dumps({'requestKey':key or None,'mode':'${{ steps.cfg.outputs.run_mode }}','targetDate':'${{ steps.cfg.outputs.target_date }}'}))
+        PY
+        PRIVATE_COMMAND
     - name: Show initial odds and MBS in prediction HTML
       run: |
         python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<'PRIVATE_COMMAND'
         python experiments/ensemble_validation/display_odds.py --output pipeline-output
+        python experiments/ensemble_validation/new_reports.py --output pipeline-output
         PRIVATE_COMMAND
     - uses: ./.github/actions/private-upload
       with:
@@ -428,3 +450,4 @@ jobs:
         retention-days: '7'
 env:
   GITHUB_TOKEN: ${{ secrets.FATHERTAHMIN_READ_TOKEN || secrets.FATHERTAHMIN_WRITE_TOKEN || secrets.ADMIN_USER }}
+

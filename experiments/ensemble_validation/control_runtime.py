@@ -23,9 +23,11 @@ def configure(c,inputs,source=None):
     mode=inputs.get('mode') or ('control' if c.get('control_target_date')==target else 'daily')
     if mode not in ('daily','control'):raise ValueError('Invalid experiment mode')
     c['run_mode']=mode
+    if inputs.get('published_ref'):c['published_ref']=inputs['published_ref']
     if mode=='control':
         if not source:raise ValueError('No successful frozen artifact for '+target+'; run daily predictions first')
         c['previous_run_id'],c['previous_artifact']=source
+    if mode=='daily' and source:c['previous_run_id'],c['previous_artifact']=source
     assert re.fullmatch('[0-9a-f]{40}',c['published_ref']) and str(c['previous_run_id']).isdigit()
     assert re.fullmatch('ensemble-market-validation-[0-9-]+',c['previous_artifact'])
     return c
@@ -51,7 +53,7 @@ def verify(output):
 def main():
     p=argparse.ArgumentParser();p.add_argument('mode',choices=['config','begin','verify']);p.add_argument('--settings',type=Path);p.add_argument('--previous',type=Path);p.add_argument('--output',type=Path);p.add_argument('--target-date');p.add_argument('--source-run');a=p.parse_args()
     if a.mode=='config':
-        c=json.loads(a.settings.read_text());inputs={'mode':os.environ.get('INPUT_MODE',''),'target_date':os.environ.get('INPUT_TARGET_DATE','')};target=inputs['target_date'] or c['target_date'];mode=inputs['mode'] or ('control' if c.get('control_target_date')==target else 'daily');source=None
+        c=json.loads(a.settings.read_text());inputs={'mode':os.environ.get('INPUT_MODE',''),'target_date':os.environ.get('INPUT_TARGET_DATE',''),'published_ref':os.environ.get('INPUT_PUBLISHED_REF','')};target=inputs['target_date'] or c['target_date'];mode=inputs['mode'] or ('control' if c.get('control_target_date')==target else 'daily');source=None
         if mode=='control':
             run=os.environ.get('INPUT_SOURCE_RUN','')
             if run:
@@ -62,9 +64,18 @@ def main():
                     runs=api(f'actions/runs?branch=experiment%2Fensemble-market-validation&status=success&per_page=30&page={page}')['workflow_runs']
                     source=select_source(runs,target,lambda i:api(f'actions/runs/{i}/artifacts')['artifacts'])
                     if source:break
+        if mode=='daily' and os.environ.get('INPUT_SOURCE_RUN'):
+            run=os.environ['INPUT_SOURCE_RUN']
+            if not run.isdigit():raise ValueError('Invalid daily source run')
+            source_run=api('actions/runs/'+run)
+            available=api(f'actions/runs/{run}/artifacts')['artifacts']
+            candidates=sorted([x['name'] for x in available if x['name'].startswith('ensemble-market-validation-') and re.fullmatch(r'ensemble-market-validation-\d{4}-\d{2}-\d{2}',x['name']) and x['name'][-10:]<target and not x.get('expired')],reverse=True)
+            if source_run.get('head_branch')!=BRANCH or source_run.get('conclusion')!='success' or not source_run.get('name','').startswith('Ensemble Market Validation') or not candidates:raise ValueError('No verified earlier-day daily source')
+            source=(run,candidates[0])
         resolved=configure(c,inputs,source)
         with open(os.environ['GITHUB_OUTPUT'],'a') as f:
             for k in ['target_date','published_ref','previous_run_id','previous_artifact','run_mode']:f.write(f'{k}={resolved[k]}\n')
     elif a.mode=='begin':begin(a.previous,a.output,a.target_date,a.source_run)
     else:verify(a.output)
 if __name__=='__main__':main()
+

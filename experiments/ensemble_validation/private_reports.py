@@ -7,13 +7,13 @@ SOURCE='sukrutureli/tahmin-platform'
 PREFIX='deney/current/'
 LIMIT=512*1024
 TOTAL=3*1024*1024
-JSON_FILES=['display-metadata.json','daily-evaluation.json','daily-journal.json','conditional-evaluation.json',
+JSON_FILES=['new-report-manifest.json','production-trigger.json','display-metadata.json','daily-evaluation.json','daily-journal.json','conditional-evaluation.json',
  'learned-daily-evaluation.json','mined-daily-evaluation.json','selection-evaluation.json',
  'selection-journal.json','match-choice-evaluation.json','match-choice-journal.json',
  'context-evaluation.json','stability-evaluation.json','stability-journal.json',
  'score-distribution-evaluation.json','input-manifest.json','reference-manifest.json',
  'error-diagnostics.json']
-HTML_FILES=['day-by-day.html','errors.html','context-comparison.html','stability.html',
+HTML_FILES=['futbol-yeni.html','basketbol-yeni.html','day-by-day.html','errors.html','context-comparison.html','stability.html',
  'models.html','selection.html','outcome-learning.html','best-matches.html']
 SNAPSHOTS=['before-results-predictions.json','conditional-before-results.json',
  'learned-before-results.json','mined-before-results.json','selection-before-results.json',
@@ -76,6 +76,7 @@ class Api:
             raise RuntimeError('GitHub request failed with HTTP '+str(e.code)) from None
 
 def publish(api,files,manifest):
+    if not re.fullmatch(r'\d{4}-\d{2}-\d{2}',manifest['targetDate']):raise ValueError('Invalid private report date')
     # Check immediately before every mutation attempt, not only at setup time.
     for attempt in range(3):
         if api.call(DEST).get('private') is not True:raise ValueError('Destination must be private')
@@ -86,10 +87,12 @@ def publish(api,files,manifest):
         owned=set(JSON_FILES+HTML_FILES+['snapshot-index.json','history-coverage.json','checkpoint-manifest.json'])
         paths={x['path']:x for x in entries['tree'] if x['path'].startswith(PREFIX)}
         files=dict(files);files['checkpoint-manifest.json']=encoded(manifest)
+        dated={name:files[name] for name in ['futbol-yeni.html','basketbol-yeni.html','new-report-manifest.json'] if name in files}
         # Git blob hashes make identical reruns a no-op.
         def blob(text):
             b=text.encode();return hashlib.sha1(b'blob '+str(len(b)).encode()+b'\0'+b).hexdigest()
         updates=[{'path':PREFIX+n,'mode':'100644','type':'blob','content':s} for n,s in files.items() if paths.get(PREFIX+n,{}).get('sha')!=blob(s)]
+        updates += [{'path':'deney/reports/'+manifest['targetDate']+'/'+n,'mode':'100644','type':'blob','content':v} for n,v in dated.items() if not any(x['path']=='deney/reports/'+manifest['targetDate']+'/'+n and x['sha']==blob(v) for x in entries['tree'])]
         updates += [{'path':p,'mode':'100644','type':'blob','sha':None} for p in paths if p[len(PREFIX):] in owned and p[len(PREFIX):] not in files]
         if not updates:return False
         newtree=api.call(DEST+'/git/trees','POST',{'base_tree':tree,'tree':updates})['sha']

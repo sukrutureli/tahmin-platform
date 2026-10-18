@@ -21,3 +21,10 @@ class ControlRuntimeTests(unittest.TestCase):
             begin(p,o,'2026-10-13','123');(o/'any-evaluation.json').write_text('{}');verify(o)
             (o/'learned-before-results.json').write_text('{}')
             with self.assertRaises(ValueError):verify(o)
+
+class DispatchInputTests(unittest.TestCase):
+    def test_daily_uses_verified_parent_and_published_ref_without_mutating_settings(self):
+        c={'target_date':'2026-10-18','published_ref':'a'*40,'previous_run_id':'1','previous_artifact':'ensemble-market-validation-2026-10-17'}
+        r=configure(c,{'mode':'daily','target_date':'2026-10-19','published_ref':'b'*40},('2','ensemble-market-validation-2026-10-18'))
+        self.assertEqual(r['published_ref'],'b'*40);self.assertEqual(r['previous_run_id'],'2');self.assertEqual(c['published_ref'],'a'*40)
+

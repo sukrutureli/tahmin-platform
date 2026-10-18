@@ -44,9 +44,13 @@ jobs:
           REPORT_SOURCE_TOKEN: ${{ github.token }}
         run: |
           python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<'PRIVATE_COMMAND'
+          python -m pip install numpy==2.3.5
           python -m unittest discover -s experiments/ensemble_validation -p test_private_reports.py -v
+          python -m unittest discover -s experiments/ensemble_validation -p test_new_reports.py -v
+          python -m unittest discover -s experiments/ensemble_validation -p test_control_runtime.py -v
           python -m unittest discover -s experiments/ensemble_validation -p test_display_odds.py -v
           python experiments/ensemble_validation/display_odds.py --output restored
+          python experiments/ensemble_validation/new_reports.py --output restored
           python experiments/ensemble_validation/private_reports.py --root restored --source-run '${{ steps.cfg.outputs.run_id }}' --target-date '${{ steps.cfg.outputs.target_date }}'
           PRIVATE_COMMAND
       - name: Prepare private diagnostics
@@ -60,3 +64,4 @@ jobs:
           path: ${{ runner.temp }}/tahmin-private-logs
           key: ${{ secrets.PRIVATE_ARTIFACT_KEY }}
           retention-days: '7'
+
