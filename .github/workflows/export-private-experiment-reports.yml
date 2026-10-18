@@ -45,6 +45,8 @@ jobs:
         run: |
           python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<'PRIVATE_COMMAND'
           python -m unittest discover -s experiments/ensemble_validation -p test_private_reports.py -v
+          python -m unittest discover -s experiments/ensemble_validation -p test_display_odds.py -v
+          python experiments/ensemble_validation/display_odds.py --output restored
           python experiments/ensemble_validation/private_reports.py --root restored --source-run '${{ steps.cfg.outputs.run_id }}' --target-date '${{ steps.cfg.outputs.target_date }}'
           PRIVATE_COMMAND
       - name: Prepare private diagnostics

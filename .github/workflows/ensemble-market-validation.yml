@@ -388,6 +388,11 @@ jobs:
         google-chrome --headless=new --no-sandbox --disable-gpu --screenshot="$PWD/pipeline-output/desktop.png" --window-size=1440,1000 "file://$PWD/pipeline-output/models.html" >/tmp/render.log 2>&1
         google-chrome --headless=new --no-sandbox --disable-gpu --screenshot="$PWD/pipeline-output/mobile.png" --window-size=390,844 "file://$PWD/pipeline-output/index.html" >>/tmp/render.log 2>&1
         PRIVATE_COMMAND
+    - name: Show initial odds and MBS in prediction HTML
+      run: |
+        python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<'PRIVATE_COMMAND'
+        python experiments/ensemble_validation/display_odds.py --output pipeline-output
+        PRIVATE_COMMAND
     - uses: ./.github/actions/private-upload
       with:
         name: ensemble-market-validation-${{ steps.cfg.outputs.target_date }}

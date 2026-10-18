@@ -7,7 +7,7 @@ SOURCE='sukrutureli/tahmin-platform'
 PREFIX='deney/current/'
 LIMIT=512*1024
 TOTAL=3*1024*1024
-JSON_FILES=['daily-evaluation.json','daily-journal.json','conditional-evaluation.json',
+JSON_FILES=['display-metadata.json','daily-evaluation.json','daily-journal.json','conditional-evaluation.json',
  'learned-daily-evaluation.json','mined-daily-evaluation.json','selection-evaluation.json',
  'selection-journal.json','match-choice-evaluation.json','match-choice-journal.json',
  'context-evaluation.json','stability-evaluation.json','stability-journal.json',
