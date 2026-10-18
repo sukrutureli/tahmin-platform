@@ -1,5 +1,9 @@
 name: Prepare dynamic private report archive
 on:
+  workflow_run:
+    workflows: [Daily Prediction, Control]
+    types: [completed]
+    branches: [main]
   push:
     branches: [main]
     paths: ['.github/report-archive-request.json']
@@ -11,10 +15,12 @@ concurrency:
   cancel-in-progress: false
 jobs:
   archive:
+    if: github.ref == 'refs/heads/main' && (github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: main
           persist-credentials: false
       - name: Test archive retention and authenticated dynamic panel
         run: |
