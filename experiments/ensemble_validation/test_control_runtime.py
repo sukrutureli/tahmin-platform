@@ -19,6 +19,11 @@ class ControlRuntimeTests(unittest.TestCase):
             for name in ['football-replay.json','basketball-replay.json','rule-mining-dataset.json']:(p/name).write_text('[]')
             with self.assertRaises(ValueError):begin(p,o,'2026-10-14','123')
             begin(p,o,'2026-10-13','123');(o/'any-evaluation.json').write_text('{}');verify(o)
+            (o/'priced-before-results.json').write_text('{}');verify(o)
+            (p/'priced-before-results.json').write_text('{}');begin(p,o,'2026-10-13','123')
+            (o/'priced-before-results.json').write_text('{"changed":true}')
+            with self.assertRaises(ValueError):verify(o)
+            (o/'priced-before-results.json').write_text('{}')
             (o/'learned-before-results.json').write_text('{}')
             with self.assertRaises(ValueError):verify(o)
 

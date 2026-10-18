@@ -46,6 +46,9 @@ def begin(previous,output,target,source_run):
 
 def verify(output):
     lock=json.loads((output/'control-lock.json').read_text());after=hashes(output)
+    # Installing the separately versioned priced layer on an older artifact may add it once.
+    # Existing priced snapshots remain byte-protected on every subsequent control.
+    if 'priced-before-results.json' not in lock['hashes']:after.pop('priced-before-results.json',None)
     if after!=lock['hashes']:raise ValueError('Control changed frozen forecasts or fitted model files')
     lock.update({'completedAt':datetime.now(timezone.utc).isoformat(),'snapshotHashesUnchanged':True,'controlCodeSha':os.environ.get('GITHUB_SHA'),'mode':'HTTP results and settlement only; no prediction/model refit'})
     (output/'control-provenance.json').write_text(json.dumps(lock,indent=2))
