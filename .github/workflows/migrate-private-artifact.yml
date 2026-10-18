@@ -1,0 +1,105 @@
+name: Ensemble Market Validation (Encrypted Migration)
+'on':
+  workflow_dispatch:
+    inputs:
+      source_run_id:
+        type: string
+        required: true
+        description: Successful plaintext source run to preserve byte for byte
+      target_date:
+        type: string
+        required: true
+        description: Source artifact date YYYY-MM-DD
+  push:
+    branches:
+    - experiment/ensemble-market-validation
+    paths:
+    - .github/privacy-artifact-migration.json
+permissions:
+  contents: read
+  actions: read
+jobs:
+  migrate:
+    if: github.ref == 'refs/heads/experiment/ensemble-market-validation'
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        persist-credentials: false
+    - name: Resolve explicit migration source
+      id: source
+      env:
+        INPUT_RUN: ${{ inputs.source_run_id }}
+        INPUT_DATE: ${{ inputs.target_date }}
+      run: |
+        python3 - <<'PYCONFIG'
+        import json,os
+        from datetime import date
+        from pathlib import Path
+        c=json.loads(Path('.github/privacy-artifact-migration.json').read_text())
+        run=os.environ.get('INPUT_RUN') or str(c['source_run_id'])
+        day=os.environ.get('INPUT_DATE') or c['target_date']
+        assert run.isdigit()
+        assert date.fromisoformat(day).isoformat() == day
+        with open(os.environ['GITHUB_OUTPUT'],'a') as f:
+         f.write('source_run_id='+run+'\n'+'target_date='+day+'\n')
+        PYCONFIG
+    - name: Validate explicit migration request
+      env:
+        SOURCE_RUN: ${{ steps.source.outputs.source_run_id }}
+        TARGET_DATE: ${{ steps.source.outputs.target_date }}
+        PRIVATE_ARTIFACT_KEY: ${{ secrets.PRIVATE_ARTIFACT_KEY }}
+      run: |
+        python3 - <<'PY'
+        import base64, os
+        from datetime import date
+        assert os.environ['SOURCE_RUN'].isdigit()
+        assert date.fromisoformat(os.environ['TARGET_DATE']).isoformat() == os.environ['TARGET_DATE']
+        assert len(base64.b64decode(os.environ['PRIVATE_ARTIFACT_KEY'],validate=True)) == 32
+        PY
+    - uses: actions/download-artifact@v4
+      with:
+        name: ensemble-market-validation-${{ steps.source.outputs.target_date }}
+        run-id: ${{ steps.source.outputs.source_run_id }}
+        github-token: ${{ github.token }}
+        path: source
+    - name: Verify source is a complete frozen experiment
+      env:
+        TARGET_DATE: ${{ steps.source.outputs.target_date }}
+      run: |
+        python3 - <<'PY'
+        import json, os
+        from pathlib import Path
+        root=Path('source')
+        assert not (root/'payload.enc').exists(), 'Source already encrypted'
+        for name in ('before-results-predictions.json','learned-before-results.json'):
+            assert json.loads((root/name).read_text())['targetDate'] == os.environ['TARGET_DATE']
+        for name in ('rule-mining-dataset.json','reference-predictions.json','reference-manifest.json'):
+            assert (root/name).is_file(), 'Incomplete source'
+        PY
+    - name: Install encryption dependency
+      run: python3 -m pip install cryptography==46.0.3
+    - name: Prove encryption preserves every source byte
+      env:
+        PRIVATE_ARTIFACT_KEY: ${{ secrets.PRIVATE_ARTIFACT_KEY }}
+      run: |
+        python3 scripts/privacy/artifact.py pack source verify/payload.enc
+        python3 scripts/privacy/artifact.py unpack verify/payload.enc restored
+        python3 - <<'PY'
+        import hashlib
+        from pathlib import Path
+        def hashes(root):
+            return {str(p.relative_to(root)):hashlib.sha256(p.read_bytes()).hexdigest()
+                    for p in root.rglob('*') if p.is_file()}
+        assert hashes(Path('source')) == hashes(Path('restored'))
+        print('All frozen forecasts, timestamps, histories and model bytes preserved.')
+        PY
+    - uses: ./.github/actions/private-upload
+      with:
+        name: ensemble-market-validation-${{ steps.source.outputs.target_date }}
+        path: source
+        key: ${{ secrets.PRIVATE_ARTIFACT_KEY }}
+        retention-days: '30'
+concurrency:
+  group: ensemble-validation-${{ github.ref }}
+  cancel-in-progress: false
