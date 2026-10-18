@@ -10,6 +10,7 @@ public class Odds {
 	private Double hOverUnderValue;
 	private Double over;
 	private Double under;
+	private Integer mbs;
 	
 	public Odds() {
 		
@@ -98,6 +99,14 @@ public class Odds {
 
 	public void setUnder(Double under) {
 		this.under = under;
+	}
+
+	public Integer getMbs() {
+		return mbs;
+	}
+
+	public void setMbs(Integer mbs) {
+		this.mbs = mbs != null && mbs > 0 ? mbs : null;
 	}
 
 }
