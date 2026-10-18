@@ -75,6 +75,7 @@ public class BasketballScraper {
                         asDouble(row.get("ust"))
                 );
 
+                odds.setMbs(parseMbs(row.get("mbs")));
                 list.add(new MatchInfo(name, time, href, odds, index++));
                 System.out.println("✅ " + name + " (" + time + ") eklendi. | URL=" + href);
 
@@ -131,6 +132,18 @@ private String asString(Object value) {
     return String.valueOf(value).trim();
 }
 
+static Integer parseMbs(Object value) {
+    if (value == null) return null;
+    try {
+        double number = value instanceof Number ? ((Number) value).doubleValue()
+                : Double.parseDouble(String.valueOf(value).trim().replace(",", "."));
+        return Double.isFinite(number) && number > 0 && number <= Integer.MAX_VALUE
+                && number == Math.rint(number) ? (int) number : null;
+    } catch (NumberFormatException invalid) {
+        return null;
+    }
+}
+
 private double asDouble(Object value) {
     try {
         if (value == null) {
@@ -176,6 +189,7 @@ private double asDouble(Object value) {
 				Odds o = new Odds(toDouble(d.get("ms1")), toDouble(d.get("ms2")), toDouble(d.get("h1Value")),
 						toDouble(d.get("h1")), toDouble(d.get("h2")), toDouble(d.get("h2Value")),
 						toDouble(d.get("alt")), toDouble(d.get("limit")), toDouble(d.get("ust")));
+				o.setMbs(parseMbs(d.get("mbs")));
 				list.add(new MatchInfo(d.get("name"), d.get("time"), d.get("url"), o, index++));
 			}
 

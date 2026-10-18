@@ -72,6 +72,7 @@ public final class FixtureIdentityRegression {
         List<PredictionResult> forecasts = new ArrayList<>();
         for (int i = 0; i < 56; i++) {
             Odds odds = new Odds(1.5, 2.0, -5.5, 1.5, 1.5, 5.5, 1.5, 200.5, 1.5);
+            odds.setMbs(i % 3 + 1);
             MatchInfo fixture = new MatchInfo("Home " + i + " - Away " + i, "20:00",
                     "https://istatistik.nesine.com/" + (5000+i) + "/ozet", odds, i);
             fixtures.add(fixture);
@@ -117,6 +118,9 @@ public final class FixtureIdentityRegression {
             check(cards[1].contains("Bu maç için geçmiş veri bulunamadı"), "no-URL card rendered");
             check(cards[19].contains("Bu maç için geçmiş veri bulunamadı"), "missing middle card rendered without forecast");
             check(cards[20].contains("108-70"), "report after gap has own score");
+            check(cards[20].contains("MBS: 1"), "report MBS follows fixture odds");
+            check(cards[57].contains("MBS: 2"), "last fixture MBS preserved");
+            check(report.contains("class='coupon-mbs'>MBS: 1</span>"), "coupon table includes MBS");
             check(cards[57].contains("145-70"), "last fixture rendered correctly");
             // Same saved histories are valid for a control render even when MatchInfo order changes.
             Collections.reverse(fixtures);
@@ -148,6 +152,26 @@ public final class FixtureIdentityRegression {
         PredictionData old = (PredictionData) mapperType.getMethod("readValue",String.class,Class.class)
             .invoke(mapper,"{\"homeTeam\":\"Legacy\",\"awayTeam\":\"Opponent\",\"picks\":[]}",PredictionData.class);
         check(old.getEventId() == null, "old JSON readable");
+
+        var parseMbs = com.basketbol.scraper.BasketballScraper.class.getDeclaredMethod("parseMbs", Object.class);
+        parseMbs.setAccessible(true);
+        check(Integer.valueOf(3).equals(parseMbs.invoke(null, 3)), "numeric MBS preserved");
+        check(Integer.valueOf(2).equals(parseMbs.invoke(null, "2")), "string MBS preserved");
+        for (Object invalid : new Object[] { null, "", "-", 0, -1, 1.5, Double.NaN, Double.POSITIVE_INFINITY, true }) {
+            check(parseMbs.invoke(null, invalid) == null, "unknown MBS is not invented");
+        }
+        Odds withMbs = new Odds(1.5, 2.0, -5.5, 1.5, 1.5, 5.5, 1.5, 200.5, 1.5);
+        withMbs.setMbs((Integer) parseMbs.invoke(null, "3"));
+        MatchInfo fixture = new MatchInfo("Home - Away", "20:00", "https://istatistik.nesine.com/123", withMbs, 0);
+        String fixtureJson = (String) mapperType.getMethod("writeValueAsString", Object.class).invoke(mapper, fixture);
+        MatchInfo restored = (MatchInfo) mapperType.getMethod("readValue", String.class, Class.class).invoke(mapper, fixtureJson, MatchInfo.class);
+        check(Integer.valueOf(3).equals(restored.getMbs()), "MatchInfo MBS JSON roundtrip");
+        check(Integer.valueOf(3).equals(restored.getOdds().getMbs()), "Odds MBS JSON roundtrip");
+        check(Double.valueOf(200.5).equals(restored.getOdds().gethOverUnderValue()), "MBS does not shift total line");
+        MatchInfo oldFixture = (MatchInfo) mapperType.getMethod("readValue", String.class, Class.class)
+                .invoke(mapper, "{\"name\":\"Legacy\",\"odds\":{\"ms1\":1.5,\"ms2\":2.0}}", MatchInfo.class);
+        check(oldFixture.getMbs() == null && oldFixture.getOdds().getMbs() == null, "old MBS-free JSON readable");
+
     }
 }
 

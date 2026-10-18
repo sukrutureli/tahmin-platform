@@ -67,6 +67,7 @@ public class CombinedHtmlReportGenerator {
 				.append("flex-wrap:wrap;margin-bottom:10px;}");
 		html.append(".match-name{font-weight:700;color:#003366;font-size:1.3em;line-height:1.2;}");
 		html.append(".match-time{color:#004d80;font-size:1.1em;font-weight:600;}");
+		html.append(".match-mbs,.coupon-mbs{display:block;font-size:12px;font-weight:500;color:#60758a;margin-top:4px;white-space:nowrap;}");
 
 		// Odds grid
 		html.append(".odds-mini{background:#f8fafc;border:1px solid #dbe2ea;padding:12px;")
@@ -145,7 +146,8 @@ public class CombinedHtmlReportGenerator {
 
 			html.append("<tr>");
 			html.append("<td>").append(p.getTime()).append("</td>");
-			html.append("<td>").append(p.getName()).append("</td>");
+			html.append("<td>").append(p.getName()).append("<span class='coupon-mbs'>MBS: ")
+                    .append(couponMbs(p, matches)).append("</span></td>");
 			html.append("<td>").append(p.preditionsToString()).append("</td>");
 			html.append("<td>").append(p.getScore() != null ? p.getScore() : "-").append("</td>");
 			html.append("<td>").append(actualScore).append("</td>");
@@ -242,7 +244,8 @@ public class CombinedHtmlReportGenerator {
 			html.append("<div class='match-header'>");
 			html.append("<div class='match-name'>").append(match.getName())
 					.append(FixtureIdentity.realScore(realScores, match)).append("</div>");
-			html.append("<div class='match-time'>").append(match.getTime()).append("</div>");
+			html.append("<div class='match-time'>").append(match.getTime())
+                    .append("<span class='match-mbs'>MBS: ").append(mbsLabel(match)).append("</span></div>");
 			html.append("</div>");
 
 			if (teamHistory != null && teamHistory.getTotalMatches() > 0) {
@@ -375,5 +378,23 @@ public class CombinedHtmlReportGenerator {
 		System.out.println("✅ Birleşik basketbol HTML üretildi: " + output.getAbsolutePath());
 	}
 
+
+    private static String mbsLabel(MatchInfo match) {
+        Integer value = match == null ? null : match.getMbs();
+        return value != null && value > 0 ? String.valueOf(value) : "—";
+    }
+
+    private static String couponMbs(LastPrediction coupon, List<MatchInfo> matches) {
+        String id = coupon.getEventId();
+        if (id == null) return "—";
+        MatchInfo found = null;
+        for (MatchInfo match : matches) {
+            if (id.equals(FixtureIdentity.eventId(match.getDetailUrl()))) {
+                if (found != null) return "—";
+                found = match;
+            }
+        }
+        return mbsLabel(found);
+    }
 }
 
