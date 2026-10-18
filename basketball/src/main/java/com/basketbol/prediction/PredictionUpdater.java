@@ -22,7 +22,7 @@ public class PredictionUpdater {
 	public static List<PredictionData> updateFromGithub(Map<String, String> updatedScores,
 			String prefix, List<MatchInfo> matches, String day) throws IOException {
 		// 🔹 Private repo'dan dosya URL'si (raw)
-		String url = "https://raw.githubusercontent.com/sukrutureli/fathertahmin/main/basketbol/data/" + prefix + day + ".json";
+		String url = "https://api.github.com/repos/sukrutureli/fathertahmin/contents/basketbol/data/" + prefix + day + ".json?ref=main";
 		System.out.println("📥 JSON indiriliyor: " + url);
 
 		// 🔹 GitHub Personal Access Token (örneğin env değişkeninden)
@@ -35,8 +35,10 @@ public class PredictionUpdater {
 		// 🔹 Token ile HTTP isteği yap
 		HttpURLConnection conn = (HttpURLConnection) new URL(url).openConnection();
 		conn.setRequestMethod("GET");
+        conn.setConnectTimeout(15000);
+        conn.setReadTimeout(30000);
 		conn.setRequestProperty("Authorization", "token " + token);
-		conn.setRequestProperty("Accept", "application/vnd.github.v3.raw");
+		conn.setRequestProperty("Accept", "application/vnd.github.raw+json");
 
 		int status = conn.getResponseCode();
 		if (status != 200) {

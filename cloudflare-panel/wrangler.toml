@@ -1,0 +1,8 @@
+name = "jolly-lake-9037"
+main = "worker.mjs"
+compatibility_date = "2026-10-17"
+workers_dev = true
+preview_urls = false
+
+[observability]
+enabled = false

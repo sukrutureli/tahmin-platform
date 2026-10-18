@@ -1,0 +1,105 @@
+name: Private data readiness
+on:
+  push:
+    branches: ['prepare/private-fathertahmin']
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  configured-access:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Probe configured key and scoped repository access
+        env:
+          FATHERTAHMIN_WRITE_TOKEN: ${{ secrets.FATHERTAHMIN_WRITE_TOKEN }}
+          PRIVATE_ARTIFACT_KEY: ${{ secrets.PRIVATE_ARTIFACT_KEY }}
+        run: python3 scripts/privacy/probe_access.py
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install cryptography==46.0.3 PyYAML==6.0.3
+      - run: python -m unittest discover -s tests/privacy -v
+  worker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: node --test cloudflare-panel/worker.test.mjs
+  transport:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Generate disposable key and synthetic fixture
+        run: |
+          python3 - <<'PYFIXTURE'
+          import base64, os, secrets
+          from pathlib import Path
+          key=base64.b64encode(secrets.token_bytes(32)).decode()
+          print('::add-mask::'+key)
+          with open(os.environ['GITHUB_ENV'],'a') as output:
+              output.write('PRIVATE_TEST_KEY='+key+'\n')
+          Path('fixture/data').mkdir(parents=True)
+          Path('fixture/data/example.json').write_text('{"synthetic":true}')
+          PYFIXTURE
+      - uses: ./.github/actions/private-upload
+        with:
+          name: private-transport-synthetic-test
+          path: fixture
+          key: ${{ env.PRIVATE_TEST_KEY }}
+          retention-days: '1'
+      - uses: ./.github/actions/private-download
+        with:
+          name: private-transport-synthetic-test
+          path: restored
+          key: ${{ env.PRIVATE_TEST_KEY }}
+          github-token: ${{ github.token }}
+      - run: cmp fixture/data/example.json restored/data/example.json
+  compile:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - run: mvn -B -f football/pom.xml compile
+      - run: mvn -B -f basketball/pom.xml compile
+  export-panel:
+    if: github.event_name == 'workflow_dispatch'
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: sukrutureli/fathertahmin
+          ref: main
+          path: published
+          token: ${{ secrets.FATHERTAHMIN_READ_TOKEN || secrets.FATHERTAHMIN_WRITE_TOKEN || secrets.ADMIN_USER }}
+          persist-credentials: false
+      - name: Export browser reports without publishing
+        run: python3 scripts/privacy/build_panel.py --source published --output private-panel
+      - uses: ./.github/actions/private-upload
+        with:
+          name: private-browser-panel
+          path: private-panel
+          key: ${{ secrets.PRIVATE_ARTIFACT_KEY }}
+          retention-days: '7'
