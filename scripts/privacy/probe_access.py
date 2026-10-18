@@ -46,6 +46,10 @@ def main():
             result = subprocess.run(command, env=env, capture_output=True, timeout=120)
             if result.returncode:
                 message = result.stderr.decode('utf-8', errors='replace')
+                import re
+                safe = message.replace(token, '***').replace(env['GIT_CONFIG_VALUE_0'].split('Basic ',1)[1], '***')
+                safe = re.sub(r'(https?://)[^/\s]*@', r'\1[redacted]@', safe)
+                print('Sanitized git diagnostic: ' + safe[-1500:])
                 if '403' in message or 'Permission' in message or 'denied' in message:
                     print('GitHub rejected the write handshake: check Contents read/write on the selected repository.')
                 elif 'workflow' in message.lower():
