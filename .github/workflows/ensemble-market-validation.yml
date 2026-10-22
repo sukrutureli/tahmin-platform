@@ -289,6 +289,12 @@ jobs:
         python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<'PRIVATE_COMMAND'
         python experiments/ensemble_validation/priced_choices.py freeze --output pipeline-output
         PRIVATE_COMMAND
+    - name: Freeze separate score research candidates (daily only)
+      if: steps.cfg.outputs.run_mode != 'control'
+      run: |
+        python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<'PRIVATE_COMMAND'
+        python experiments/ensemble_validation/score_research.py freeze --output pipeline-output --previous previous
+        PRIVATE_COMMAND
     - name: Refresh today's finished football outcomes (artifact only)
       working-directory: football
       run: |
@@ -388,6 +394,11 @@ jobs:
         manifest.update({"sourceSha": os.environ["SOURCE_SHA"], "runUrl": os.environ["RUN_URL"], "publishedSha": subprocess.check_output(["git", "-C", "published", "rev-parse", "HEAD"], text=True).strip(), "archiveSha": subprocess.check_output(["git", "-C", "archive", "rev-parse", "HEAD"], text=True).strip(), "referenceManifest": json.loads(Path("reference/manifest.json").read_text())})
         (root / "input-manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2))
         PY
+        PRIVATE_COMMAND
+    - name: Evaluate separate frozen score research
+      run: |
+        python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<'PRIVATE_COMMAND'
+        python experiments/ensemble_validation/score_research.py settle --output pipeline-output
         PRIVATE_COMMAND
     - name: Prove control preserved forecasts and model parameters
       if: steps.cfg.outputs.run_mode == 'control'

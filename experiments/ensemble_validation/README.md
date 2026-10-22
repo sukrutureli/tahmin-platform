@@ -486,3 +486,40 @@ Başarılı üretim Daily/Control sonrası main koordinatörü bu branchi dispat
 `priced_choices.py freeze` sonuç HTTP çağrılarından ÖNCE `priced-before-results.json` kaydeder. Control aynı kaydı aynen kullanır. Orijinal stability tahminleri ve model dosyaları değiştirilmez. Yeni HTML'lerde görünen seçimlerin doğru karşılaştırması `priced-evaluation.json` dosyasıdır; her sistem için aynı oran uygunluk kuralı uygulanır, kendi maksimum adayı ve güven alt kümeleri kullanılır. Kaydın kendi oluşturulma saati esas alınır; geç ve 18 Ekim ön izleme örnekleri bağımsız ölçüm değildir. Eski stability-evaluation özgün politika için ayrı tutulur.
 
 Futbol Yeni / Basketbol Yeni HTML'lerinde en düşük oran filtresi ve temizleme düğmesi vardır. Filtre yalnız görünümü değiştirir, kayıtlı tercihleri/rankleri veya değerlendirme kohortunu değiştirmez. Cloudflare yeniden dağıtımı gerektirmez.
+
+
+## Separate football score research (23 October 2026)
+`score_research.py` is version `score-research-v1`, separate from opponent-locked-v1.
+No locked weights, distributions, market selections, main files or Telegram settings are changed.
+The first independently measured date is 2026-10-23; late or preview records are separate.
+
+Daily freezes three candidates BEFORE HTTP label refresh, all using the SAME frozen available-price-v1 market:
+1. Original locked conditional modal score (verified equal to the displayed score).
+2. Previous-day residual mean calibration, separate home/away additive bias, shrinkage 30,
+   minimum 30 finished pre-kickoff records, bounded to +/-1 goal. Otherwise zero adjustment.
+3. The same calibrated means with a prespecified negative-binomial dispersion of 5.
+These are candidates, not promoted winners; the wider distribution need not produce a larger modal score.
+
+Training bootstraps from the previous artifact's original pre-kickoff locked forecasts and completed labels,
+then accumulates `score-research-journal.json` inside encrypted artifacts. Dates >= the forecast date and
+late original forecasts cannot train calibration. No new HTTP history requests are introduced.
+A retrospective walk-forward report refits the fixed calibration formula only on earlier dates and is
+explicitly NOT independent success. On initial rollout only the previous artifact is available; this
+is not a replay of all past days. Unresolved old labels may remain absent until their artifact is refreshed
+and carried forward. Training count/dates and source hashes are recorded; insufficient training is disclosed.
+
+Control only settles the existing immutable research snapshot; it never creates a missing snapshot,
+refits candidates or changes their predictions. Existing control hashes now protect this extra snapshot.
+The independent score metrics use before-kickoff rows from 23 October onward. Missing finals are excluded.
+Reports include exact-score hits, compatible top-three hits, per-team MAE and unconditional exact-score
+log loss; zero-goal and 4+ goal subsets, tail-event Brier and modal concentration are also stored.
+Unconditional log loss includes results inconsistent with the selected bet, without conditioning them away.
+
+`futbol-skor-deneyi.html` is a separate mobile report with search, all eligible fixtures, the same bet,
+three methods and their compatible top-three scores (percentages are unconditional exact-score probabilities).
+No-price/missing-mean fixtures are counted as excluded. Basketball forecasts remain in their existing report;
+this research specifically targets football's repeated 1-1 / 2-1 score modes.
+The private exporter publishes this HTML under `raporlar/YYYY-MM-DD/` for automatic dynamic-panel discovery,
+and retains dated `score-research-evaluation.json` alongside the other experiments.
+Two-day HTML retention remains in force. Training journals and prediction snapshots are never exported as
+public data; source artifacts remain encrypted. No automatic main promotion.

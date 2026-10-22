@@ -1,0 +1,26 @@
+name: Score research checks
+on:
+  push:
+    branches: [experiment/ensemble-market-validation]
+    paths:
+      - experiments/ensemble_validation/score_research.py
+      - experiments/ensemble_validation/test_score_research.py
+      - .github/workflows/score-research-checks.yml
+permissions:
+  contents: read
+jobs:
+  synthetic-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install numpy==2.3.5
+      - name: Validate synthetic score cases and private export boundaries
+        run: |
+          python -m unittest discover -s experiments/ensemble_validation -p test_score_research.py -v
+          python -m unittest discover -s experiments/ensemble_validation -p test_control_runtime.py -v
+          python -m unittest discover -s experiments/ensemble_validation -p test_private_reports.py -v
