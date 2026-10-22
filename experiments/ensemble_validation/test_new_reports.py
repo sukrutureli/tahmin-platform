@@ -18,6 +18,7 @@ class NewReportTests(unittest.TestCase):
             self.assertFalse(manifest['previewOnly']);self.assertEqual(manifest['reports']['futbol']['fixtureCount'],1)
             for folder,sport in [('futbol','football'),('basketbol','basketball')]:
                 s=(root/(folder+'-yeni.html')).read_text();self.assertIn(sport+' Home',s);self.assertIn('Oran <b>1.80</b>',s);self.assertIn('MBS <b>2</b>',s);self.assertIn('Kazandı',s);self.assertIn('id="min-odds"',s);self.assertIn('data-odds="1.8"',s)
+                self.assertIn('id="match-search"',s);self.assertIn('data-search="'+sport+' Home - Away"',s)
             self.assertEqual(before,{n:(root/n).read_bytes() for n in before})
     def test_later_day_cannot_use_unlocked_research_forecasts(self):
         with tempfile.TemporaryDirectory() as t:
@@ -34,6 +35,7 @@ class FilterTests(unittest.TestCase):
         harness="""
 import vm from 'node:vm';import assert from 'node:assert/strict';
 const input={value:'',addEventListener(t,f){this.run=f}},finished={checked:false,addEventListener(t,f){this.run=f}},started={checked:false,addEventListener(t,f){this.run=f}},clear={addEventListener(t,f){this.run=f}},count={};
+const search={value:'',addEventListener(t,f){this.run=f}};
 const rows=[
 {dataset:{odds:'1.8',finished:'1',kickoff:'2026-10-18T13:00:00+03:00'}},
 {dataset:{odds:'1.8',finished:'0',kickoff:'2026-10-18T14:00:00+03:00'}},
@@ -41,7 +43,15 @@ const rows=[
 {dataset:{odds:'2.0',finished:'0',kickoff:'2026-10-18T15:00:00+03:00'}},
 {dataset:{odds:'1.9',finished:'0',kickoff:''}}];let clock=Date.parse('2026-10-18T11:00:00Z'),timer;
 const ctx={Date:class extends Date{static now(){return clock}},Number,document:{getElementById:id=>({'min-odds':input,'hide-finished':finished,'hide-started':started,'clear-odds':clear,'filter-count':count}[id]),querySelectorAll:()=>rows},window:{addEventListener(){}},setInterval(f){timer=f}};
+rows.forEach((r,i)=>r.dataset.search=['İstanbul - Beşiktaş','IĞDIR - Şanlıurfa','Fenerbahçe - İzmir','Beşiktaş - İstanbul','Other - Away'][i]);
+const originalGet=ctx.document.getElementById;ctx.document.getElementById=id=>id==='match-search'?search:originalGet(id);
 vm.runInNewContext(SCRIPT,ctx);
+search.value='istanbul BESIKTAS';search.run();assert.deepEqual(rows.map(r=>r.hidden),[false,true,true,false,true]);
+input.value='1.9';input.run();assert.deepEqual(rows.map(r=>r.hidden),[true,true,true,false,true]);assert.equal(count.textContent,'1 / 5 maç');
+search.value='ığdır';search.run();assert.ok(rows.every(r=>r.hidden));
+input.value='';input.run();assert.deepEqual(rows.map(r=>r.hidden),[true,false,true,true,true]);
+search.value='nonexistent';search.run();assert.equal(count.textContent,'0 / 5 maç');
+clear.run();assert.equal(search.value,'');assert.ok(rows.every(r=>!r.hidden));
 finished.checked=true;finished.run();assert.deepEqual(rows.map(r=>r.hidden),[true,false,false,false,false]);
 started.checked=true;started.run();assert.deepEqual(rows.map(r=>r.hidden),[true,true,false,false,false]);
 input.value='1.50';input.run();assert.deepEqual(rows.map(r=>r.hidden),[true,true,true,false,false]);assert.equal(count.textContent,'2 / 5 maç');
