@@ -30,6 +30,7 @@ jobs:
           with open(os.environ['GITHUB_OUTPUT'],'a') as f:
               f.write('run_id='+str(d['source_run_id'])+'\n')
               f.write('target_date='+d['target_date']+'\n')
+              f.write('recovery='+('true' if d.get('recover_export_only') is True else 'false')+'\n')
           PY
       - uses: ./.github/actions/private-download
         with:
@@ -50,9 +51,13 @@ jobs:
           python -m unittest discover -s experiments/ensemble_validation -p test_priced_choices.py -v
           python -m unittest discover -s experiments/ensemble_validation -p test_control_runtime.py -v
           python -m unittest discover -s experiments/ensemble_validation -p test_display_odds.py -v
-          python experiments/ensemble_validation/display_odds.py --output restored
-          python experiments/ensemble_validation/new_reports.py --output restored
-          python experiments/ensemble_validation/private_reports.py --root restored --source-run '${{ steps.cfg.outputs.run_id }}' --target-date '${{ steps.cfg.outputs.target_date }}'
+          if [ '${{ steps.cfg.outputs.recovery }}' = true ]; then
+            python experiments/ensemble_validation/private_reports.py --root restored --source-run '${{ steps.cfg.outputs.run_id }}' --target-date '${{ steps.cfg.outputs.target_date }}' --recover-export-only
+          else
+            python experiments/ensemble_validation/display_odds.py --output restored
+            python experiments/ensemble_validation/new_reports.py --output restored
+            python experiments/ensemble_validation/private_reports.py --root restored --source-run '${{ steps.cfg.outputs.run_id }}' --target-date '${{ steps.cfg.outputs.target_date }}'
+          fi
           PRIVATE_COMMAND
       - name: Prepare private diagnostics
         if: always()

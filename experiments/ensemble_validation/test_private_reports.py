@@ -1,6 +1,6 @@
 import hashlib,json,tempfile,unittest
 from pathlib import Path
-from private_reports import collect,compact,publish,DEST,PREFIX
+from private_reports import collect,compact,publish,DEST,PREFIX,HTML_LIMIT,verify_source
 
 class FakeApi:
     def __init__(self,private=True,entries=None):self.private=private;self.entries=entries or [];self.writes=[]
@@ -34,7 +34,19 @@ class PrivateReportTests(unittest.TestCase):
         self.assertEqual(v,{'count':50,'accuracy':.6,'errorExampleCount':20,'errorExamples':[0,1,2,3,4]})
     def test_large_report_fails_instead_of_silent_omission(self):
         with tempfile.TemporaryDirectory() as t:
-            root=Path(t);self.seed(root);(root/'best-matches.html').write_text('x'*600000)
+            root=Path(t);self.seed(root);(root/'best-matches.html').write_text('x'*(HTML_LIMIT+1))
+            with self.assertRaisesRegex(ValueError,'size limit'):collect(root)
+    def test_large_match_day_html_is_preserved(self):
+        with tempfile.TemporaryDirectory() as t:
+            root=Path(t);self.seed(root)
+            html='<html>'+('<tr><td>Fixture</td><td>'+('x'*1000)+'</td></tr>')*1000+'</html>'
+            (root/'futbol-yeni.html').write_text(html)
+            files,_=collect(root)
+            self.assertEqual(files['futbol-yeni.html'],html)
+    def test_json_size_guard_remains(self):
+        with tempfile.TemporaryDirectory() as t:
+            root=Path(t);self.seed(root)
+            (root/'context-evaluation.json').write_text(json.dumps({'data':'x'*1100000}))
             with self.assertRaisesRegex(ValueError,'size limit'):collect(root)
     def test_identical_exports_are_noop(self):
         from private_reports import encoded
@@ -71,3 +83,24 @@ class RetentionTests(unittest.TestCase):
 
 if __name__=='__main__':unittest.main()
 
+
+class RecoveryTests(unittest.TestCase):
+    def test_pinned_export_only_failure_is_validated(self):
+        import copy
+        run={'head_branch':'experiment/ensemble-market-validation','path':'.github/workflows/ensemble-market-validation.yml',
+             'head_sha':'66c9642a31f744afa00a448ff666c4fdeeb9e56a','status':'completed','conclusion':'failure','run_attempt':1}
+        names=['Freeze choices with available initial prices before results','Freeze separate score research candidates (daily only)',
+               'Verify provenance and history boundaries','Show initial odds and MBS in prediction HTML','Run ./.github/actions/private-upload',
+               'Save bounded reports to private repository']
+        steps=[{'name':n,'number':i,'conclusion':'success' if i<5 else 'failure'} for i,n in enumerate(names)]
+        class Source:
+            def call(self,path):return {'total_count':1,'jobs':[{'steps':steps}]}
+        api=Source()
+        verify_source(api,run,'40026399108','2026-10-24',True)
+        for enabled,source,date in [(False,'40026399108','2026-10-24'),(True,'1','2026-10-24'),(True,'40026399108','2026-10-25')]:
+            with self.assertRaises(ValueError):verify_source(api,run,source,date,enabled)
+        for field,value in [('head_sha','changed'),('run_attempt',2),('path','wrong.yml')]:
+            changed=copy.deepcopy(run);changed[field]=value
+            with self.assertRaises(ValueError):verify_source(api,changed,'40026399108','2026-10-24',True)
+        steps[0]['conclusion']='failure'
+        with self.assertRaises(ValueError):verify_source(api,run,'40026399108','2026-10-24',True)

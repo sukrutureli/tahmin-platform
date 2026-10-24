@@ -7,8 +7,9 @@ from zoneinfo import ZoneInfo
 DEST='sukrutureli/fathertahmin'
 SOURCE='sukrutureli/tahmin-platform'
 PREFIX='deney/current/'
-LIMIT=512*1024
-TOTAL=3*1024*1024
+LIMIT=1024*1024
+HTML_LIMIT=4*1024*1024
+TOTAL=16*1024*1024
 JSON_FILES=['score-research-evaluation.json','priced-evaluation.json','new-report-manifest.json','production-trigger.json','display-metadata.json','daily-evaluation.json','daily-journal.json','conditional-evaluation.json',
  'learned-daily-evaluation.json','mined-daily-evaluation.json','selection-evaluation.json',
  'selection-journal.json','match-choice-evaluation.json','match-choice-journal.json',
@@ -43,7 +44,7 @@ def collect(root):
         if path.is_symlink() or not path.is_file():raise ValueError('Unsafe report source')
         raw=path.read_bytes();source_hashes[name]=digest(raw)
         data=encoded(compact(json.loads(raw))) if name.endswith('.json') else raw.decode('utf-8')
-        if len(data.encode())>LIMIT:raise ValueError('Report size limit exceeded: '+name)
+        if len(data.encode())>(HTML_LIMIT if name.endswith('.html') else LIMIT):raise ValueError('Report size limit exceeded: '+name)
         out[name]=data
     for required in ['daily-evaluation.json','input-manifest.json','context-evaluation.json','stability-journal.json']:
         if required not in out:raise ValueError('Required report missing: '+required)
@@ -118,21 +119,50 @@ def publish(api,files,manifest,today=None):
             if attempt==2:raise
     raise RuntimeError('Private report update failed')
 
+
+def verify_source(source,run,source_run,target_date,recovery=False):
+    if run.get('head_branch')!='experiment/ensemble-market-validation' or run.get('path')!='.github/workflows/ensemble-market-validation.yml':
+        raise ValueError('Unverified experiment source run')
+    own=source_run==os.environ.get('GITHUB_RUN_ID')
+    if run.get('conclusion')=='success' or (own and run.get('status')=='in_progress'):return
+    # Explicit, one-source export-only recovery. Never accept arbitrary failed runs.
+    if not (recovery and source_run=='40026399108' and target_date=='2026-10-24'
+            and run.get('head_sha')=='66c9642a31f744afa00a448ff666c4fdeeb9e56a'
+            and run.get('status')=='completed' and run.get('conclusion')=='failure'
+            and run.get('run_attempt')==1):
+        raise ValueError('Unverified experiment source run')
+    jobs=source.call(SOURCE+'/actions/runs/'+source_run+'/jobs?per_page=100')
+    if jobs.get('total_count')!=1 or len(jobs.get('jobs',[]))!=1:raise ValueError('Unexpected recovery jobs')
+    steps=jobs['jobs'][0]['steps']
+    failed=[s for s in steps if s.get('conclusion') not in ('success','skipped')]
+    if len(failed)!=1 or failed[0]['name']!='Save bounded reports to private repository':raise ValueError('Recovery source failed before export')
+    cutoff=failed[0]['number']
+    required=['Freeze choices with available initial prices before results','Freeze separate score research candidates (daily only)',
+              'Verify provenance and history boundaries','Show initial odds and MBS in prediction HTML','Run ./.github/actions/private-upload']
+    for name in required:
+        if not any(s['name']==name and s['number']<cutoff and s['conclusion']=='success' for s in steps):
+            raise ValueError('Required recovery source step missing')
+
 def main():
-    p=argparse.ArgumentParser();p.add_argument('--root',type=Path,required=True);p.add_argument('--source-run',required=True);p.add_argument('--target-date',required=True);a=p.parse_args()
+    p=argparse.ArgumentParser();p.add_argument('--root',type=Path,required=True);p.add_argument('--source-run',required=True);p.add_argument('--target-date',required=True);p.add_argument('--recover-export-only',action='store_true');a=p.parse_args()
     if not re.fullmatch(r'\d{4}-\d{2}-\d{2}',a.target_date) or not a.source_run.isdigit():raise ValueError('Invalid source')
     files,hashes=collect(a.root)
     if json.loads(files['daily-evaluation.json'])['date']!=a.target_date:raise ValueError('Report date mismatch')
     source=Api(os.environ.get('REPORT_SOURCE_TOKEN'));run=source.call(SOURCE+'/actions/runs/'+a.source_run)
-    own=a.source_run==os.environ.get('GITHUB_RUN_ID')
-    if run['head_branch']!='experiment/ensemble-market-validation' or (run.get('conclusion')!='success' and not (own and run['status']=='in_progress')):raise ValueError('Unverified experiment source run')
+    verify_source(source,run,a.source_run,a.target_date,a.recover_export_only)
     artifacts=source.call(SOURCE+'/actions/runs/'+a.source_run+'/artifacts?per_page=100')['artifacts']
     name='ensemble-market-validation-'+a.target_date
     artifact=next((x for x in artifacts if x['name']==name and not x['expired']),None)
     if not artifact:raise ValueError('Encrypted source artifact missing')
+    if a.recover_export_only and artifact['id']!=12535836798:raise ValueError('Recovery artifact mismatch')
     manifest={'targetDate':a.target_date,'sourceRunId':a.source_run,'sourceSha':run['head_sha'],'sourceArtifact':name,'sourceArtifactId':artifact['id'],'artifactUrl':f'https://github.com/{SOURCE}/actions/runs/{a.source_run}/artifacts/{artifact["id"]}',
       'policy':'Private report copies only. Event ID membership lists omitted; five error examples per block. Full datasets, snapshots, raw HTTP, and logs remain encrypted. Predictions and models unchanged.',
       'sourceFileSha256':hashes,'reports':{n:{'bytes':len(s.encode()),'sha256':digest(s.encode())} for n,s in files.items()}}
+    if a.recover_export_only:
+        manifest['exportRecovery']={'sourceConclusion':run['conclusion'],'sourceAttempt':run['run_attempt'],
+          'mode':'existing-artifact-only','oldFileLimitBytes':512*1024,'oldPackageLimitBytes':3*1024*1024,
+          'filesExceedingOldLimit':{n:len(v.encode()) for n,v in files.items() if len(v.encode())>512*1024},
+          'packageBytes':sum(len(v.encode()) for v in files.values())}
     changed=publish(Api(os.environ.get('PRIVATE_REPORT_TOKEN')),files,manifest)
     print('Private experiment report checkpoint '+('updated' if changed else 'unchanged')+'; '+str(len(files))+' bounded reports')
 
