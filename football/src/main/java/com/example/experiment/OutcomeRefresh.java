@@ -7,6 +7,9 @@ import java.nio.file.*;
 import java.time.Instant;
 import java.io.IOException;
 import java.util.concurrent.*;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
 
 /** Refresh labels after predictions are frozen; artifact files only, no Application or Telegram. */
 public final class OutcomeRefresh {
@@ -16,8 +19,11 @@ public final class OutcomeRefresh {
   ResultApiClient client=new ResultApiClient();int fetched=0;
   long deadline=System.nanoTime()+TimeUnit.MINUTES.toNanos(12);
   ExecutorService executor=Executors.newSingleThreadExecutor(r->{Thread t=new Thread(r,"bounded-result-refresh");t.setDaemon(true);return t;});
+  List<JsonNode> refreshRows=new ArrayList<>();rows.forEach(refreshRows::add);
+  // Retry unresolved fixtures first; preserve original replay order and frozen forecasts.
+  refreshRows.sort(Comparator.comparingInt(r->"live HTTP finished scoreboard".equals(r.path("resultSource").asText())?1:0));
   try {
-  for(JsonNode row:rows){
+  for(JsonNode row:refreshRows){
    if(!"holdout".equals(row.path("role").asText()))continue;
    ObjectNode entry=mapper.createObjectNode();entry.put("eventId",row.path("eventId").asText());
    entry.put("observedAt",Instant.now().toString());entry.set("snapshotScore",row.path("realScore"));audit.add(entry);
