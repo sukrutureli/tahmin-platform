@@ -462,7 +462,7 @@ original file hash and copied report hash. context-evaluation event membership
 arrays are omitted; all metric counts and scores are preserved. Diagnostic JSON
 keeps all aggregate feature comparisons and the first five error examples per
 block, explicitly recording the full example count. Full details stay encrypted.
-Per-file limit 512 KiB; package limit 3 MiB. Missing mandatory reports, invalid
+Per-file limits: JSON 1 MiB, HTML 4 MiB; package limit 16 MiB. Missing mandatory reports, invalid
 source dates and public destinations fail. Identical exports do not create commits.
 
 Future successful artifact uploads export these reports automatically. The
@@ -523,3 +523,30 @@ The private exporter publishes this HTML under `raporlar/YYYY-MM-DD/` for automa
 and retains dated `score-research-evaluation.json` alongside the other experiments.
 Two-day HTML retention remains in force. Training journals and prediction snapshots are never exported as
 public data; source artifacts remain encrypted. No automatic main promotion.
+
+
+## 25 October: preserve forecasts and bound result refresh
+
+Experiment OutcomeRefresh now has a 12-minute per-sport budget and a 90-second
+per-fixture timeout. It preserves fetched finished results when the budget expires;
+unresolved/live matches remain outside success denominators. Unconfirmed fixtures
+are queried first without changing replay order or frozen forecast bytes.
+The optional `missing_only` workflow input (or `refresh_missing_only` in settings
+for a settings-triggered run) skips only previously HTTP-confirmed final outcomes.
+Normal controls still refresh confirmed outcomes after unconfirmed fixtures.
+
+Daily uploads an encrypted `frozen-forecasts-YYYY-MM-DD` checkpoint immediately
+after forecast freezing and before HTTP settlement. A later failure therefore no
+longer loses the only copy of that day's forecasts. This checkpoint is not silently
+accepted as a successful evaluated artifact; recovery requires provenance checks.
+
+24 October's export-only failure was recovered from its original encrypted artifact.
+The one-source control recovery checks the pinned run, SHA, attempt, successful
+forecast/upload steps, sole export failure, exact unexpired artifact, and successful
+export recovery run. Arbitrary failed runs remain rejected. Successful subsequent
+controls are discoverable through the ordinary production-to-experiment coordinator.
+
+25 October's cancelled run had no forecast artifact, so its replacement uses the
+original published daily inputs and the refreshed 24 October artifact. Actual new
+recording times remain visible; late records are not counted as pre-kickoff evidence.
+The opponent-locked-v1 model, score distribution and selection policy are unchanged.
