@@ -26,6 +26,10 @@ run-name: Ensemble ${{ inputs.mode || 'auto' }} ${{ inputs.target_date || 'setti
       published_ref:
         description: Verified private input commit SHA
         type: string
+      missing_only:
+        description: Refresh only outcomes not previously confirmed by HTTP
+        type: boolean
+        default: false
       production_run_id:
         description: Idempotent production run key
         type: string
@@ -64,6 +68,7 @@ jobs:
         INPUT_TARGET_DATE: ${{ inputs.target_date }}
         INPUT_SOURCE_RUN: ${{ inputs.source_run_id }}
         INPUT_PUBLISHED_REF: ${{ inputs.published_ref }}
+        INPUT_MISSING_ONLY: ${{ inputs.missing_only }}
       run: |
         python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<'PRIVATE_COMMAND'
         python experiments/ensemble_validation/control_runtime.py config --settings experiments/ensemble_validation/experiment-settings.json
@@ -307,13 +312,13 @@ jobs:
       working-directory: football
       run: |
         python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<'PRIVATE_COMMAND'
-        mvn -B exec:java -Dexec.mainClass=com.example.experiment.OutcomeRefresh -Dexec.args="../pipeline-output/football-replay.json ../pipeline-output/football-outcome-audit.json"
+        mvn -B exec:java -Dexec.mainClass=com.example.experiment.OutcomeRefresh -Dexec.args="../pipeline-output/football-replay.json ../pipeline-output/football-outcome-audit.json ${{ steps.cfg.outputs.refresh_flag }}"
         PRIVATE_COMMAND
     - name: Refresh today's finished basketball outcomes (artifact only)
       working-directory: basketball
       run: |
         python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<'PRIVATE_COMMAND'
-        mvn -B exec:java -Dexec.mainClass=com.basketbol.experiment.OutcomeRefresh -Dexec.args="../pipeline-output/basketball-replay.json ../pipeline-output/basketball-outcome-audit.json"
+        mvn -B exec:java -Dexec.mainClass=com.basketbol.experiment.OutcomeRefresh -Dexec.args="../pipeline-output/basketball-replay.json ../pipeline-output/basketball-outcome-audit.json ${{ steps.cfg.outputs.refresh_flag }}"
         PRIVATE_COMMAND
     - name: Validate baseline parity and train on earlier days only
       if: steps.cfg.outputs.run_mode != 'control'

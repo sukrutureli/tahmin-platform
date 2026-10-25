@@ -93,8 +93,9 @@ def main():
             if source_run.get('head_branch')!=BRANCH or source_run.get('conclusion')!='success' or source_run.get('path')!='.github/workflows/ensemble-market-validation.yml' or not candidates:raise ValueError('No verified earlier-day daily source')
             source=(run,candidates[0])
         resolved=configure(c,inputs,source)
+        resolved['refresh_flag']='--missing-only' if (os.environ.get('INPUT_MISSING_ONLY')=='true' or (not inputs.get('mode') and c.get('refresh_missing_only'))) else ''
         with open(os.environ['GITHUB_OUTPUT'],'a') as f:
-            for k in ['target_date','published_ref','previous_run_id','previous_artifact','run_mode']:f.write(f'{k}={resolved[k]}\n')
+            for k in ['target_date','published_ref','previous_run_id','previous_artifact','run_mode','refresh_flag']:f.write(f'{k}={resolved[k]}\n')
     elif a.mode=='begin':begin(a.previous,a.output,a.target_date,a.source_run)
     else:verify(a.output)
 if __name__=='__main__':main()

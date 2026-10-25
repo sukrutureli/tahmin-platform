@@ -25,6 +25,7 @@ public final class OutcomeRefresh {
   try {
   for(JsonNode row:refreshRows){
    if(!"holdout".equals(row.path("role").asText()))continue;
+   if(args.length>2 && "--missing-only".equals(args[2]) && "live HTTP finished scoreboard".equals(row.path("resultSource").asText()))continue;
    ObjectNode entry=mapper.createObjectNode();entry.put("eventId",row.path("eventId").asText());
    entry.put("observedAt",Instant.now().toString());entry.set("snapshotScore",row.path("realScore"));audit.add(entry);
    long remaining=deadline-System.nanoTime();
