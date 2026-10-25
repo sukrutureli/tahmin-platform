@@ -53,15 +53,32 @@ def verify(output):
     lock.update({'completedAt':datetime.now(timezone.utc).isoformat(),'snapshotHashesUnchanged':True,'controlCodeSha':os.environ.get('GITHUB_SHA'),'mode':'HTTP results and settlement only; no prediction/model refit'})
     (output/'control-provenance.json').write_text(json.dumps(lock,indent=2))
 
+
+def recovered_source(run,target):
+    from private_reports import verify_source,SOURCE
+    class Source:
+        def call(self,path):return api(path.removeprefix(SOURCE+'/'))
+    verify_source(Source(),api('actions/runs/'+run),run,target,True)
+    exported=api('actions/runs/40075531544')
+    if exported.get('conclusion')!='success' or exported.get('head_sha')!='d4205538faab9c126ccca49c9f9d816a0458094f' or exported.get('path')!='.github/workflows/export-private-experiment-reports.yml':
+        raise ValueError('Recovery export not verified')
+    artifacts=api('actions/runs/'+run+'/artifacts')['artifacts']
+    name='ensemble-market-validation-'+target
+    if not any(a['id']==12535836798 and a['name']==name and not a.get('expired') for a in artifacts):
+        raise ValueError('Recovered artifact unavailable')
+    return run,name
+
 def main():
     p=argparse.ArgumentParser();p.add_argument('mode',choices=['config','begin','verify']);p.add_argument('--settings',type=Path);p.add_argument('--previous',type=Path);p.add_argument('--output',type=Path);p.add_argument('--target-date');p.add_argument('--source-run');a=p.parse_args()
     if a.mode=='config':
         c=json.loads(a.settings.read_text());inputs={'mode':os.environ.get('INPUT_MODE',''),'target_date':os.environ.get('INPUT_TARGET_DATE',''),'published_ref':os.environ.get('INPUT_PUBLISHED_REF','')};target=inputs['target_date'] or c['target_date'];mode=inputs['mode'] or ('control' if c.get('control_target_date')==target else 'daily');source=None
         if mode=='control':
-            run=os.environ.get('INPUT_SOURCE_RUN','')
+            run=os.environ.get('INPUT_SOURCE_RUN','') or str(c.get('control_source_run_id',''))
             if run:
                 if not run.isdigit():raise ValueError('Invalid source run')
                 source=select_source([api('actions/runs/'+run)],target,lambda i:api(f'actions/runs/{i}/artifacts')['artifacts'])
+                if source is None and run=='40026399108' and target=='2026-10-24':
+                    source=recovered_source(run,target)
             else:
                 for page in range(1,4):
                     runs=api(f'actions/runs?branch=experiment%2Fensemble-market-validation&status=success&per_page=30&page={page}')['workflow_runs']

@@ -6,6 +6,7 @@ import com.basketbol.scraper.HistoryApiClient;
 import java.nio.file.*;
 import java.time.Instant;
 import java.io.IOException;
+import java.util.concurrent.*;
 
 /** Refresh labels after predictions are frozen; artifact files only, no Application or Telegram. */
 public final class OutcomeRefresh {
@@ -13,18 +14,28 @@ public final class OutcomeRefresh {
   ObjectMapper mapper=new ObjectMapper();Path replay=Path.of(args[0]);
   ArrayNode rows=(ArrayNode)mapper.readTree(replay.toFile());ArrayNode audit=mapper.createArrayNode();
   ResultApiClient client=new ResultApiClient();int fetched=0;
+  long deadline=System.nanoTime()+TimeUnit.MINUTES.toNanos(12);
+  ExecutorService executor=Executors.newSingleThreadExecutor(r->{Thread t=new Thread(r,"bounded-result-refresh");t.setDaemon(true);return t;});
+  try {
   for(JsonNode row:rows){
    if(!"holdout".equals(row.path("role").asText()))continue;
    ObjectNode entry=mapper.createObjectNode();entry.put("eventId",row.path("eventId").asText());
    entry.put("observedAt",Instant.now().toString());entry.set("snapshotScore",row.path("realScore"));audit.add(entry);
+   long remaining=deadline-System.nanoTime();
+   if(remaining<=0){entry.put("status","time budget; refresh stopped");break;}
+   Future<String> pending=executor.submit(()->client.finishedScore("https://istatistik.nesine.com/"+row.path("eventId").asText()+"/ozet",2));
    try{
-    String score=client.finishedScore("https://istatistik.nesine.com/"+row.path("eventId").asText()+"/ozet",2);
+    String score=pending.get(Math.min(remaining,TimeUnit.SECONDS.toNanos(90)),TimeUnit.NANOSECONDS);
     if(score!=null){((ObjectNode)row).put("realScore",score);((ObjectNode)row).put("resultSource","live HTTP finished scoreboard");entry.put("score",score);entry.put("status","finished");fetched++;}
     else entry.put("status","not finished; frozen final retained if present");
-   }catch(HistoryApiClient.RateLimitException ex){entry.put("status","rate limit; refresh stopped");entry.put("error",ex.getMessage());entry.put("cooldownStopped",true);break;
-   }catch(IOException ex){entry.put("status","request failed; frozen final retained if present");entry.put("error",ex.getMessage());
+   }catch(TimeoutException ex){pending.cancel(true);entry.put("status","request timeout; refresh stopped");break;
+   }catch(ExecutionException ex){
+    entry.put("status","request failed; frozen final retained if present");
+    if(ex.getCause() instanceof HistoryApiClient.RateLimitException){entry.put("status","rate limit; refresh stopped");entry.put("cooldownStopped",true);break;}
+    if(!(ex.getCause() instanceof IOException))throw ex;
    }
   }
+  } finally {executor.shutdownNow();}
   mapper.writerWithDefaultPrettyPrinter().writeValue(replay.toFile(),rows);
   mapper.writerWithDefaultPrettyPrinter().writeValue(Path.of(args[1]).toFile(),audit);
   System.out.println("Artifact outcome refresh: attempted="+audit.size()+", finished="+fetched);

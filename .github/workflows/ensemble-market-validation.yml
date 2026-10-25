@@ -295,6 +295,14 @@ jobs:
         python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<'PRIVATE_COMMAND'
         python experiments/ensemble_validation/score_research.py freeze --output pipeline-output --previous previous
         PRIVATE_COMMAND
+    - name: Save immutable forecasts before HTTP settlement
+      if: steps.cfg.outputs.run_mode != 'control'
+      uses: ./.github/actions/private-upload
+      with:
+        name: frozen-forecasts-${{ steps.cfg.outputs.target_date }}
+        path: pipeline-output/
+        retention-days: 30
+        key: ${{ secrets.PRIVATE_ARTIFACT_KEY }}
     - name: Refresh today's finished football outcomes (artifact only)
       working-directory: football
       run: |

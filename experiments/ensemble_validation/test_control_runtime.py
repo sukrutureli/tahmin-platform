@@ -33,3 +33,24 @@ class DispatchInputTests(unittest.TestCase):
         r=configure(c,{'mode':'daily','target_date':'2026-10-19','published_ref':'b'*40},('2','ensemble-market-validation-2026-10-18'))
         self.assertEqual(r['published_ref'],'b'*40);self.assertEqual(r['previous_run_id'],'2');self.assertEqual(c['published_ref'],'a'*40)
 
+
+class RecoverySourceTests(unittest.TestCase):
+    def test_recovery_requires_verified_export_and_exact_artifact(self):
+        from unittest.mock import patch
+        from control_runtime import recovered_source
+        run={'head_branch':BRANCH,'path':'.github/workflows/ensemble-market-validation.yml','head_sha':'66c9642a31f744afa00a448ff666c4fdeeb9e56a','status':'completed','conclusion':'failure','run_attempt':1}
+        names=['Freeze choices with available initial prices before results','Freeze separate score research candidates (daily only)','Verify provenance and history boundaries','Show initial odds and MBS in prediction HTML','Run ./.github/actions/private-upload','Save bounded reports to private repository']
+        steps=[{'name':n,'number':i,'conclusion':'success' if i<5 else 'failure'} for i,n in enumerate(names)]
+        export={'conclusion':'success','head_sha':'d4205538faab9c126ccca49c9f9d816a0458094f','path':'.github/workflows/export-private-experiment-reports.yml'}
+        artifact={'id':12535836798,'name':'ensemble-market-validation-2026-10-24','expired':False}
+        def api(path):
+            if '/jobs?' in path:return {'total_count':1,'jobs':[{'steps':steps}]}
+            if path.endswith('/artifacts'):return {'artifacts':[artifact]}
+            if path.endswith('40075531544'):return export
+            return run
+        with patch('control_runtime.api',side_effect=api):
+            self.assertEqual(recovered_source('40026399108','2026-10-24'),('40026399108',artifact['name']))
+            export['conclusion']='failure'
+            with self.assertRaises(ValueError):recovered_source('40026399108','2026-10-24')
+            export['conclusion']='success';artifact['expired']=True
+            with self.assertRaises(ValueError):recovered_source('40026399108','2026-10-24')
