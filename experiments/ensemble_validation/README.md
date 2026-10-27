@@ -550,3 +550,21 @@ controls are discoverable through the ordinary production-to-experiment coordina
 original published daily inputs and the refreshed 24 October artifact. Actual new
 recording times remain visible; late records are not counted as pre-kickoff evidence.
 The opponent-locked-v1 model, score distribution and selection policy are unchanged.
+
+## 27 October: MBS/selection filters and score concentration candidate
+
+The two new mobile reports expose presentation-only MBS and selected-bet filters.
+Every row carries the initial saved MBS and its frozen available-price-v1 label;
+the controls combine with search, minimum odds, started/finished toggles and reset.
+Filtering never changes ranks, saved choices, evaluation cohorts or denominators.
+
+`score-research-v2` adds a fourth isolated football-score candidate from 28 October.
+It keeps the same frozen available-price-v1 market and prior-day residual means,
+then chooses one dispersion from the prespecified `[Poisson, 2, 3, 5, 8, 12]`
+grid using minimum exact-score log loss on completed pre-kickoff records strictly
+before the target date. Same-day outcomes cannot select it. Reports add 1-1 modal
+share, most-common modal share and distinct modal-score count alongside exact hit,
+top-three hit, MAE, log loss and tail Brier metrics. This measures concentration;
+it does not force cosmetic score variety. Existing v1 snapshots remain readable
+and settle without generating the new candidate. The locked opponent model, main,
+production workflows, market selections and Telegram remain unchanged.

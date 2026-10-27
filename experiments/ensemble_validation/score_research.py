@@ -8,12 +8,15 @@ from conditional_score import compatible
 from score_distribution import intensities,log_probability
 from report import parse_score
 
-VERSION='score-research-v1'
+VERSION='score-research-v2'
+LEGACY_VERSION='score-research-v1'
 FIRST='2026-10-23'
+CONCENTRATION_FIRST='2026-10-28'
 SNAPSHOT='score-research-before-results.json'
 JOURNAL='score-research-journal.json'
-CANDIDATES=('locked','calibrated','overdispersed')
-LABELS={'locked':'Mevcut dağılım','calibrated':'Düzeltilmiş gol beklentisi','overdispersed':'Geniş gol dağılımı'}
+CANDIDATES_V1=('locked','calibrated','overdispersed')
+CANDIDATES=CANDIDATES_V1+('validatedDispersion',)
+LABELS={'locked':'Mevcut dağılım','calibrated':'Düzeltilmiş gol beklentisi','overdispersed':'Geniş gol dağılımı','validatedDispersion':'Geçmiş doğrulamalı yayılım'}
 def read(p):return json.loads(Path(p).read_text())
 def write(p,v):Path(p).write_text(json.dumps(v,ensure_ascii=False,allow_nan=False,indent=2)+'\n')
 def sha(p):return hashlib.sha256(Path(p).read_bytes()).hexdigest()
@@ -48,11 +51,25 @@ def fit(records,target):
     n=len(train)
     # Prespecified additive residual calibration with shrinkage; no same-day tuning.
     bias=[max(-1.,min(1.,sum(r['actual'][j]-r['mean'][j] for r in train)/(n+30))) if n>=30 else 0. for j in (0,1)]
+    grid=[None,2,3,5,8,12];losses={}
+    if n>=30:
+        for k in grid:
+            loss=0.
+            for r in train:
+                mean=intensities([x+bias[i] for i,x in enumerate(r['mean'])])
+                model=dict(r.get('distribution') or {'dispersion':None,'rho':0}) if k is None else {'dispersion':k,'rho':0}
+                loss-=log_probability(r['actual'],mean,model)
+            losses['poisson' if k is None else str(k)]=loss/n
+    selected=min(grid,key=lambda k:(losses.get('poisson' if k is None else str(k),float('inf')),grid.index(k))) if losses else None
     return {'bias':bias,'trainingCount':n,'trainingDates':sorted({r['date'] for r in train}),
-            'active':n>=30,'minimumTrainingCount':30,'shrinkage':30,'maxAbsBias':1.,'dispersionCandidate':5}
+            'active':n>=30,'minimumTrainingCount':30,'shrinkage':30,'maxAbsBias':1.,'dispersionCandidate':5,
+            'dispersionGrid':grid,'selectedDispersion':selected,'dispersionLogLoss':losses,
+            'selectionPolicy':'Minimum exact-score log loss on completed pre-kickoff records strictly before target date'}
 def forecast(row,candidate,params):
     mean=intensities([x+(params['bias'][i] if candidate!='locked' else 0) for i,x in enumerate(row['mean'])])
-    model=dict(row['distribution']) if candidate!='overdispersed' else {'dispersion':5,'rho':0}
+    if candidate=='overdispersed':model={'dispersion':5,'rho':0}
+    elif candidate=='validatedDispersion' and params.get('selectedDispersion') is not None:model={'dispersion':params['selectedDispersion'],'rho':0}
+    else:model=dict(row['distribution'])
     k=model['dispersion'];bounds=[max(40,math.ceil(x+16*math.sqrt(x+(x*x/k if k else 0)))) for x in mean]
     marg=[]
     for x,n in zip(mean,bounds):
@@ -90,17 +107,22 @@ def metrics(rows,candidate):
             'logLoss':-sum(log_probability(r['actual'],p['mean'],p['distribution']) for r,p in pairs)/n,
             'zeroGoalBrier':sum((p['zeroGoalProbability']-int(0 in r['actual']))**2 for r,p in pairs)/n,
             'fourPlusBrier':sum((p['fourPlusProbability']-int(sum(r['actual'])>=4))**2 for r,p in pairs)/n}
-def blocks(rows):
+def names_for(book):
+    if book.get('candidates'):return tuple(book['candidates'])
+    return tuple(next(iter(book.get('rows',[])),{}).get('candidates',{})) or CANDIDATES_V1
+def blocks(rows,names=CANDIDATES):
     subsets={'all':rows,'zeroGoal':[r for r in rows if r.get('actual') is not None and 0 in r['actual']],
              'fourPlus':[r for r in rows if r.get('actual') is not None and sum(r['actual'])>=4]}
-    return {name:{c:metrics(rs,c) for c in CANDIDATES} for name,rs in subsets.items()}
-def diagnostics(rows):
+    return {name:{c:metrics(rs,c) for c in names} for name,rs in subsets.items()}
+def diagnostics(rows,names=CANDIDATES):
     result={}
-    for c in CANDIDATES:
+    for c in names:
         ps=[r['candidates'][c] for r in rows];counts={}
         for p in ps:
             s='-'.join(map(str,p['score']));counts[s]=counts.get(s,0)+1
-        result[c]={'count':len(ps),'modalScoreCounts':counts,
+        one=counts.get('1-1',0);top=max(counts.items(),key=lambda x:x[1]) if counts else (None,0)
+        result[c]={'count':len(ps),'modalScoreCounts':counts,'oneOneCount':one,'oneOneRate':one/len(ps) if ps else None,
+                   'uniqueModalScores':len(counts),'topModalScore':top[0],'topModalRate':top[1]/len(ps) if ps else None,
                    'meanGoals':np.mean([p['mean'] for p in ps],axis=0).tolist() if ps else None,
                    'betweenMatchGoalStd':np.std([p['mean'] for p in ps],axis=0).tolist() if ps else None}
     return result
@@ -111,12 +133,12 @@ def retrospective(records):
         for r in records:
             if r['date']==day and r.get('originalBeforeKickoff') and r.get('actual') is not None:
                 out.append(dict(r,candidates={c:forecast(r,c,params) for c in CANDIDATES}))
-    return {'policy':'Retrospective walk-forward; not independent success','metrics':blocks(out)}
+    return {'policy':'Retrospective walk-forward; not independent success','metrics':blocks(out,CANDIDATES)}
 def freeze(root,previous=None,now=None):
     path=root/SNAPSHOT
     if path.exists():
         b=read(path)
-        if b['version']!=VERSION or b['sourceSha256']!=sha(root/'priced-before-results.json') or b['modelSha256']!=sha(root/'stability-model.json'):raise ValueError('Research source mismatch')
+        if b['version'] not in (LEGACY_VERSION,VERSION) or b['sourceSha256']!=sha(root/'priced-before-results.json') or b['modelSha256']!=sha(root/'stability-model.json'):raise ValueError('Research source mismatch')
         if b['snapshotSha256']!=signature({k:v for k,v in b.items() if k!='snapshotSha256'}):raise ValueError('Research snapshot changed')
         return b
     source=read(root/'priced-before-results.json');target=source['targetDate']
@@ -130,7 +152,7 @@ def freeze(root,previous=None,now=None):
         r['candidates']={c:forecast(r,c,params) for c in CANDIDATES}
         if r.get('lockedScore')!=r['candidates']['locked']['score']:raise ValueError('Research baseline differs from frozen displayed score')
         rows.append(r)
-    b={'version':VERSION,'targetDate':target,'firstIndependentDate':FIRST,'createdAt':now.isoformat(),
+    b={'version':VERSION,'targetDate':target,'firstIndependentDate':FIRST,'concentrationCandidateFirstIndependentDate':CONCENTRATION_FIRST,'candidates':list(CANDIDATES),'createdAt':now.isoformat(),
        'sourceSha256':sha(root/'priced-before-results.json'),'modelSha256':sha(root/'stability-model.json'),
        'parameters':params,'trainingDataSha256':signature(records),'rows':rows,
        'excludedFixtures':len(source['systems']['football']['experiment'])-len(rows),'retrospective':retrospective(records)}
@@ -138,34 +160,37 @@ def freeze(root,previous=None,now=None):
     return b
 def settle(root):
     if not (root/SNAPSHOT).exists():return None
-    b=freeze(root);labels={str(r['eventId']):r for r in read(root/'football-replay.json') if r['date']==b['targetDate']}
+    b=freeze(root);names=names_for(b);labels={str(r['eventId']):r for r in read(root/'football-replay.json') if r['date']==b['targetDate']}
     rows=[dict(r,actual=finished(labels.get(r['eventId'],{}))) for r in b['rows']]
     journal=read(root/JOURNAL) if (root/JOURNAL).exists() else {'version':VERSION,'records':[]}
     records={(r['date'],r['eventId']):r for r in journal['records']}
     for r in baseline_rows(root):records[(r['date'],r['eventId'])]=r
-    write(root/JOURNAL,{'version':VERSION,'records':list(records.values())})
+    write(root/JOURNAL,{'version':b['version'],'records':list(records.values())})
     prospective=[r for r in rows if r['beforeKickoff']]
-    result={'version':VERSION,'targetDate':b['targetDate'],'firstIndependentDate':FIRST,'snapshotSha256':b['snapshotSha256'],
+    result={'version':b['version'],'targetDate':b['targetDate'],'firstIndependentDate':FIRST,'snapshotSha256':b['snapshotSha256'],
             'updatedAt':datetime.now(timezone.utc).isoformat(),'parameters':b['parameters'],'excludedFixtures':b['excludedFixtures'],
             'recorded':len(rows),'beforeKickoffRecorded':len(prospective),'lateOrPreview':len(rows)-len(prospective),
-            'pending':sum(r['actual'] is None for r in rows),'concentration':diagnostics(rows),
-            'beforeKickoff':blocks(prospective),'allIncludingLate':blocks(rows),'retrospective':b['retrospective']}
+            'pending':sum(r['actual'] is None for r in rows),'concentration':diagnostics(rows,names),
+            'beforeKickoff':blocks(prospective,names),'allIncludingLate':blocks(rows,names),'retrospective':b['retrospective']}
     write(root/'score-research-evaluation.json',result);render(root,b,rows,result);return result
 def render(root,book,rows,result):
+    names=names_for(book)
+    intro='Yeni yayılım adayının ilk bağımsız günü 28 Ekim 2026.' if 'validatedDispersion' in names else 'Bağımsız başlangıç 23 Ekim 2026.'
+    concentration_note=(' Geçmiş doğrulamalı aday aynı gün sonucuna bakmadan, yalnız önceki tamamlanmış maçlarda en düşük tam-skor log loss veren yayılımı kullanır.' if 'validatedDispersion' in names else '')
     esc=lambda s:html.escape(str(s))
     score=lambda s:'-'.join(map(str,s)) if s is not None else '—'
     cells=[]
     for r in sorted(rows,key=lambda r:(r['time'],r['eventId'])):
         c=r['chosen'];label={'MS':['MS1','MSX','MS2'],'BTTS':['KG Var','KG Yok'],'OU':['2.5 Üst','2.5 Alt']}[c['market']][c['option']]
-        forecasts=''.join('<div><small>'+LABELS[name]+'</small><b>'+score(r['candidates'][name]['score'])+'</b><span>'+esc(' · '.join(score(a['score'])+' (%'+format(100*a['probability'],'.1f')+')' for a in r['candidates'][name]['top3']))+'</span></div>' for name in CANDIDATES)
+        forecasts=''.join('<div><small>'+LABELS[name]+'</small><b>'+score(r['candidates'][name]['score'])+'</b><span>'+esc(' · '.join(score(a['score'])+' (%'+format(100*a['probability'],'.1f')+')' for a in r['candidates'][name]['top3']))+'</span></div>' for name in names)
         cells.append('<article data-search="'+esc(r['name'])+'"><h2>'+esc(r['time']+' '+r['name'])+'</h2><p>'+esc(label)+' · '+('Maç öncesi' if r['beforeKickoff'] else 'Geç kayıt / hazırlık')+' · Gerçek skor: <b>'+score(r['actual'])+'</b></p><section>'+forecasts+'</section></article>')
     def panel(title,data):
         body=''
-        for name in CANDIDATES:
+        for name in names:
             m=data['all'][name];fmt=lambda v:'—' if v is None else format(v,'.3f')
             body+='<tr><td>'+LABELS[name]+'</td><td>'+str(m['count'])+'</td><td>'+str(m['exactHits'])+'</td><td>'+str(m['top3Hits'])+'</td><td>'+fmt(m['teamMAE'])+'</td><td>'+fmt(m['logLoss'])+'</td></tr>'
         return '<h2>'+title+'</h2><div class="scroll"><table><tr><th>Yöntem</th><th>N</th><th>Tam skor</th><th>İlk 3</th><th>MAE ↓</th><th>Log loss ↓</th></tr>'+body+'</table></div>'
-    doc='<!doctype html><html lang="tr"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Futbol Skor Deneyi · '+book['targetDate']+'</title><style>body{font:16px system-ui;background:#eff3f8;color:#18344b;margin:0;padding:16px}main{max-width:1100px;margin:auto}h1{background:#15334d;color:white;padding:24px;border-radius:18px}article{background:white;padding:16px;border-radius:14px;margin:14px 0}h2{font-size:18px}section{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}section div{background:#f2f7fa;padding:12px;border-radius:10px}small,span,b{display:block}b{font-size:22px}span,small{font-size:13px}input{font:inherit;padding:12px;width:100%;box-sizing:border-box}.scroll{overflow:auto}table{border-collapse:collapse;width:100%;background:white}th,td{padding:10px;border-bottom:1px solid #ccd7e0;text-align:left}p{line-height:1.6}[hidden]{display:none!important}@media(max-width:650px){section{grid-template-columns:1fr}section div{display:grid;grid-template-columns:1fr auto}section span{grid-column:1/-1}}</style><main><h1>Futbol Skor Deneyi · '+book['targetDate']+'</h1><p>Ayrı araştırma: score-research-v1. Bağımsız başlangıç 23 Ekim 2026. Ana model ve bahis tercihleri değişmez. Kontroller kayıtlı skorları yeniden hesaplamaz.</p><p>Son değerlendirme: '+esc(result['updatedAt'])+' · Bekleyen: '+str(result['pending'])+' · Eksik oran/girdi nedeniyle dışarıda: '+str(result['excludedFixtures'])+'</p><p>Gol düzeltmesinin geçmiş örnek sayısı: '+str(book['parameters']['trainingCount'])+'. En az 30 örnek yoksa düzeltme uygulanmaz. Yüzdeler tam skorun koşulsuz olasılığıdır; bahsin güveni değildir. İlk üç skor bahisle uyumludur. Log loss tüm gerçek skorları değerlendirir.</p>'+panel('Bağımsız maç öncesi ölçüm',result['beforeKickoff'])+panel('En az bir takımın gol atamadığı maçlar',{'all':result['beforeKickoff']['zeroGoal']})+panel('Toplam 4+ gollü maçlar',{'all':result['beforeKickoff']['fourPlus']})+'<details><summary>Geç kayıtlar dahil — keşif amaçlı</summary>'+panel('Bağımsız başarı sayılmaz',result['allIncludingLate'])+'</details><details><summary>Geçmiş gün gün test — geriye dönük</summary>'+panel('Her gün yalnız önceki günlerle ayarlandı',result['retrospective']['metrics'])+'</details><h2>Maçlar</h2><input type="search" id="q" placeholder="Takım / maç ara" aria-label="Maç ara">'+''.join(cells)+'</main><script>const norm=s=>s.replace(/ı/g,"i").normalize("NFD").replace(/[\\u0300-\\u036f]/g,"").toLowerCase();document.getElementById("q").addEventListener("input",e=>{const terms=norm(e.target.value).split(/\\s+/).filter(Boolean);document.querySelectorAll("article").forEach(r=>r.hidden=!terms.every(t=>norm(r.dataset.search).includes(t)))});</script></html>'
+    doc='<!doctype html><html lang="tr"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Futbol Skor Deneyi · '+book['targetDate']+'</title><style>body{font:16px system-ui;background:#eff3f8;color:#18344b;margin:0;padding:16px}main{max-width:1100px;margin:auto}h1{background:#15334d;color:white;padding:24px;border-radius:18px}article{background:white;padding:16px;border-radius:14px;margin:14px 0}h2{font-size:18px}section{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}section div{background:#f2f7fa;padding:12px;border-radius:10px}small,span,b{display:block}b{font-size:22px}span,small{font-size:13px}input{font:inherit;padding:12px;width:100%;box-sizing:border-box}.scroll{overflow:auto}table{border-collapse:collapse;width:100%;background:white}th,td{padding:10px;border-bottom:1px solid #ccd7e0;text-align:left}p{line-height:1.6}[hidden]{display:none!important}@media(max-width:650px){section{grid-template-columns:1fr}section div{display:grid;grid-template-columns:1fr auto}section span{grid-column:1/-1}}</style><main><h1>Futbol Skor Deneyi · '+book['targetDate']+'</h1><p>Ayrı araştırma: '+esc(book['version'])+'. '+esc(intro)+' Ana model ve bahis tercihleri değişmez. Kontroller kayıtlı skorları yeniden hesaplamaz.</p><p>Son değerlendirme: '+esc(result['updatedAt'])+' · Bekleyen: '+str(result['pending'])+' · Eksik oran/girdi nedeniyle dışarıda: '+str(result['excludedFixtures'])+'</p><p>Gol düzeltmesinin geçmiş örnek sayısı: '+str(book['parameters']['trainingCount'])+'. En az 30 örnek yoksa düzeltme uygulanmaz. Yüzdeler tam skorun koşulsuz olasılığıdır; bahsin güveni değildir. İlk üç skor bahisle uyumludur. Log loss tüm gerçek skorları değerlendirir.</p><p><b>Görünen 1-1 yoğunluğu:</b> '+esc(' · '.join(LABELS[n]+': %'+format(100*(result['concentration'][n]['oneOneRate'] or 0),'.1f') for n in names))+'.'+esc(concentration_note)+'</p>'+panel('Bağımsız maç öncesi ölçüm',result['beforeKickoff'])+panel('En az bir takımın gol atamadığı maçlar',{'all':result['beforeKickoff']['zeroGoal']})+panel('Toplam 4+ gollü maçlar',{'all':result['beforeKickoff']['fourPlus']})+'<details><summary>Geç kayıtlar dahil — keşif amaçlı</summary>'+panel('Bağımsız başarı sayılmaz',result['allIncludingLate'])+'</details><details><summary>Geçmiş gün gün test — geriye dönük</summary>'+panel('Her gün yalnız önceki günlerle ayarlandı',result['retrospective']['metrics'])+'</details><h2>Maçlar</h2><input type="search" id="q" placeholder="Takım / maç ara" aria-label="Maç ara">'+''.join(cells)+'</main><script>const norm=s=>s.replace(/ı/g,"i").normalize("NFD").replace(/[\\u0300-\\u036f]/g,"").toLowerCase();document.getElementById("q").addEventListener("input",e=>{const terms=norm(e.target.value).split(/\\s+/).filter(Boolean);document.querySelectorAll("article").forEach(r=>r.hidden=!terms.every(t=>norm(r.dataset.search).includes(t)))});</script></html>'
     (root/'futbol-skor-deneyi.html').write_text(doc)
 if __name__=='__main__':
     p=argparse.ArgumentParser();p.add_argument('mode',choices=['freeze','settle']);p.add_argument('--output',type=Path,required=True);p.add_argument('--previous',type=Path);a=p.parse_args()

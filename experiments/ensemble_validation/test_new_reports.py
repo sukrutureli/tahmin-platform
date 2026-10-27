@@ -19,6 +19,8 @@ class NewReportTests(unittest.TestCase):
             for folder,sport in [('futbol','football'),('basketbol','basketball')]:
                 s=(root/(folder+'-yeni.html')).read_text();self.assertIn(sport+' Home',s);self.assertIn('Oran <b>1.80</b>',s);self.assertIn('MBS <b>2</b>',s);self.assertIn('Kazandı',s);self.assertIn('id="min-odds"',s);self.assertIn('data-odds="1.8"',s)
                 self.assertIn('id="match-search"',s);self.assertIn('data-search="'+sport+' Home - Away"',s)
+                self.assertIn('id="mbs-filter"',s);self.assertIn('id="pick-filter"',s)
+                self.assertIn('data-mbs="2"',s);self.assertIn('data-pick="MS1"',s)
             self.assertEqual(before,{n:(root/n).read_bytes() for n in before})
     def test_later_day_cannot_use_unlocked_research_forecasts(self):
         with tempfile.TemporaryDirectory() as t:
@@ -35,17 +37,18 @@ class FilterTests(unittest.TestCase):
         harness="""
 import vm from 'node:vm';import assert from 'node:assert/strict';
 const input={value:'',addEventListener(t,f){this.run=f}},finished={checked:false,addEventListener(t,f){this.run=f}},started={checked:false,addEventListener(t,f){this.run=f}},clear={addEventListener(t,f){this.run=f}},count={};
-const search={value:'',addEventListener(t,f){this.run=f}};
+const search={value:'',addEventListener(t,f){this.run=f}};const makeSelect=()=>({value:'',children:[],addEventListener(t,f){this.run=f},appendChild(x){this.children.push(x)}}),mbs=makeSelect(),pick=makeSelect();
 const rows=[
-{dataset:{odds:'1.8',finished:'1',kickoff:'2026-10-18T13:00:00+03:00'}},
-{dataset:{odds:'1.8',finished:'0',kickoff:'2026-10-18T14:00:00+03:00'}},
-{dataset:{odds:'1.4',finished:'0',kickoff:'2026-10-18T15:00:00+03:00'}},
-{dataset:{odds:'2.0',finished:'0',kickoff:'2026-10-18T15:00:00+03:00'}},
-{dataset:{odds:'1.9',finished:'0',kickoff:''}}];let clock=Date.parse('2026-10-18T11:00:00Z'),timer;
-const ctx={Date:class extends Date{static now(){return clock}},Number,document:{getElementById:id=>({'min-odds':input,'hide-finished':finished,'hide-started':started,'clear-odds':clear,'filter-count':count}[id]),querySelectorAll:()=>rows},window:{addEventListener(){}},setInterval(f){timer=f}};
+{dataset:{odds:'1.8',mbs:'1',pick:'MS1',finished:'1',kickoff:'2026-10-18T13:00:00+03:00'}},
+{dataset:{odds:'1.8',mbs:'2',pick:'KG Var',finished:'0',kickoff:'2026-10-18T14:00:00+03:00'}},
+{dataset:{odds:'1.4',mbs:'2',pick:'MS1',finished:'0',kickoff:'2026-10-18T15:00:00+03:00'}},
+{dataset:{odds:'2.0',mbs:'3',pick:'KG Var',finished:'0',kickoff:'2026-10-18T15:00:00+03:00'}},
+{dataset:{odds:'1.9',mbs:'',pick:'MS2',finished:'0',kickoff:''}}];let clock=Date.parse('2026-10-18T11:00:00Z'),timer;
+const ctx={Date:class extends Date{static now(){return clock}},Number,document:{createElement:()=>({}),getElementById:id=>({'min-odds':input,'mbs-filter':mbs,'pick-filter':pick,'hide-finished':finished,'hide-started':started,'clear-odds':clear,'filter-count':count}[id]),querySelectorAll:()=>rows},window:{addEventListener(){}},setInterval(f){timer=f}};
 rows.forEach((r,i)=>r.dataset.search=['İstanbul - Beşiktaş','IĞDIR - Şanlıurfa','Fenerbahçe - İzmir','Beşiktaş - İstanbul','Other - Away'][i]);
 const originalGet=ctx.document.getElementById;ctx.document.getElementById=id=>id==='match-search'?search:originalGet(id);
 vm.runInNewContext(SCRIPT,ctx);
+assert.deepEqual(pick.children.map(x=>x.value),['KG Var','MS1','MS2']);
 search.value='istanbul BESIKTAS';search.run();assert.deepEqual(rows.map(r=>r.hidden),[false,true,true,false,true]);
 input.value='1.9';input.run();assert.deepEqual(rows.map(r=>r.hidden),[true,true,true,false,true]);assert.equal(count.textContent,'1 / 5 maç');
 search.value='ığdır';search.run();assert.ok(rows.every(r=>r.hidden));
@@ -57,5 +60,6 @@ started.checked=true;started.run();assert.deepEqual(rows.map(r=>r.hidden),[true,
 input.value='1.50';input.run();assert.deepEqual(rows.map(r=>r.hidden),[true,true,true,false,false]);assert.equal(count.textContent,'2 / 5 maç');
 clock=Date.parse('2026-10-18T12:00:00Z');timer();assert.deepEqual(rows.map(r=>r.hidden),[true,true,true,true,false]);
 clear.run();assert.ok(rows.every(r=>!r.hidden));assert.equal(finished.checked,false);assert.equal(started.checked,false);
+mbs.value='2';mbs.run();assert.deepEqual(rows.map(r=>r.hidden),[true,false,false,true,true]);pick.value='MS1';pick.run();assert.deepEqual(rows.map(r=>r.hidden),[true,true,false,true,true]);clear.run();assert.ok(rows.every(r=>!r.hidden));
 """.replace('SCRIPT',json.dumps(script))
         subprocess.run(['node','--input-type=module'],input=harness,text=True,check=True,capture_output=True)

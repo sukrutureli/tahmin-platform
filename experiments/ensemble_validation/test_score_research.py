@@ -18,6 +18,7 @@ class ScoreResearchTests(unittest.TestCase):
             before={f.name:f.read_bytes() for f in p.iterdir()}
             b=freeze(p,now=datetime(2026,10,23,5,tzinfo=timezone.utc));raw=(p/SNAPSHOT).read_bytes()
             self.assertTrue(b['rows'][0]['beforeKickoff'])
+            self.assertEqual(b['version'],VERSION);self.assertIn('validatedDispersion',b['rows'][0]['candidates'])
             for name,data in before.items():self.assertEqual((p/name).read_bytes(),data)
             write(p/'football-replay.json',[{'date':'2026-10-23','eventId':'1','realScore':'4-1'}])
             result=settle(p);self.assertEqual(result['beforeKickoff']['all']['locked']['count'],1)
@@ -31,13 +32,19 @@ class ScoreResearchTests(unittest.TestCase):
             broken=read(p/SNAPSHOT);broken['rows'][0]['mean']=[3,3];write(p/SNAPSHOT,broken)
             with self.assertRaises(ValueError):settle(p)
     def test_future_today_and_late_labels_cannot_train(self):
-        r={'date':'2026-10-22','mean':[1.,1.],'actual':[3,0],'originalBeforeKickoff':True}
+        r={'date':'2026-10-22','mean':[1.,1.],'distribution':{'dispersion':None,'rho':0},'actual':[3,0],'originalBeforeKickoff':True}
         records=[dict(r,eventId=str(i)) for i in range(30)]
         expected=fit(records,'2026-10-23')
         polluted=records+[dict(r,date='2026-10-23',actual=[50,50])]*100+[dict(r,originalBeforeKickoff=False,actual=[50,50])]*100
         self.assertEqual(expected,fit(polluted,'2026-10-23'))
         self.assertEqual(expected['bias'],[1.,-.5]);self.assertEqual(expected['trainingCount'],30)
         self.assertFalse(fit(records,'2026-10-22')['active'])
+    def test_validated_dispersion_uses_prior_results_and_reports_concentration(self):
+        records=[{'date':'2026-10-22','eventId':str(i),'mean':[1.2,1.1],'distribution':{'dispersion':None,'rho':0},'actual':[0,0] if i%2 else [3,0],'originalBeforeKickoff':True} for i in range(40)]
+        params=fit(records,'2026-10-23');self.assertIn(params['selectedDispersion'],params['dispersionGrid']);self.assertEqual(set(params['dispersionLogLoss']),{'poisson','2','3','5','8','12'})
+        row={'mean':[1.4,1.1],'distribution':{'dispersion':None,'rho':0},'chosen':{'market':'MS','option':0}}
+        d=diagnostics([dict(row,candidates={c:forecast(row,c,params) for c in CANDIDATES},actual=[2,0])])['validatedDispersion']
+        self.assertIn('oneOneRate',d);self.assertIn('uniqueModalScores',d);self.assertIn('topModalRate',d)
     def test_all_choices_compatible_and_top_three_distinct(self):
         for market,options in [('MS',range(3)),('BTTS',range(2)),('OU',range(2))]:
             for i in options:
@@ -69,6 +76,15 @@ class ScoreResearchTests(unittest.TestCase):
     def test_old_control_does_not_create_research_predictions(self):
         with tempfile.TemporaryDirectory() as t:
             p=Path(t);self.seed(p,'2026-10-22');self.assertIsNone(settle(p));self.assertFalse((p/SNAPSHOT).exists())
+    def test_existing_v1_snapshot_remains_settleable_without_fourth_candidate(self):
+        with tempfile.TemporaryDirectory() as t:
+            p=Path(t);self.seed(p);b=freeze(p,now=datetime(2026,10,23,5,tzinfo=timezone.utc))
+            b['version']=LEGACY_VERSION;b.pop('candidates');b.pop('concentrationCandidateFirstIndependentDate')
+            for row in b['rows']:row['candidates'].pop('validatedDispersion')
+            b['retrospective']['metrics']={subset:{k:v for k,v in values.items() if k in CANDIDATES_V1} for subset,values in b['retrospective']['metrics'].items()}
+            b['snapshotSha256']=signature({k:v for k,v in b.items() if k!='snapshotSha256'});write(p/SNAPSHOT,b)
+            write(p/'football-replay.json',[{'date':'2026-10-23','eventId':'1','realScore':'1-1'}])
+            result=settle(p);self.assertEqual(result['version'],LEGACY_VERSION);self.assertNotIn('validatedDispersion',result['beforeKickoff']['all'])
     def test_control_guard_protects_research_snapshot(self):
         from control_runtime import hashes,verify
         with tempfile.TemporaryDirectory() as t:
