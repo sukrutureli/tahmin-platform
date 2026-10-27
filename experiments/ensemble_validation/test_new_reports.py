@@ -4,15 +4,21 @@ from new_reports import reports
 
 class NewReportTests(unittest.TestCase):
     def test_two_sports_and_results_are_rendered_without_changing_any_frozen_source(self):
+        self.check_render('2026-10-19',False)
+
+    def test_checkbox_rollout_preserves_sources(self):
+        self.check_render('2026-10-28',True)
+
+    def check_render(self,target,checkboxes):
         with tempfile.TemporaryDirectory() as t:
             root=Path(t);model={'protocol':{'version':'opponent-locked-v1','first_forecast_date':'2026-10-19'},'payload':{'footballDistribution':{'dispersion':None,'rho':0},'basketballCovariance':[[100,0],[0,100]]}}
             (root/'stability-model.json').write_text(json.dumps(model));digest=hashlib.sha256((root/'stability-model.json').read_bytes()).hexdigest()
             systems={}
             for sport,score in [('football',[1,0]),('basketball',[80,70])]:
-                entry={'sport':sport,'date':'2026-10-19','eventId':'42','name':sport+' Home - Away','time':'20:00','prospectiveBeforeKickoff':True,'score':score,'scoreMean':score,'markets':{'MS':[.7,.2,.1] if sport=='football' else [.7,.3]},'chosen':{'market':'MS','option':0,'confidence':.7}}
+                entry={'sport':sport,'date':target,'eventId':'42','name':sport+' Home - Away','time':'20:00','prospectiveBeforeKickoff':True,'score':score,'scoreMean':score,'markets':{'MS':[.7,.2,.1] if sport=='football' else [.7,.3]},'chosen':{'market':'MS','option':0,'confidence':.7}}
                 systems[sport]={'opponent-locked-v1':[entry]}
-                (root/(sport+'-replay.json')).write_text(json.dumps([{'date':'2026-10-19','eventId':'42','realScore':'-'.join(map(str,score)),'odds':{'ms1':1.8,'mbs':2}}]))
-            (root/'stability-before-results.json').write_text(json.dumps({'targetDate':'2026-10-19','version':'opponent-locked-v1','modelSha256':digest,'systems':systems,'createdAt':'2026-10-18T22:00:00Z'}))
+                (root/(sport+'-replay.json')).write_text(json.dumps([{'date':target,'eventId':'42','realScore':'-'.join(map(str,score)),'odds':{'ms1':1.8,'mbs':2}}]))
+            (root/'stability-before-results.json').write_text(json.dumps({'targetDate':target,'version':'opponent-locked-v1','modelSha256':digest,'systems':systems,'createdAt':'2026-10-18T22:00:00Z'}))
             before={p.name:p.read_bytes() for p in root.iterdir()}
             manifest=reports(root)
             self.assertFalse(manifest['previewOnly']);self.assertEqual(manifest['reports']['futbol']['fixtureCount'],1)
@@ -20,6 +26,8 @@ class NewReportTests(unittest.TestCase):
                 s=(root/(folder+'-yeni.html')).read_text();self.assertIn(sport+' Home',s);self.assertIn('Oran <b>1.80</b>',s);self.assertIn('MBS <b>2</b>',s);self.assertIn('Kazandı',s);self.assertIn('id="min-odds"',s);self.assertIn('data-odds="1.8"',s)
                 self.assertIn('id="match-search"',s);self.assertIn('data-search="'+sport+' Home - Away"',s)
                 self.assertIn('id="mbs-filter"',s);self.assertIn('id="pick-filter"',s)
+                self.assertEqual('<fieldset id="mbs-filter"' in s,checkboxes)
+                self.assertEqual('<select id="mbs-filter"' in s,not checkboxes)
                 self.assertIn('data-mbs="2"',s);self.assertIn('data-pick="MS1"',s)
             self.assertEqual(before,{n:(root/n).read_bytes() for n in before})
     def test_later_day_cannot_use_unlocked_research_forecasts(self):
@@ -32,7 +40,7 @@ if __name__=='__main__':unittest.main()
 class FilterTests(unittest.TestCase):
     def test_odds_finished_and_clock_filters_work_together(self):
         import subprocess
-        from new_reports import FILTER_SCRIPT
+        from new_reports import LEGACY_FILTER_SCRIPT as FILTER_SCRIPT
         script=FILTER_SCRIPT.replace('<script>','').replace('</script>','')
         harness="""
 import vm from 'node:vm';import assert from 'node:assert/strict';
@@ -61,5 +69,36 @@ input.value='1.50';input.run();assert.deepEqual(rows.map(r=>r.hidden),[true,true
 clock=Date.parse('2026-10-18T12:00:00Z');timer();assert.deepEqual(rows.map(r=>r.hidden),[true,true,true,true,false]);
 clear.run();assert.ok(rows.every(r=>!r.hidden));assert.equal(finished.checked,false);assert.equal(started.checked,false);
 mbs.value='2';mbs.run();assert.deepEqual(rows.map(r=>r.hidden),[true,false,false,true,true]);pick.value='MS1';pick.run();assert.deepEqual(rows.map(r=>r.hidden),[true,true,false,true,true]);clear.run();assert.ok(rows.every(r=>!r.hidden));
+""".replace('SCRIPT',json.dumps(script))
+        subprocess.run(['node','--input-type=module'],input=harness,text=True,check=True,capture_output=True)
+
+class CheckboxFilterTests(unittest.TestCase):
+    def test_multi_choice_union_and_combined_filters(self):
+        import subprocess
+        from new_reports import FILTER_SCRIPT
+        script=FILTER_SCRIPT.replace('<script>','').replace('</script>','')
+        harness=r"""
+import vm from 'node:vm';import assert from 'node:assert/strict';
+function element(){return {value:'',checked:false,children:[],addEventListener(t,f){this.run=f},appendChild(x){this.children.push(x)},querySelectorAll(selector){const all=this.children.flatMap(x=>x.type==='checkbox'?[x]:x.children||[]).filter(x=>x.type==='checkbox');return selector==='input:checked'?all.filter(x=>x.checked):all}}}
+const input=element(),search=element(),mbs=element(),pick=element(),finished=element(),started=element(),clear=element(),count={};
+for(const value of ['1','2','3'])mbs.appendChild({...element(),type:'checkbox',value});
+const rows=[
+{dataset:{mbs:'1',pick:'MS1',odds:'1.8',finished:'0',search:'Home A'}},
+{dataset:{mbs:'2',pick:'Üst',odds:'1.9',finished:'0',search:'Home B'}},
+{dataset:{mbs:'2',pick:'Alt',odds:'1.5',finished:'1',search:'Home C'}},
+{dataset:{mbs:'3',pick:'MS1',odds:'2.0',finished:'0',search:'Home D'}},
+{dataset:{mbs:'',pick:'',odds:'0',finished:'0',search:'Other'}}];
+const nodes={'min-odds':input,'match-search':search,'mbs-filter':mbs,'pick-filter':pick,'hide-finished':finished,'hide-started':started,'clear-odds':clear,'filter-count':count};
+const ctx={Date,Number,document:{createElement:element,createTextNode:text=>({text}),getElementById:id=>nodes[id],querySelectorAll:()=>rows},window:{addEventListener(){}},setInterval(){}};
+vm.runInNewContext(SCRIPT,ctx);
+const visible=()=>rows.map(r=>!r.hidden),choose=(group,values)=>{group.querySelectorAll('input').forEach(b=>b.checked=values.includes(b.value));group.run()};
+assert.deepEqual(visible(),[true,true,true,true,true]);
+choose(mbs,['1','2']);assert.deepEqual(visible(),[true,true,true,false,false]);
+choose(pick,['MS1','Üst']);assert.deepEqual(visible(),[true,true,false,false,false]);
+input.value='1.85';input.run();assert.deepEqual(visible(),[false,true,false,false,false]);
+search.value='Home A';search.run();assert.ok(rows.every(r=>r.hidden));
+clear.run();assert.ok(rows.every(r=>!r.hidden));assert.ok([...mbs.querySelectorAll('input'),...pick.querySelectorAll('input')].every(b=>!b.checked));
+choose(pick,['Alt','Üst']);finished.checked=true;finished.run();assert.deepEqual(visible(),[false,true,false,false,false]);
+clear.run();assert.equal(count.textContent,'5 / 5 maç');
 """.replace('SCRIPT',json.dumps(script))
         subprocess.run(['node','--input-type=module'],input=harness,text=True,check=True,capture_output=True)
