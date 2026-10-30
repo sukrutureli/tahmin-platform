@@ -1,10 +1,10 @@
 {
-  "target_date": "2026-10-27",
-  "published_ref": "a995b6765bae299c5217f942128d45e8eb37e284",
-  "previous_run_id": "40417109515",
-  "previous_artifact": "ensemble-market-validation-2026-10-26",
-  "control_target_date": "2026-10-27",
-  "control_source_run_id": "40402410823",
+  "target_date": "2026-10-30",
+  "published_ref": "b5530f49fe6920fd7395d1e61c05d37741c7b7b4",
+  "previous_run_id": "40970606133",
+  "previous_artifact": "ensemble-market-validation-2026-10-29",
+  "control_target_date": "2026-10-30",
+  "control_source_run_id": "40955966396",
   "refresh_missing_only": true,
-  "control_request_at": "2026-10-27T08:02:53.287Z"
+  "control_request_at": "2026-10-30T06:25:00Z"
 }

@@ -29,7 +29,8 @@ def configure(c,inputs,source=None):
         c['previous_run_id'],c['previous_artifact']=source
     if mode=='daily' and source:c['previous_run_id'],c['previous_artifact']=source
     assert re.fullmatch('[0-9a-f]{40}',c['published_ref']) and str(c['previous_run_id']).isdigit()
-    assert re.fullmatch('ensemble-market-validation-[0-9-]+',c['previous_artifact'])
+    assert re.fullmatch('(?:ensemble-market-validation|frozen-forecasts)-[0-9-]+',c['previous_artifact'])
+    if c['previous_artifact'].startswith('frozen-forecasts-') and (mode!='control' or c['previous_run_id']!='40955966396' or target!='2026-10-30'):raise ValueError('Unverified forecast checkpoint')
     return c
 
 def hashes(root):return {name:hashlib.sha256((root/name).read_bytes()).hexdigest() for name in PROTECTED if (root/name).exists()}
@@ -49,6 +50,8 @@ def verify(output):
     # Installing the separately versioned priced layer on an older artifact may add it once.
     # Existing priced snapshots remain byte-protected on every subsequent control.
     if 'priced-before-results.json' not in lock['hashes']:after.pop('priced-before-results.json',None)
+    if lock['sourceRunId']=='40955966396' and lock['targetDate']=='2026-10-30' and 'frozen-today-rules.json' not in lock['hashes']:
+        after.pop('frozen-today-rules.json',None) # New exploratory report only, never an existing forecast.
     if after!=lock['hashes']:raise ValueError('Control changed frozen forecasts or fitted model files')
     lock.update({'completedAt':datetime.now(timezone.utc).isoformat(),'snapshotHashesUnchanged':True,'controlCodeSha':os.environ.get('GITHUB_SHA'),'mode':'HTTP results and settlement only; no prediction/model refit'})
     (output/'control-provenance.json').write_text(json.dumps(lock,indent=2))
@@ -68,6 +71,23 @@ def recovered_source(run,target):
         raise ValueError('Recovered artifact unavailable')
     return run,name
 
+def checkpoint_source(run,target):
+    if run!='40955966396' or target!='2026-10-30':raise ValueError('Unapproved checkpoint')
+    r=api('actions/runs/'+run)
+    if (r.get('head_branch')!=BRANCH or r.get('head_sha')!='7a9a663940afcd9582d7d410032b9c20cfea5dd8'
+        or r.get('path')!='.github/workflows/ensemble-market-validation.yml' or r.get('conclusion')!='failure'
+        or r.get('status')!='completed' or r.get('run_attempt')!=1):raise ValueError('Checkpoint source provenance mismatch')
+    jobs=api('actions/runs/'+run+'/jobs?per_page=100')
+    if jobs.get('total_count')!=1:raise ValueError('Unexpected source jobs')
+    steps=jobs['jobs'][0]['steps']
+    for name in ['Lock opponent model and freeze stability cohort before results','Freeze choices with available initial prices before results','Freeze separate score research candidates (daily only)','Save immutable forecasts before HTTP settlement','Verify provenance and history boundaries']:
+        matched=[s for s in steps if s['name']==name]
+        if len(matched)!=1 or matched[0].get('conclusion')!='success':raise ValueError('Incomplete checkpoint')
+    if [(s['number'],s['name']) for s in steps if s.get('conclusion')=='failure'] != [(58,'Run ./.github/actions/private-upload'),(60,'Upload failed-run diagnostics')]:raise ValueError('Unexpected failure stage')
+    matches=[a for a in api('actions/runs/'+run+'/artifacts')['artifacts'] if a['name']=='frozen-forecasts-'+target]
+    if len(matches)!=1 or matches[0]['id']!=12935496972 or matches[0].get('expired') or matches[0].get('digest')!='sha256:5385cacd8118e0f5c579e4486ea3ecaa78b102d876c750eb5619f385183d5a2e':raise ValueError('Checkpoint artifact mismatch')
+    return run,'frozen-forecasts-'+target
+
 def main():
     p=argparse.ArgumentParser();p.add_argument('mode',choices=['config','begin','verify']);p.add_argument('--settings',type=Path);p.add_argument('--previous',type=Path);p.add_argument('--output',type=Path);p.add_argument('--target-date');p.add_argument('--source-run');a=p.parse_args()
     if a.mode=='config':
@@ -79,6 +99,8 @@ def main():
                 source=select_source([api('actions/runs/'+run)],target,lambda i:api(f'actions/runs/{i}/artifacts')['artifacts'])
                 if source is None and run=='40026399108' and target=='2026-10-24':
                     source=recovered_source(run,target)
+                if source is None and run=='40955966396' and target=='2026-10-30':
+                    source=checkpoint_source(run,target)
             else:
                 for page in range(1,4):
                     runs=api(f'actions/runs?branch=experiment%2Fensemble-market-validation&status=success&per_page=30&page={page}')['workflow_runs']
@@ -93,10 +115,12 @@ def main():
             if source_run.get('head_branch')!=BRANCH or source_run.get('conclusion')!='success' or source_run.get('path')!='.github/workflows/ensemble-market-validation.yml' or not candidates:raise ValueError('No verified earlier-day daily source')
             source=(run,candidates[0])
         resolved=configure(c,inputs,source)
+        resolved['checkpoint_recovery']='true' if resolved['previous_artifact'].startswith('frozen-forecasts-') else 'false'
         resolved['refresh_flag']='--missing-only' if (os.environ.get('INPUT_MISSING_ONLY')=='true' or (not inputs.get('mode') and c.get('refresh_missing_only'))) else ''
         with open(os.environ['GITHUB_OUTPUT'],'a') as f:
-            for k in ['target_date','published_ref','previous_run_id','previous_artifact','run_mode','refresh_flag']:f.write(f'{k}={resolved[k]}\n')
+            for k in ['target_date','published_ref','previous_run_id','previous_artifact','run_mode','refresh_flag','checkpoint_recovery']:f.write(f'{k}={resolved[k]}\n')
     elif a.mode=='begin':begin(a.previous,a.output,a.target_date,a.source_run)
     else:verify(a.output)
 if __name__=='__main__':main()
+
 

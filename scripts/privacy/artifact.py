@@ -89,5 +89,9 @@ if __name__ == '__main__':
     args = parser.parse_args()
     try:
         (pack if args.mode == 'pack' else unpack)(args.source, args.target)
-    except Exception:
-        raise SystemExit('Private artifact operation failed; no plaintext fallback') from None
+    except Exception as error:
+        # Only fixed infrastructure categories; never paths, contents or key values.
+        known = {'Expanded artifact too large', 'Artifact too large', 'Symlinks are not allowed in private artifacts', 'Artifact source directory is missing'}
+        category = str(error) if isinstance(error, ValueError) and str(error) in known else type(error).__name__
+        raise SystemExit('Private artifact operation failed (' + category + '); no plaintext fallback') from None
+
