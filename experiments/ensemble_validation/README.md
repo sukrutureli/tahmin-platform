@@ -568,3 +568,9 @@ top-three hit, MAE, log loss and tail Brier metrics. This measures concentration
 it does not force cosmetic score variety. Existing v1 snapshots remain readable
 and settle without generating the new candidate. The locked opponent model, main,
 production workflows, market selections and Telegram remain unchanged.
+
+## 30 October: recover preserved forecasts and cumulative journals
+
+The 30 October daily run completed forecast freezing but failed to package its final output. Recovery accepts only its pinned run/SHA/attempt and authenticated frozen artifact, verifies successful freeze steps and the exact failure stage, and settles original forecasts without refitting the locked model. The preceding successful day's cumulative journals are restored separately before settlement. Existing snapshot hashes remain protected.
+
+Accumulated reports exceeded the 2 GiB expanded archive bound. The experiment branch now permits at most 4 GiB expanded data while retaining the 2 GiB compressed bound, AES-GCM authentication, traversal/symlink protections and fail-closed behavior. Fixed infrastructure error categories expose the cause without exposing paths, data or keys. Packing/unpacking bound, tamper rejection and symlink tests cover the change. No production branch or model change.

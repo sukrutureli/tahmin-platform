@@ -11,6 +11,7 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 MAGIC = b'TAHMIN-PRIVATE-1\n'
 LIMIT = 2 * 1024 * 1024 * 1024
+EXPANDED_LIMIT = 4 * 1024 * 1024 * 1024
 
 
 def key():
@@ -36,7 +37,7 @@ def pack(source, target):
                 raise ValueError('Symlinks are not allowed in private artifacts')
             if path.is_file():
                 expanded += path.stat().st_size
-                if expanded > LIMIT:
+                if expanded > EXPANDED_LIMIT:
                     raise ValueError('Expanded artifact too large')
                 archive.write(path, path.relative_to(root).as_posix())
     if len(buffer.getvalue()) > LIMIT:
@@ -57,7 +58,7 @@ def unpack(source, target):
     root = Path(target).resolve()
     with zipfile.ZipFile(io.BytesIO(plaintext)) as archive:
         members = archive.infolist()
-        if sum(item.file_size for item in members) > LIMIT:
+        if sum(item.file_size for item in members) > EXPANDED_LIMIT:
             raise ValueError('Expanded artifact too large')
         seen = set()
         for item in members:
