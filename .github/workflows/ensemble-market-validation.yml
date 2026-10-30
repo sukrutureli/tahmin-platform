@@ -179,6 +179,29 @@ jobs:
         python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<'PRIVATE_COMMAND'
         python -m unittest discover -s experiments/ensemble_validation -v
         PRIVATE_COMMAND
+    - name: Restore verified preceding-day journals for checkpoint recovery
+      if: steps.cfg.outputs.checkpoint_recovery == 'true'
+      uses: ./.github/actions/private-download
+      with:
+        name: ensemble-market-validation-2026-10-29
+        run-id: '40970606133'
+        github-token: ${{ github.token }}
+        path: recovery-parent
+        key: ${{ secrets.PRIVATE_ARTIFACT_KEY }}
+    - name: Preserve missing cumulative journals without overwriting checkpoint files
+      if: steps.cfg.outputs.checkpoint_recovery == 'true'
+      run: |
+        python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<'PRIVATE_COMMAND'
+        python3 - <<'PYJ'
+        from pathlib import Path
+        import shutil
+        for name in ['daily-journal.json','selection-journal.json','match-choice-journal.json','stability-journal.json']:
+            source=Path('recovery-parent')/name
+            destination=Path('previous')/name
+            if not source.is_file():raise ValueError('Missing recovery parent journal')
+            if not destination.exists():shutil.copyfile(source,destination)
+        PYJ
+        PRIVATE_COMMAND
     - name: Restore immutable artifact for experiment control
       if: steps.cfg.outputs.run_mode == 'control'
       run: |
