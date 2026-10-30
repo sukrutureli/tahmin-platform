@@ -50,7 +50,7 @@ def verify(output):
     # Installing the separately versioned priced layer on an older artifact may add it once.
     # Existing priced snapshots remain byte-protected on every subsequent control.
     if 'priced-before-results.json' not in lock['hashes']:after.pop('priced-before-results.json',None)
-    if lock['sourceRunId']=='40955966396' and lock['targetDate']=='2026-10-30' and 'frozen-today-rules.json' not in lock['hashes']:
+    if lock.get('sourceRunId')=='40955966396' and lock.get('targetDate')=='2026-10-30' and 'frozen-today-rules.json' not in lock['hashes']:
         after.pop('frozen-today-rules.json',None) # New exploratory report only, never an existing forecast.
     if after!=lock['hashes']:raise ValueError('Control changed frozen forecasts or fitted model files')
     lock.update({'completedAt':datetime.now(timezone.utc).isoformat(),'snapshotHashesUnchanged':True,'controlCodeSha':os.environ.get('GITHUB_SHA'),'mode':'HTTP results and settlement only; no prediction/model refit'})
