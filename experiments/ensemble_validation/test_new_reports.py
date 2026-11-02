@@ -52,7 +52,7 @@ const rows=[
 {dataset:{odds:'1.4',mbs:'2',pick:'MS1',finished:'0',kickoff:'2026-10-18T15:00:00+03:00'}},
 {dataset:{odds:'2.0',mbs:'3',pick:'KG Var',finished:'0',kickoff:'2026-10-18T15:00:00+03:00'}},
 {dataset:{odds:'1.9',mbs:'',pick:'MS2',finished:'0',kickoff:''}}];let clock=Date.parse('2026-10-18T11:00:00Z'),timer;
-const ctx={Date:class extends Date{static now(){return clock}},Number,document:{createElement:()=>({}),getElementById:id=>({'min-odds':input,'mbs-filter':mbs,'pick-filter':pick,'hide-finished':finished,'hide-started':started,'clear-odds':clear,'filter-count':count}[id]),querySelectorAll:()=>rows},window:{addEventListener(){}},setInterval(f){timer=f}};
+const ctx={Date:class extends Date{static now(){return clock}},Number,document:{createElement:()=>({}),getElementById:id=>({'min-odds':input,'mbs-filter':mbs,'pick-filter':pick,'hide-finished':finished,'hide-started':started,'clear-odds':clear,'filter-count':count}[id]),querySelector:()=>null,querySelectorAll:selector=>selector==='[name=rank-filter]'?[]:rows},window:{addEventListener(){}},setInterval(f){timer=f}};
 rows.forEach((r,i)=>r.dataset.search=['İstanbul - Beşiktaş','IĞDIR - Şanlıurfa','Fenerbahçe - İzmir','Beşiktaş - İstanbul','Other - Away'][i]);
 const originalGet=ctx.document.getElementById;ctx.document.getElementById=id=>id==='match-search'?search:originalGet(id);
 vm.runInNewContext(SCRIPT,ctx);
@@ -89,7 +89,8 @@ const rows=[
 {dataset:{mbs:'3',pick:'MS1',odds:'2.0',finished:'0',search:'Home D'}},
 {dataset:{mbs:'',pick:'',odds:'0',finished:'0',search:'Other'}}];
 const nodes={'min-odds':input,'match-search':search,'mbs-filter':mbs,'pick-filter':pick,'hide-finished':finished,'hide-started':started,'clear-odds':clear,'filter-count':count};
-const ctx={Date,Number,document:{createElement:element,createTextNode:text=>({text}),getElementById:id=>nodes[id],querySelectorAll:()=>rows},window:{addEventListener(){}},setInterval(){}};
+const ranking={value:'1',checked:true,addEventListener(t,f){this.run=f}};rows.forEach((r,i)=>Object.assign(r.dataset,{rank:i<4?String(i+1):'0',eligible:'4'}));
+const ctx={Date,Number,document:{createElement:element,createTextNode:text=>({text}),getElementById:id=>nodes[id],querySelector:()=>ranking,querySelectorAll:selector=>selector==='[name=rank-filter]'?[ranking]:rows},window:{addEventListener(){}},setInterval(){}};
 vm.runInNewContext(SCRIPT,ctx);
 const visible=()=>rows.map(r=>!r.hidden),choose=(group,values)=>{group.querySelectorAll('input').forEach(b=>b.checked=values.includes(b.value));group.run()};
 assert.deepEqual(visible(),[true,true,true,true,true]);
@@ -100,5 +101,10 @@ search.value='Home A';search.run();assert.ok(rows.every(r=>r.hidden));
 clear.run();assert.ok(rows.every(r=>!r.hidden));assert.ok([...mbs.querySelectorAll('input'),...pick.querySelectorAll('input')].every(b=>!b.checked));
 choose(pick,['Alt','Üst']);finished.checked=true;finished.run();assert.deepEqual(visible(),[false,true,false,false,false]);
 clear.run();assert.equal(count.textContent,'5 / 5 maç');
+ranking.value='0.5';ranking.run();assert.deepEqual(visible(),[true,true,false,false,false]);
+ranking.value='0.25';ranking.run();assert.deepEqual(visible(),[true,false,false,false,false]);
+ranking.value='0.75';ranking.run();assert.deepEqual(visible(),[true,true,true,false,false]);
+clear.run();assert.equal(ranking.checked,true);
 """.replace('SCRIPT',json.dumps(script))
         subprocess.run(['node','--input-type=module'],input=harness,text=True,check=True,capture_output=True)
+

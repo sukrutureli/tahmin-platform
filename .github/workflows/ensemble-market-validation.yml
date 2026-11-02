@@ -365,11 +365,13 @@ jobs:
         python experiments/ensemble_validation/report.py --output pipeline-output
         PRIVATE_COMMAND
     - name: Diagnose incorrect forecasts by historical features
+      if: github.event_name != 'push'
       run: |
         python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<'PRIVATE_COMMAND'
         python experiments/ensemble_validation/error_diagnostics.py --output pipeline-output
         PRIVATE_COMMAND
     - name: Settle saved predictions and update daily journal
+      if: github.event_name != 'push'
       run: |
         python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<'PRIVATE_COMMAND'
         python experiments/ensemble_validation/daybook.py settle --output pipeline-output --previous previous
@@ -380,11 +382,13 @@ jobs:
         python experiments/ensemble_validation/conditional_rules.py settle --output pipeline-output --previous previous
         PRIVATE_COMMAND
     - name: Settle immutable subgroup rule forecasts
+      if: github.event_name != 'push'
       run: |
         python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<'PRIVATE_COMMAND'
         python experiments/ensemble_validation/mine_rules.py --settle --input pipeline-output --output pipeline-output --target-date '${{ steps.cfg.outputs.target_date }}'
         PRIVATE_COMMAND
     - name: Settle independent learned forecasts
+      if: github.event_name != 'push'
       env:
         OPENBLAS_NUM_THREADS: '1'
       run: |
@@ -392,6 +396,7 @@ jobs:
         python experiments/ensemble_validation/outcome_learning.py --settle --dataset pipeline-output/rule-mining-dataset.json --output pipeline-output --target-date '${{ steps.cfg.outputs.target_date }}'
         PRIVATE_COMMAND
     - name: Evaluate selected cohorts without rewriting selections
+      if: github.event_name != 'push'
       run: |
         python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<'PRIVATE_COMMAND'
         python experiments/ensemble_validation/selection.py settle --output pipeline-output --previous previous
@@ -402,6 +407,7 @@ jobs:
         python experiments/ensemble_validation/match_choice.py settle --output pipeline-output --previous previous
         PRIVATE_COMMAND
     - name: Compare each system's own market and confidence subsets
+      if: github.event_name != 'push'
       env:
         OPENBLAS_NUM_THREADS: '1'
       run: |
