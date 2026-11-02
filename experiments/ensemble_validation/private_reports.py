@@ -102,7 +102,7 @@ def publish(api,files,manifest,today=None):
         updates += [{'path':p,'mode':'100644','type':'blob','sha':None} for p in paths if p[len(PREFIX):] in owned and p[len(PREFIX):] not in files]
         if manifest['targetDate'] in keep:
             for n,v in files.items():
-                if n.endswith('.html'):
+                if n.endswith('.html') and not (manifest['targetDate'] >= '2026-11-02' and n in ('futbol-yeni.html','basketbol-yeni.html')):
                     p='raporlar/'+manifest['targetDate']+'/'+n
                     if not any(x['path']==p and x['sha']==blob(v) for x in entries['tree']):updates.append({'path':p,'mode':'100644','type':'blob','content':v})
         if manifest['targetDate'] in keep and manifest['targetDate'] >= '2026-11-02':
@@ -114,8 +114,9 @@ def publish(api,files,manifest,today=None):
                     updates.append({'path':p,'mode':'100644','type':'blob','content':v})
         for entry in entries['tree']:
             p=entry['path'];m=re.fullmatch(r'raporlar/(\d{4}-\d{2}-\d{2})/.+',p)
+            duplicate=p in ('raporlar/'+manifest['targetDate']+'/futbol-yeni.html','raporlar/'+manifest['targetDate']+'/basketbol-yeni.html') and manifest['targetDate'] >= '2026-11-02'
             old_html=re.fullmatch(r'deney/reports/(\d{4}-\d{2}-\d{2})/[^/]+\.html',p)
-            if entry.get('type')=='blob' and ((m and m[1]<min(keep)) or (old_html and old_html[1]<min(keep))):
+            if entry.get('type')=='blob' and (duplicate or (m and m[1]<min(keep)) or (old_html and old_html[1]<min(keep))):
                 updates.append({'path':p,'mode':'100644','type':'blob','sha':None})
         if not updates:return False
         newtree=api.call(DEST+'/git/trees','POST',{'base_tree':tree,'tree':updates})['sha']

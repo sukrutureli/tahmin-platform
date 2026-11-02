@@ -41,6 +41,7 @@ def archive(root,today=None,history=False):
                     n=sport+'-yeni.html'; data=(folder/n).read_bytes()
                     if hashlib.sha256(data).hexdigest()!=manifest['reports'][sport]['sha256']:raise ValueError('Invalid report digest')
                     (out/(sport+'.html')).write_bytes(data)
+                    (out/n).unlink(missing_ok=True)
     # Only date-named folders in the dedicated HTML archive are pruned.
     for folder in dest.iterdir():
         if folder.is_dir() and re.fullmatch(r'\d{4}-\d{2}-\d{2}',folder.name) and folder.name<min(keep):shutil.rmtree(folder)

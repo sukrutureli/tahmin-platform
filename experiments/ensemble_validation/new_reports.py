@@ -30,7 +30,7 @@ def reports(root):
     before={p.name:sha(p) for p in root.glob('*before-results*.json')};before[model.name]=model_hash
     config=read(model)['protocol'];payload=read(model)['payload'];summary={}
     priced=priced_freeze(root);priced_settle(root)
-    for sport,folder,title in [('football','futbol','⚽ Futbol Yeni'),('basketball','basketbol','🏀 Basketbol Yeni')]:
+    for sport,folder,title in [('football','futbol','⚽ Futbol'),('basketball','basketbol','🏀 Basketbol')]:
         labels={(r['date'],str(r['eventId'])):r for r in read(root/(sport+'-replay.json'))}
         entries=priced['systems'][sport]['experiment']
         es=[]
