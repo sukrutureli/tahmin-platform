@@ -1,5 +1,5 @@
 import unittest
-from conditional_score import football_score,compatible
+from score_details import football_score,compatible
 class ScoreDetails(unittest.TestCase):
     def test_detail_preserves_mode_and_has_unconditional_probabilities(self):
         model={'rho':0,'dispersion':None}

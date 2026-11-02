@@ -11,7 +11,7 @@ def compatible(h,a,sport,market,option,line=2.5):
     if market=='OU':return h+a>line if option==0 else h+a<line
     raise ValueError('Unsupported market')
 
-def football_score(mean,model,market,option,line=2.5,top_n=1):
+def football_score(mean,model,market,option,line=2.5):
     lh,la=intensities(mean);k=model['dispersion']
     sd=lambda l:math.sqrt(l+(l*l/k if k else 0))
     bounds=[max(40,math.ceil(l+16*sd(l)),math.ceil(line)+2 if market=='OU' else 0) for l in [lh,la]]
@@ -34,9 +34,7 @@ def football_score(mean,model,market,option,line=2.5,top_n=1):
     if mass<=0:raise ValueError('Selected event has zero score probability')
     eligible=np.where(mask,joint,-1);flat=int(eligible.argmax());u,v=np.unravel_index(flat,joint.shape);p=float(joint[u,v])
     assert compatible(u,v,'football',market,option,line)
-    ranked=sorted(zip(*np.where(mask)),key=lambda pair:(-joint[pair],pair[0],pair[1]))[:top_n]
-    top=[{'score':[int(h),int(a)],'probability':float(joint[h,a])} for h,a in ranked]
-    return {'topScores':top,'score':[int(u),int(v)],'probability':p,'conditionalProbability':p/mass,'conditionMass':mass,'method':'conditional_distribution'}
+    return {'score':[int(u),int(v)],'probability':p,'conditionalProbability':p/mass,'conditionMass':mass,'method':'conditional_distribution'}
 
 def basket_covariance(report):
     model=next((m for m in report.get('models',[]) if m['sport']=='basketball' and m['market']=='score'),None)
