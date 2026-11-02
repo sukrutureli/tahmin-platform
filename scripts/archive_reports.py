@@ -1,5 +1,5 @@
 """Keep self-contained HTML copies for today/yesterday; retain experiment metrics."""
-import argparse,re,shutil,subprocess
+import hashlib,json,argparse,re,shutil,subprocess
 from datetime import datetime,timedelta,date
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -17,11 +17,11 @@ def archive(root,today=None,history=False):
     for sport in ['futbol','basketbol']:
         p=root/sport/(sport+'.html')
         text=p.read_text() if p.is_file() else '';d=html_day(text)
-        if d in keep:
+        if d in keep and d<'2026-11-02':
             out=dest/d;out.mkdir(exist_ok=True);(out/p.name).write_text(text)
         if history:
             for day in sorted(keep):
-                if (dest/day/p.name).exists():continue
+                if day>='2026-11-02' or (dest/day/p.name).exists():continue
                 rel=sport+'/data/PredictionData-'+day+'.json'
                 refs=subprocess.check_output(['git','log','--format=%H','-20','--',rel],cwd=root,text=True).splitlines()
                 for ref in refs:
@@ -33,6 +33,14 @@ def archive(root,today=None,history=False):
             out=dest/folder.name;out.mkdir(exist_ok=True)
             for p in folder.glob('*.html'):
                 if p.is_file() and not p.is_symlink():shutil.copyfile(p,out/p.name)
+            if folder.name >= '2026-11-02':
+                manifest=json.loads((folder/'new-report-manifest.json').read_text())
+                if manifest['targetDate']!=folder.name or manifest['selectionPolicy']!='available-price-v1' or manifest['version']!='opponent-locked-v1':
+                    raise ValueError('Promoted report identity mismatch')
+                for sport in ('futbol','basketbol'):
+                    n=sport+'-yeni.html'; data=(folder/n).read_bytes()
+                    if hashlib.sha256(data).hexdigest()!=manifest['reports'][sport]['sha256']:raise ValueError('Invalid report digest')
+                    (out/(sport+'.html')).write_bytes(data)
     # Only date-named folders in the dedicated HTML archive are pruned.
     for folder in dest.iterdir():
         if folder.is_dir() and re.fullmatch(r'\d{4}-\d{2}-\d{2}',folder.name) and folder.name<min(keep):shutil.rmtree(folder)

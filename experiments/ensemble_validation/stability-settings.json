@@ -1,0 +1,10 @@
+{
+  "version": "opponent-locked-v1",
+  "source_date": "2026-10-18",
+  "first_forecast_date": "2026-10-19",
+  "arm": "opponent",
+  "minimum_observed_days": 14,
+  "primary_fraction": 0.5,
+  "fractions": [0.25, 0.5, 0.75, 1.0],
+  "automatic_promotion": false
+}

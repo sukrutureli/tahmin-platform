@@ -1,4 +1,4 @@
-"""Trusted main-only orchestration; all modelling remains on the experiment branch."""
+"""Trusted main-only orchestration; the promoted model runs on main."""
 import argparse,json,os,time,re,urllib.request,urllib.error
 from datetime import datetime,timedelta
 from zoneinfo import ZoneInfo
@@ -26,14 +26,16 @@ def target(run):
 
 def runs(api):
     out=[]
-    for page in range(1,5):
-        values=api.call('actions/runs?branch=experiment%2Fensemble-market-validation&per_page=100&page='+str(page))['workflow_runs'];out.extend(values)
-        if len(values)<100:break
-    return out
+    for branch in ('main','experiment%2Fensemble-market-validation'):
+        for page in range(1,5):
+            values=api.call('actions/workflows/'+WF+'/runs?branch='+branch+'&per_page=100&page='+str(page))['workflow_runs']
+            out.extend(values)
+            if len(values)<100:break
+    return sorted(out,key=lambda r:r.get('id',0),reverse=True)
 
 def source(api,records,day=None,before=None):
     for r in records:
-        if r.get('head_branch')!=BRANCH or r.get('conclusion')!='success' or not (r.get('path')=='.github/workflows/ensemble-market-validation.yml' or (not r.get('path') and r.get('name','').startswith('Ensemble Market Validation'))):continue
+        if not (r.get('head_branch')==BRANCH or (r.get('head_branch')=='main' and r.get('path')=='.github/workflows/ensemble-market-validation.yml')) or r.get('conclusion')!='success' or not (r.get('path')=='.github/workflows/ensemble-market-validation.yml' or (not r.get('path') and r.get('name','').startswith('Ensemble Market Validation'))):continue
         artifacts=api.call('actions/runs/'+str(r['id'])+'/artifacts?per_page=100')['artifacts']
         for a in artifacts:
             name=a['name'];d=name.removeprefix('ensemble-market-validation-')
@@ -49,7 +51,7 @@ def launch(api,mode,day,source_run,published,key,wait=False):
         run_id=existing['id']
         print('Shadow request already exists:',run_id)
     else:
-        api.call('actions/workflows/'+WF+'/dispatches',{'ref':BRANCH,'inputs':{'mode':mode,'target_date':day,'source_run_id':source_run,'published_ref':published,'production_run_id':key}})
+        api.call('actions/workflows/'+WF+'/dispatches',{'ref':'main','inputs':{'mode':mode,'target_date':day,'source_run_id':source_run,'published_ref':published,'production_run_id':key}})
         run_id=None;print('Dispatched shadow',mode,day)
     if not wait:return run_id
     deadline=time.monotonic()+60*60

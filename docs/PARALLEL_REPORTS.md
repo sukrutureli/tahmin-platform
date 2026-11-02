@@ -1,3 +1,7 @@
+## 2 Kasım 2026 — ana raporlar
+
+Daily/Control JSON ve Telegram üretimini sürdürür. Başarılı çalışmanın ardından koordinatör artık deney dalı yerine main üzerinde kayıtlı opponent-locked-v1 uygulamasını çalıştırır. Önceki dalın başarılı şifreli kayıtları geçişte kaynak olabilir. Aynı gün kontrolü mevcut kaydı kullanır. Tarihli panelde futbol.html ve basketbol.html oranlı tercihi ve ona uyumlu kilitli skoru gösterir. Skor araştırması ayrı kalır. Eski Java HTML ve Telegram üretim dosyaları geriye uyumluluk için korunur; panelin yeni tarihli ana dosyalarının üzerine yazılmaz. Aşağıdaki bölüm geçmiş paralel deney düzenini anlatır.
+
 # Eski ve yeni raporların paralel izlemesi
 
 Üretim Daily Prediction ve Control aynı algoritma ve Telegram davranışıyla kalır.
