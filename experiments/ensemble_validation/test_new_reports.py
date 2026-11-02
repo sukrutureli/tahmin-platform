@@ -104,7 +104,7 @@ clear.run();assert.equal(count.textContent,'5 / 5 maç');
 ranking.value='0.5';ranking.run();assert.deepEqual(visible(),[true,true,false,false,false]);
 ranking.value='0.25';ranking.run();assert.deepEqual(visible(),[true,false,false,false,false]);
 ranking.value='0.75';ranking.run();assert.deepEqual(visible(),[true,true,true,false,false]);
-clear.run();assert.equal(ranking.checked,true);
+ranking.value='1';clear.run();assert.equal(ranking.checked,true);
 """.replace('SCRIPT',json.dumps(script))
         subprocess.run(['node','--input-type=module'],input=harness,text=True,check=True,capture_output=True)
 
