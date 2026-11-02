@@ -6,6 +6,7 @@ from zoneinfo import ZoneInfo
 from responsive_report import STYLE,SCRIPT
 from display_odds import display_values
 from report import GROUPS,result,parse_score
+from conditional_score import football_score
 from priced_choices import freeze as priced_freeze,settle as priced_settle
 
 LEGACY_FILTER_SCRIPT="<script>\n(()=>{const input=document.getElementById('min-odds'),search=document.getElementById('match-search'),mbs=document.getElementById('mbs-filter'),pick=document.getElementById('pick-filter'),finished=document.getElementById('hide-finished'),started=document.getElementById('hide-started'),rows=[...document.querySelectorAll('.match-list tr')],count=document.getElementById('filter-count');\nfunction normalize(value){return value.replace(/ı/g,'i').normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').toLowerCase();}\nfor(const value of [...new Set(rows.map(row=>row.dataset.pick).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'tr'))){const option=document.createElement('option');option.value=value;option.textContent=value;pick.appendChild(option);}\nfunction filter(){const terms=normalize(search.value).trim().split(/\\s+/).filter(Boolean);const raw=input.value.trim(),min=raw===''?null:Number(raw.replace(',','.')),now=Date.now();let n=0;for(const row of rows){const odd=Number(row.dataset.odds),kickoff=Date.parse(row.dataset.kickoff||'');const below=min!==null&&Number.isFinite(min)&&!(odd>1&&odd>=min),wrongMbs=mbs.value!==''&&row.dataset.mbs!==mbs.value,wrongPick=pick.value!==''&&row.dataset.pick!==pick.value,done=finished.checked&&row.dataset.finished==='1',begun=started.checked&&Number.isFinite(kickoff)&&kickoff<=now;row.hidden=below||wrongMbs||wrongPick||done||begun||!terms.every(term=>normalize(row.dataset.search||'').includes(term));if(!row.hidden)n++;}count.textContent=n+' / '+rows.length+' maç';}\ninput.addEventListener('input',filter);search.addEventListener('input',filter);mbs.addEventListener('change',filter);pick.addEventListener('change',filter);finished.addEventListener('change',filter);started.addEventListener('change',filter);document.getElementById('clear-odds').addEventListener('click',()=>{input.value='';search.value='';mbs.value='';pick.value='';finished.checked=false;started.checked=false;filter();});setInterval(filter,30000);window.addEventListener('focus',filter);filter();})();\n</script>"
@@ -59,7 +60,13 @@ def reports(root):
             tier='tier-late' if late else 'tier-25' if position<math.ceil(len(eligible)*.25) else 'tier-50' if position<math.ceil(len(eligible)*.5) else 'tier-75' if position<math.ceil(len(eligible)*.75) else 'tier-rest'
             vals=[e.get('time') or '—',title,name,label,'-'.join(str(int(x)) for x in score) if score else '—',f'%{100*p:.1f}' if c else '—','—','-'.join(str(int(x)) for x in actual) if actual else '—',status,'Geç kayıt' if late else 'Maç öncesi','']
             heads=['Saat','Spor','Maç','Tek tercih','Skor tahmini','Güven','Tam skor olasılığı','Gerçek skor','Sonuç','Kayıt','']
-            cells=''.join('<td data-label="'+html.escape(h)+'">'+(str(v) if j==2 else html.escape(str(v)))+'</td>' for j,(h,v) in enumerate(zip(heads,vals)))
+            score_detail=None
+            if sport=='football' and c and score and e.get('scoreMean') is not None:
+                detail=football_score(e['scoreMean'],payload['footballDistribution'],m,i,line,top_n=3)
+                if detail['score']!=score:raise ValueError('Score detail differs from frozen displayed score')
+                choices=''.join('<li><b>'+html.escape('-'.join(map(str,x['score'])))+'</b> · %'+format(100*x['probability'],'.1f')+'</li>' for x in detail['topScores'])
+                score_detail='<details class="score-detail"><summary>'+html.escape(str(vals[4]))+' <small>▾</small></summary><strong>En olası 3 uyumlu skor</strong><ul>'+choices+'</ul><small>Yüzdeler tüm skor dağılımındandır; toplamları %100 olmak zorunda değil.</small></details>'
+            cells=''.join('<td data-label="'+html.escape(h)+'">'+(str(v) if j==2 else score_detail if j==4 and score_detail else html.escape(str(v)))+'</td>' for j,(h,v) in enumerate(zip(heads,vals)))
             try:kickoff=datetime.fromisoformat(target+'T'+e['time']).replace(tzinfo=ZoneInfo('Europe/Istanbul')).isoformat()
             except (ValueError,TypeError,KeyError):kickoff=''
             rows.append(f'<tr class="{tier}" data-search="{html.escape(e["name"],quote=True)}" data-event-id="{html.escape(str(e["eventId"]))}" data-finished="{1 if actual is not None else 0}" data-kickoff="{kickoff}" data-confidence="{p}" data-odds="{c["price"] if c else 0}" data-mbs="{html.escape(mbs if mbs != "—" else "")}" data-pick="{html.escape(pick_filter,quote=True)}" data-time="{html.escape(e.get("time") or "99:99")}">{cells}</tr>')
@@ -81,6 +88,7 @@ def reports(root):
         if target>='2026-11-02':
             body=body.replace('<div class="odds-filter">','<details class="market-filters"><summary>Maç ara ve filtrele</summary><div class="odds-filter">',1).replace('<div class="legend">','</details><div class="legend">',1)
             css+=' .market-filters summary{font-weight:700;cursor:pointer;padding:12px}.market-filters{border:1px solid #b7c6d2;border-radius:12px;padding:0 8px;margin:12px 0} @media(max-width:600px){.multi-filter label,.check-filter{min-height:44px}.odds-filter input:not([type=checkbox]){font-size:16px}.odds-filter #pick-filter{max-width:100%}}'
+        css+='.score-detail summary{cursor:pointer;min-height:44px;display:flex;align-items:center;gap:8px}.score-detail ul{padding-left:18px;margin:8px 0}.score-detail small{font-size:12px;line-height:1.5}.score-detail{max-width:300px}'
         doc='<!doctype html><html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'+title+' · '+target+'</title><style>'+css+'</style></head><body><main>'+body+'</main>'+SCRIPT+(FILTER_SCRIPT if target>='2026-10-28' else LEGACY_FILTER_SCRIPT)+'</body></html>'
         name=folder+'-yeni.html';(root/name).write_text(doc)
         summary[folder]={'file':name,'sha256':sha(root/name),'fixtureCount':len(es),'settledChoiceCount':finished,'hits':hits}

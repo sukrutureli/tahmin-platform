@@ -1,6 +1,9 @@
 name: Ensemble Market Validation (Artifacts Only)
 run-name: Ensemble ${{ inputs.mode || 'auto' }} ${{ inputs.target_date || 'settings' }} [${{ inputs.production_run_id || 'manual' }}]
 'on':
+  push:
+    branches: [main]
+    paths: ['.github/mobile-detail-request.json']
   workflow_dispatch:
     inputs:
       mode:
@@ -34,7 +37,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   benchmark:
-    if: github.ref == 'refs/heads/main' && inputs.target_date != '' && inputs.source_run_id != '' && inputs.published_ref != ''
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || (inputs.target_date != '' && inputs.source_run_id != '' && inputs.published_ref != ''))
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
@@ -48,6 +51,16 @@ jobs:
           cp "promoted/replay/$sport/pom.xml" "$sport/pom.xml"
         done
         cp promoted/artifact.py scripts/privacy/artifact.py
+    - name: Resolve presentation refresh request
+      if: github.event_name == 'push'
+      run: |
+        python3 - <<'PY'
+        import json,os,re
+        r=json.load(open('.github/mobile-detail-request.json'))
+        assert re.fullmatch(r'\d{4}-\d{2}-\d{2}',r['date']) and r['source'].isdigit() and re.fullmatch(r'[0-9a-f]{40}',r['published'])
+        with open(os.environ['GITHUB_ENV'],'a') as out:
+            for k,v in {'REPORT_MODE':'control','REPORT_DATE':r['date'],'REPORT_SOURCE':r['source'],'REPORT_PUBLISHED':r['published']}.items():out.write(k+'='+v+'\n')
+        PY
     - name: Require private artifact key
       env:
         PRIVATE_ARTIFACT_KEY: ${{ secrets.PRIVATE_ARTIFACT_KEY }}
@@ -64,10 +77,10 @@ jobs:
       id: cfg
       env:
         GH_TOKEN: ${{ github.token }}
-        INPUT_MODE: ${{ inputs.mode }}
-        INPUT_TARGET_DATE: ${{ inputs.target_date }}
-        INPUT_SOURCE_RUN: ${{ inputs.source_run_id }}
-        INPUT_PUBLISHED_REF: ${{ inputs.published_ref }}
+        INPUT_MODE: ${{ inputs.mode || env.REPORT_MODE }}
+        INPUT_TARGET_DATE: ${{ inputs.target_date || env.REPORT_DATE }}
+        INPUT_SOURCE_RUN: ${{ inputs.source_run_id || env.REPORT_SOURCE }}
+        INPUT_PUBLISHED_REF: ${{ inputs.published_ref || env.REPORT_PUBLISHED }}
         INPUT_MISSING_ONLY: ${{ inputs.missing_only }}
       run: |
         python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<'PRIVATE_COMMAND'
@@ -332,12 +345,14 @@ jobs:
         retention-days: 30
         key: ${{ secrets.PRIVATE_ARTIFACT_KEY }}
     - name: Refresh today's finished football outcomes (artifact only)
+      if: github.event_name != 'push'
       working-directory: football
       run: |
         python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<'PRIVATE_COMMAND'
         mvn -B exec:java -Dexec.mainClass=com.example.experiment.OutcomeRefresh -Dexec.args="../pipeline-output/football-replay.json ../pipeline-output/football-outcome-audit.json ${{ steps.cfg.outputs.refresh_flag }}"
         PRIVATE_COMMAND
     - name: Refresh today's finished basketball outcomes (artifact only)
+      if: github.event_name != 'push'
       working-directory: basketball
       run: |
         python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<'PRIVATE_COMMAND'
