@@ -336,6 +336,12 @@ jobs:
         python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<'PRIVATE_COMMAND'
         python experiments/ensemble_validation/score_research.py freeze --output pipeline-output --previous previous
         PRIVATE_COMMAND
+    - name: Freeze separate same-competition ten-percent candidate
+      if: steps.cfg.outputs.run_mode != 'control'
+      run: |
+        python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<'PRIVATE_COMMAND'
+        python experiments/ensemble_validation/competition_blend.py freeze --output pipeline-output
+        PRIVATE_COMMAND
     - name: Save immutable forecasts before HTTP settlement
       if: steps.cfg.outputs.run_mode != 'control'
       uses: ./.github/actions/private-upload
@@ -456,6 +462,11 @@ jobs:
       run: |
         python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<'PRIVATE_COMMAND'
         python experiments/ensemble_validation/score_research.py settle --output pipeline-output
+        PRIVATE_COMMAND
+    - name: Measure frozen same-competition candidate without refitting
+      run: |
+        python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<'PRIVATE_COMMAND'
+        python experiments/ensemble_validation/competition_blend.py settle --output pipeline-output
         PRIVATE_COMMAND
     - name: Prove control preserved forecasts and model parameters
       if: steps.cfg.outputs.run_mode == 'control'

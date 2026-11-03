@@ -1,0 +1,22 @@
+name: Same competition research checks
+on:
+  push:
+    branches: [main]
+    paths:
+      - experiments/ensemble_validation/competition_blend.py
+      - experiments/ensemble_validation/test_competition_blend.py
+      - .github/workflows/competition-research-checks.yml
+permissions:
+  contents: read
+jobs:
+  synthetic-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install numpy==2.3.5
+      - run: python -m unittest discover -s experiments/ensemble_validation -v

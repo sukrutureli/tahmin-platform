@@ -1,0 +1,11 @@
+# Same competition 10% research v1
+
+First prospective day: 2026-11-04. Main reports, frozen opponent model, weights and Telegram are unchanged. Separate research outputs: competition-evaluation.json and ayni-lig-deneyi.html. Historical 3 November outcomes are not scored as independent evidence.
+
+Within the exact sport/provider team identities and tournament ID, use the last six finished matches strictly before forecast day, at most 365 days old. Current-date/future matches, ambiguous identities and basketball tied regulation rows are excluded. No name-based competition or team joins; no inferred season. Seasons within the trailing year can mix; distinct stage/leg context is not modelled. Sparse cup and new-team coverage is explicit.
+
+For each side compute win/draw/loss, over/under relative to TODAY's line, BTTS (football) and own/opponent scoring means. Orient away-team results toward today's home/away outcomes and average both sides. Blend each available probability vector and scoring mean with the frozen current system: weight = 0.10 * min(homeCount,awayCount)/6, capped at 10%; missing either side/identity means zero. All six rows => 90/10. The coefficient/window are fixed hypotheses, not empirically optimal. No auto tuning.
+
+Each system chooses its own highest-confidence offered-price (>1, finite) market, its own compatible modal score and confidence ranking. Freeze candidate before HTTP outcomes; control only settles an existing file and protects its bytes. Late/no-price/push/unresolved samples stay out of independent denominators. Compare own-rank first 25/50/75/all with first 50 primary. Snapshot/index and evaluations retain counts, weight and source hashes. Export only bounded private summaries; the full snapshot stays encrypted. Same-priced-policy baseline is the current locked system, NOT the older legacy main comparison.
+
+Data sources: existing context ledger and fixture identity index; no new HTTP requests. Same-competition availability is not guaranteed, particularly cups and basketball competitions. Zero-weight fixtures remain in all-fixture comparisons; coverage counts disclose how many actually changed. Panel report is separate; no automatic promotion.
