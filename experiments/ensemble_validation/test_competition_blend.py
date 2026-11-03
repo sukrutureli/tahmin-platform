@@ -56,6 +56,12 @@ class CompetitionTests(unittest.TestCase):
         e,n=estimate(rows,ident,'basketball','2026-11-04',170)
         self.assertEqual(n,[1,1]);self.assertEqual(e['markets']['OU'],[.5,.5]);self.assertEqual(e['markets']['MS'],[1,0]);self.assertNotIn('BTTS',e['markets'])
         self.assertEqual(estimate(rows,ident,'football','2026-11-04',2.5)[1],[0,0])
+    def test_human_readable_pending_report(self):
+        with tempfile.TemporaryDirectory() as td:
+            root=Path(td);self.fixture(root);p=root/'football-replay.json';rows=json.loads(p.read_text());rows[0]['realScore']=None;p.write_text(json.dumps(rows))
+            freeze(root,datetime(2026,11,4,8,tzinfo=timezone.utc));settle(root)
+            text=(root/'ayni-lig-deneyi.html').read_text()
+            self.assertIn('Sonuç bekleniyor',text);self.assertIn('A - B',text);self.assertIn('Mevcut',text);self.assertIn('Lig/kupa',text);self.assertNotIn('None',text)
     def test_no_backfill_before_launch(self):
         with tempfile.TemporaryDirectory() as td:
             root=Path(td);self.fixture(root);p=root/'priced-before-results.json';b=json.loads(p.read_text());b['targetDate']='2026-11-03';p.write_text(json.dumps(b))
