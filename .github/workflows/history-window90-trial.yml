@@ -1,0 +1,102 @@
+name: Isolated history window90 trial
+run-name: History window90 ${{ github.ref_name }}
+'on':
+  push:
+    branches: [experiment/history-window90-2026-11-06]
+    paths: [.github/history-window90-request.json, .github/workflows/history-window90-trial.yml, experiments/ensemble_validation/history_window90_trial.py, experiments/ensemble_validation/history_window90_runner.py, experiments/ensemble_validation/test_history_window90_trial.py, experiments/ensemble_validation/window_features.py]
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: isolated-history-window90-trial
+  cancel-in-progress: false
+jobs:
+  trial:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install fixed inference dependencies
+        run: pip install --quiet numpy
+      - name: Test independent intervention
+        run: PYTHONPATH=experiments/ensemble_validation python -m unittest discover -s experiments/ensemble_validation -p test_history_window90_trial.py -v
+      - name: Resolve fixed request
+        id: req
+        run: |
+          python3 - <<'PY'
+          import json,os,re
+          v=json.load(open('.github/history-window90-request.json'))
+          assert v['mode'] in ('freeze','settle')
+          assert re.fullmatch(r'\d{4}-\d{2}-\d{2}',v['targetDate'])
+          assert str(v['sourceRunId']).isdigit()
+          assert str(v['freezeSourceRunId']).isdigit()
+          with open(os.environ['GITHUB_OUTPUT'],'a') as f:
+              for k in ('mode','targetDate','sourceRunId','freezeRunId','freezeSourceRunId'):f.write(k+'='+str(v.get(k,''))+'\n')
+          PY
+          cp promoted/artifact.py scripts/privacy/artifact.py
+      - name: Validate successful source and artifact identity
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 scripts/privacy/run_private.py <<'PRIVATE_COMMAND'
+          python experiments/ensemble_validation/history_window90_runner.py verify
+          PRIVATE_COMMAND
+      - name: Restore existing source without new HTTP history
+        uses: ./.github/actions/private-download
+        with:
+          name: ensemble-market-validation-${{ steps.req.outputs.targetDate }}
+          path: trial-source
+          run-id: ${{ steps.req.outputs.sourceRunId }}
+          key: ${{ secrets.PRIVATE_ARTIFACT_KEY }}
+          github-token: ${{ github.token }}
+      - name: Restore immutable original trial for settlement
+        if: steps.req.outputs.mode == 'settle'
+        uses: ./.github/actions/private-download
+        with:
+          name: history-window90-frozen-${{ steps.req.outputs.targetDate }}
+          path: trial-output
+          run-id: ${{ steps.req.outputs.freezeRunId }}
+          key: ${{ secrets.PRIVATE_ARTIFACT_KEY }}
+          github-token: ${{ github.token }}
+      - name: Restore original pre-trial evidence for eligibility
+        if: steps.req.outputs.freezeSourceRunId != steps.req.outputs.sourceRunId
+        uses: ./.github/actions/private-download
+        with:
+          name: ensemble-market-validation-${{ steps.req.outputs.targetDate }}
+          path: trial-origin
+          run-id: ${{ steps.req.outputs.freezeSourceRunId }}
+          key: ${{ secrets.PRIVATE_ARTIFACT_KEY }}
+          github-token: ${{ github.token }}
+      - name: Freeze or evaluate without refitting the primary model
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 scripts/privacy/run_private.py <<'PRIVATE_COMMAND'
+          python experiments/ensemble_validation/history_window90_runner.py run
+          PRIVATE_COMMAND
+      - name: Save authenticated encrypted trial checkpoint before publishing
+        uses: ./.github/actions/private-upload
+        with:
+          name: history-window90-frozen-${{ steps.req.outputs.targetDate }}
+          path: trial-output
+          key: ${{ secrets.PRIVATE_ARTIFACT_KEY }}
+      - name: Publish only isolated private trial reports
+        env:
+          GH_TOKEN: ${{ secrets.FATHERTAHMIN_WRITE_TOKEN || secrets.ADMIN_USER }}
+        run: |
+          python3 scripts/privacy/run_private.py <<'PRIVATE_COMMAND'
+          python experiments/ensemble_validation/history_window90_runner.py publish
+          PRIVATE_COMMAND
+      - name: Upload encrypted diagnostics on failure
+        if: failure()
+        uses: ./.github/actions/private-upload
+        with:
+          name: history-window90-private-diagnostics
+          path: ${{ runner.temp }}/tahmin-private-logs
+          key: ${{ secrets.PRIVATE_ARTIFACT_KEY }}
+          retention-days: '7'
