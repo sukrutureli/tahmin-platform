@@ -27,8 +27,10 @@ def publish(api,root,out,request):
         if p.exists():others[name]=compact(read(p))
     summary={'targetDate':target,'trialVersion':trial.VERSION,'sourceRunId':request['sourceRunId'],
              'trialRunId':os.environ['GITHUB_RUN_ID'],'freezeRunId':request.get('freezeRunId') or os.environ['GITHUB_RUN_ID'],
+             'freezeSourceRunId':request.get('freezeSourceRunId',request['sourceRunId']),
              'snapshotSha256':trial.digest(out/trial.FILE),'modelSha256':b['modelSha256'],
-             'otherExperiments':others,'policy':'Policies/cohorts are separate; no automatic promotion; raw snapshots stay encrypted.'}
+             'otherExperiments':others,'policy':'Policies/cohorts are separate; no automatic promotion; raw snapshots stay encrypted.',
+             'reports':{p:{'sha256':hashlib.sha256(v.encode()).hexdigest(),'bytes':len(v.encode())} for p,v in files.items()}}
     files['deney/reports/'+target+'/history-context-checkpoint.json']=encoded(summary)
     for attempt in range(3):
         head=api.call(DEST+'/git/ref/heads/main')['object']['sha'];tree=api.call(DEST+'/git/commits/'+head)['tree']['sha']
@@ -62,6 +64,7 @@ def main():
             if not (out/trial.FILE).exists():raise ValueError('Original trial checkpoint required for settlement')
             # The current source can contain refreshed labels, never new candidate forecasts.
             if read(out/trial.FILE)['targetDate']!=req['targetDate']:raise ValueError('Settlement day mismatch')
+        trial.seal_eligibility(Path('trial-origin') if Path('trial-origin').exists() else root,out)
         trial.settle(root,out)
         if any(trial.digest(root/name)!=value for name,value in before.items()):raise ValueError('Production forecast/model modified')
         return

@@ -57,4 +57,14 @@ class TrialTests(unittest.TestCase):
         ledger={'matches':[r,dict(r,date='2026-11-06',homeScore=0,awayScore=10)]}
         state=trial.WeightedContext(ledger,{},'10','recency').state('football','2026-11-06')
         self.assertEqual(len(state[0]),1);self.assertAlmostEqual(state[2]['ns:1'],.5);self.assertAlmostEqual(state[1]['ns:1'],.0375)
+    def test_known_result_excluded_using_original_source_without_rewriting_forecast(self):
+        with tempfile.TemporaryDirectory() as td:
+            root=Path(td);self.fixture(root)
+            p=root/'football-replay.json';rows=json.loads(p.read_text());rows[0]['realScore']='2-1';write(p,rows)
+            out=root/'trial';trial.freeze(root,out,datetime(2026,11,6,10,tzinfo=timezone.utc));saved=(out/trial.FILE).read_bytes()
+            trial.seal_eligibility(root,out);report=trial.settle(root,out)
+            self.assertEqual(report['knownAtFreezeExcluded']['football'],1)
+            self.assertTrue(all(r['count']==0 for block in report['beforeKickoff'].values() for r in block))
+            self.assertTrue(all(r['count']==1 for r in report['allIncludingLate']['recency'] if r['sport']=='football'))
+            self.assertEqual((out/trial.FILE).read_bytes(),saved)
 if __name__=='__main__':unittest.main()

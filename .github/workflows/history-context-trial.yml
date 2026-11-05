@@ -34,8 +34,9 @@ jobs:
           assert v['mode'] in ('freeze','settle')
           assert re.fullmatch(r'\d{4}-\d{2}-\d{2}',v['targetDate'])
           assert str(v['sourceRunId']).isdigit()
+          assert str(v['freezeSourceRunId']).isdigit()
           with open(os.environ['GITHUB_OUTPUT'],'a') as f:
-              for k in ('mode','targetDate','sourceRunId','freezeRunId'):f.write(k+'='+str(v.get(k,''))+'\n')
+              for k in ('mode','targetDate','sourceRunId','freezeRunId','freezeSourceRunId'):f.write(k+'='+str(v.get(k,''))+'\n')
           PY
           cp promoted/artifact.py scripts/privacy/artifact.py
       - name: Validate successful source and artifact identity
@@ -60,6 +61,15 @@ jobs:
           name: history-context-frozen-${{ steps.req.outputs.targetDate }}
           path: trial-output
           run-id: ${{ steps.req.outputs.freezeRunId }}
+          key: ${{ secrets.PRIVATE_ARTIFACT_KEY }}
+          github-token: ${{ github.token }}
+      - name: Restore original pre-trial evidence for eligibility
+        if: steps.req.outputs.freezeSourceRunId != steps.req.outputs.sourceRunId
+        uses: ./.github/actions/private-download
+        with:
+          name: ensemble-market-validation-${{ steps.req.outputs.targetDate }}
+          path: trial-origin
+          run-id: ${{ steps.req.outputs.freezeSourceRunId }}
           key: ${{ secrets.PRIVATE_ARTIFACT_KEY }}
           github-token: ${{ github.token }}
       - name: Freeze or evaluate without refitting the primary model

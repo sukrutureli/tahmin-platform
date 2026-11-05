@@ -21,9 +21,12 @@ It does not claim to account for rotation, lineups or first/second legs.
 
 Only completed history strictly before target date is allowed. Current outcomes
 cannot enter feature construction. Original checkpoints are restored from
-authenticated encrypted artifacts. No new crawl or fit is necessary. Four tests
+authenticated encrypted artifacts. No new crawl or fit is necessary. Five tests
 cover age/future boundaries, strength updates, source immutability, missing
 competition fallback, prospective/late separation and frozen settlement.
+Exclude final scores already present in the ORIGINAL input checkpoint even if the
+kickoff time disagrees. This deterministic evidence is sealed in the encrypted
+eligibility sidecar; it never changes forecast probabilities or snapshot hashes.
 
 ## Evaluation
 
@@ -42,7 +45,8 @@ Update only `.github/history-context-request.json` on this branch. Push starts
 Freeze request pins target date, successful sourceRunId, sourceArtifactId and
 pricedSourceSha256 verified against private dated manifest/index. On settlement,
 use latest successful same-date production Control source, set `mode=settle`
-and `freezeRunId` to this trial's first successful run. It restores that encrypted
+and `freezeRunId` to this trial's first successful run. Keep `freezeSourceRunId`
+fixed to the original input run (42120844121 for 6 November). It restores that encrypted
 trial before labels are read, so no candidate is reforecast or backdated.
 
 Private outputs: `raporlar/2026-11-06/gecmis-baglam-deneyi.html`,

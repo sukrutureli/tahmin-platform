@@ -183,10 +183,35 @@ def freeze(root,out,now=None):
        'ledgerSha256':digest(root/'context-ledger.json'),'systems':systems,'coverage':coverage}
     b['snapshotSha256']=signature(b);write(path,b);return b
 
+def seal_eligibility(origin,out):
+    """Deterministic exclusions from the ORIGINAL input artifact, never current labels."""
+    origin=Path(origin);out=Path(out);b=read(out/FILE);path=out/'history-context-eligibility.json'
+    if digest(origin/'priced-complete-before-results.json')!=b['sourceSha256']:raise ValueError('Wrong original inputs for eligibility')
+    excluded={}
+    for sport in GROUPS:
+        excluded[sport]=[str(r['eventId']) for r in read(origin/(sport+'-replay.json')) if r['date']==b['targetDate'] and parse_score({'scoreline':r.get('realScore')}) is not None]
+    value={'targetDate':b['targetDate'],'sourceSha256':b['sourceSha256'],'knownAtFreeze':excluded,
+           'policy':'Exclude outcomes already present in the original frozen source even when kickoff clock disagrees.'}
+    if path.exists():
+        if read(path)!=value:raise ValueError('Original eligibility evidence changed')
+    else:write(path,value)
+    return value
+
 def settle(root,out):
     root=Path(root);out=Path(out);b=read(out/FILE)
     if b['snapshotSha256']!=signature({k:v for k,v in b.items() if k!='snapshotSha256'}):raise ValueError('Frozen trial changed')
     report={k:b[k] for k in ('version','protocol','targetDate','createdAt','snapshotSha256','sourceSha256','modelSha256','coverage')}
+    eligibility=out/'history-context-eligibility.json'
+    if eligibility.exists():
+        evidence=read(eligibility)
+        if evidence['sourceSha256']!=b['sourceSha256']:raise ValueError('Eligibility source mismatch')
+        report['knownAtFreezeExcluded']={s:len(ids) for s,ids in evidence['knownAtFreeze'].items()}
+        b=copy.deepcopy(b)
+        for sport,systems in b['systems'].items():
+            excluded=set(evidence['knownAtFreeze'][sport])
+            for entries in systems.values():
+                for e in entries:
+                    if str(e['eventId']) in excluded:e['prospectiveBeforeKickoff']=False;e['eligibilityExclusion']='Result already in original source'
     for key,prospective in [('beforeKickoff',True),('allIncludingLate',False)]:
         report[key]={}
         for arm in ARMS:
@@ -227,5 +252,5 @@ def render(root,out,b,report):
 
 if __name__=='__main__':
     p=argparse.ArgumentParser();p.add_argument('mode',choices=['freeze','settle']);p.add_argument('--root',type=Path,required=True);p.add_argument('--out',type=Path,required=True);a=p.parse_args()
-    if a.mode=='freeze':freeze(a.root,a.out)
+    if a.mode=='freeze':freeze(a.root,a.out);seal_eligibility(a.root,a.out)
     settle(a.root,a.out)
