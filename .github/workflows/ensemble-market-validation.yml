@@ -2,8 +2,10 @@ name: Ensemble Market Validation (Artifacts Only)
 run-name: Ensemble ${{ inputs.mode || 'auto' }} ${{ inputs.target_date || 'settings' }} [${{ inputs.production_run_id || 'manual' }}]
 'on':
   push:
-    branches: [main]
-    paths: ['.github/mobile-detail-request.json']
+    branches:
+    - main
+    paths:
+    - .github/mobile-detail-request.json
   workflow_dispatch:
     inputs:
       mode:
@@ -36,43 +38,39 @@ concurrency:
   group: ensemble-validation-${{ github.ref }}
   cancel-in-progress: false
 jobs:
-  benchmark:
-    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || (inputs.target_date != '' && inputs.source_run_id != '' && inputs.published_ref != ''))
+  primary:
+    name: Primary forecast and immediate HTML
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || (inputs.target_date != '' && inputs.source_run_id != '' &&
+      inputs.published_ref != ''))
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 65
+    outputs:
+      target_date: ${{ steps.cfg.outputs.target_date }}
+      published_ref: ${{ steps.cfg.outputs.published_ref }}
+      previous_run_id: ${{ steps.cfg.outputs.previous_run_id }}
+      previous_artifact: ${{ steps.cfg.outputs.previous_artifact }}
+      run_mode: ${{ steps.cfg.outputs.run_mode }}
+      refresh_flag: ${{ steps.cfg.outputs.refresh_flag }}
+      checkpoint_recovery: ${{ steps.cfg.outputs.checkpoint_recovery }}
     steps:
     - uses: actions/checkout@v4
       with:
         persist-credentials: false
     - name: Use the promoted replay implementation on this runner
-      run: |
-        for sport in football basketball; do
-          rsync -a --delete "promoted/replay/$sport/src/" "$sport/src/"
-          cp "promoted/replay/$sport/pom.xml" "$sport/pom.xml"
-        done
-        cp promoted/artifact.py scripts/privacy/artifact.py
+      run: "for sport in football basketball; do\n  rsync -a --delete \"promoted/replay/$sport/src/\" \"$sport/src/\"\n  cp \"promoted/replay/$sport/pom.xml\"\
+        \ \"$sport/pom.xml\"\ndone\ncp promoted/artifact.py scripts/privacy/artifact.py\n"
     - name: Resolve presentation refresh request
       if: github.event_name == 'push'
-      run: |
-        python3 - <<'PY'
-        import json,os,re
-        r=json.load(open('.github/mobile-detail-request.json'))
-        assert re.fullmatch(r'\d{4}-\d{2}-\d{2}',r['date']) and r['source'].isdigit() and re.fullmatch(r'[0-9a-f]{40}',r['published'])
-        with open(os.environ['GITHUB_ENV'],'a') as out:
-            for k,v in {'REPORT_MODE':'control','REPORT_DATE':r['date'],'REPORT_SOURCE':r['source'],'REPORT_PUBLISHED':r['published']}.items():out.write(k+'='+v+'\n')
-        PY
+      run: "python3 - <<'PY'\nimport json,os,re\nr=json.load(open('.github/mobile-detail-request.json'))\nassert re.fullmatch(r'\\d{4}-\\\
+        d{2}-\\d{2}',r['date']) and r['source'].isdigit() and re.fullmatch(r'[0-9a-f]{40}',r['published'])\nwith open(os.environ['GITHUB_ENV'],'a')\
+        \ as out:\n    for k,v in {'REPORT_MODE':'control','REPORT_DATE':r['date'],'REPORT_SOURCE':r['source'],'REPORT_PUBLISHED':r['published']}.items():out.write(k+'='+v+'\\\
+        n')\nPY\n"
     - name: Require private artifact key
       env:
         PRIVATE_ARTIFACT_KEY: ${{ secrets.PRIVATE_ARTIFACT_KEY }}
-      run: |
-        python3 - <<'PYKEY'
-        import os, base64
-        try:
-         k=base64.b64decode(os.environ.get("PRIVATE_ARTIFACT_KEY", ""),validate=True)
-         assert len(k)==32
-        except Exception:
-         raise SystemExit("Configure PRIVATE_ARTIFACT_KEY before enabling this workflow")
-        PYKEY
+      run: "python3 - <<'PYKEY'\nimport os, base64\ntry:\n k=base64.b64decode(os.environ.get(\"PRIVATE_ARTIFACT_KEY\", \"\"),validate=True)\n\
+        \ assert len(k)==32\nexcept Exception:\n raise SystemExit(\"Configure PRIVATE_ARTIFACT_KEY before enabling this workflow\")\n\
+        PYKEY\n"
     - name: Resolve experimental day and frozen source
       id: cfg
       env:
@@ -82,10 +80,13 @@ jobs:
         INPUT_SOURCE_RUN: ${{ inputs.source_run_id || env.REPORT_SOURCE }}
         INPUT_PUBLISHED_REF: ${{ inputs.published_ref || env.REPORT_PUBLISHED }}
         INPUT_MISSING_ONLY: ${{ inputs.missing_only }}
-      run: |
-        python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<'PRIVATE_COMMAND'
+      run: 'python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<''PRIVATE_COMMAND''
+
         python experiments/ensemble_validation/control_runtime.py config --settings experiments/ensemble_validation/experiment-settings.json
+
         PRIVATE_COMMAND
+
+        '
     - uses: actions/checkout@v4
       if: steps.cfg.outputs.run_mode != 'control'
       with:
@@ -152,17 +153,9 @@ jobs:
     - name: Restore frozen history reference from previous artifact
       if: steps.cfg.outputs.run_mode != 'control'
       id: seed
-      run: |
-        python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<'PRIVATE_COMMAND'
-        mkdir -p reference
-        if test -f previous/reference-predictions.json; then
-          cp previous/reference-predictions.json reference/predictions.json
-          cp previous/reference-manifest.json reference/manifest.json
-          echo "available=true" >> "$GITHUB_OUTPUT"
-        else
-          echo "available=false" >> "$GITHUB_OUTPUT"
-        fi
-        PRIVATE_COMMAND
+      run: "python3 \"$GITHUB_WORKSPACE/scripts/privacy/run_private.py\" <<'PRIVATE_COMMAND'\nmkdir -p reference\nif test -f previous/reference-predictions.json;\
+        \ then\n  cp previous/reference-predictions.json reference/predictions.json\n  cp previous/reference-manifest.json reference/manifest.json\n\
+        \  echo \"available=true\" >> \"$GITHUB_OUTPUT\"\nelse\n  echo \"available=false\" >> \"$GITHUB_OUTPUT\"\nfi\nPRIVATE_COMMAND\n"
     - uses: ./.github/actions/private-download
       if: steps.cfg.outputs.run_mode != 'control' && (steps.seed.outputs.available != 'true')
       with:
@@ -175,23 +168,31 @@ jobs:
       with:
         python-version: '3.11'
     - name: Install independent outcome learner dependency
-      run: |
-        python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<'PRIVATE_COMMAND'
+      run: 'python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<''PRIVATE_COMMAND''
+
         python -m pip install numpy==2.3.5
+
         PRIVATE_COMMAND
+
+        '
     - uses: actions/setup-java@v4
       with:
         distribution: temurin
         java-version: '17'
         cache: maven
-        cache-dependency-path: |
-          football/pom.xml
+        cache-dependency-path: 'football/pom.xml
+
           basketball/pom.xml
+
+          '
     - name: Verify feature and validation rules
-      run: |
-        python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<'PRIVATE_COMMAND'
+      run: 'python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<''PRIVATE_COMMAND''
+
         python -m unittest discover -s experiments/ensemble_validation -v
+
         PRIVATE_COMMAND
+
+        '
     - name: Restore verified preceding-day journals for checkpoint recovery
       if: steps.cfg.outputs.checkpoint_recovery == 'true'
       uses: ./.github/actions/private-download
@@ -203,311 +204,601 @@ jobs:
         key: ${{ secrets.PRIVATE_ARTIFACT_KEY }}
     - name: Preserve missing cumulative journals without overwriting checkpoint files
       if: steps.cfg.outputs.checkpoint_recovery == 'true'
-      run: |
-        python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<'PRIVATE_COMMAND'
-        python3 - <<'PYJ'
-        from pathlib import Path
-        import shutil
-        for name in ['daily-journal.json','selection-journal.json','match-choice-journal.json','stability-journal.json']:
-            source=Path('recovery-parent')/name
-            destination=Path('previous')/name
-            if not source.is_file():raise ValueError('Missing recovery parent journal')
-            if not destination.exists():shutil.copyfile(source,destination)
-        PYJ
-        PRIVATE_COMMAND
+      run: "python3 \"$GITHUB_WORKSPACE/scripts/privacy/run_private.py\" <<'PRIVATE_COMMAND'\npython3 - <<'PYJ'\nfrom pathlib import\
+        \ Path\nimport shutil\nfor name in ['daily-journal.json','selection-journal.json','match-choice-journal.json','stability-journal.json']:\n\
+        \    source=Path('recovery-parent')/name\n    destination=Path('previous')/name\n    if not source.is_file():raise ValueError('Missing\
+        \ recovery parent journal')\n    if not destination.exists():shutil.copyfile(source,destination)\nPYJ\nPRIVATE_COMMAND\n"
     - name: Restore immutable artifact for experiment control
       if: steps.cfg.outputs.run_mode == 'control'
-      run: |
-        python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<'PRIVATE_COMMAND'
-        python experiments/ensemble_validation/control_runtime.py begin --previous previous --output pipeline-output --target-date '${{ steps.cfg.outputs.target_date }}' --source-run '${{ steps.cfg.outputs.previous_run_id }}'
+      run: 'python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<''PRIVATE_COMMAND''
+
+        python experiments/ensemble_validation/control_runtime.py begin --previous previous --output pipeline-output --target-date ''${{
+        steps.cfg.outputs.target_date }}'' --source-run ''${{ steps.cfg.outputs.previous_run_id }}''
+
         PRIVATE_COMMAND
+
+        '
     - name: Compile experiment HTTP refresh tools
       if: steps.cfg.outputs.run_mode == 'control'
-      run: |
-        python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<'PRIVATE_COMMAND'
+      run: 'python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<''PRIVATE_COMMAND''
+
         mvn -B -f football/pom.xml compile
+
         mvn -B -f basketball/pom.xml compile
+
         PRIVATE_COMMAND
+
+        '
     - name: Collect daily wide HTTP history (experiment only)
       if: steps.cfg.outputs.run_mode != 'control'
-      run: |
-        python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<'PRIVATE_COMMAND'
-        python experiments/ensemble_validation/live_history.py --published published --previous previous --output pipeline-output --target-date '${{ steps.cfg.outputs.target_date }}'
+      run: 'python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<''PRIVATE_COMMAND''
+
+        python experiments/ensemble_validation/live_history.py --published published --previous previous --output pipeline-output --target-date
+        ''${{ steps.cfg.outputs.target_date }}''
+
         PRIVATE_COMMAND
+
+        '
     - name: Freeze paired inputs and feature ablations
       if: steps.cfg.outputs.run_mode != 'control'
-      run: |
-        python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<'PRIVATE_COMMAND'
-        python experiments/ensemble_validation/prepare.py --published published --archive archive --reference reference --output pipeline-output --holdout '${{ steps.cfg.outputs.target_date }}' --live-history pipeline-output/live-history-journal.json
+      run: 'python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<''PRIVATE_COMMAND''
+
+        python experiments/ensemble_validation/prepare.py --published published --archive archive --reference reference --output pipeline-output
+        --holdout ''${{ steps.cfg.outputs.target_date }}'' --live-history pipeline-output/live-history-journal.json
+
         PRIVATE_COMMAND
+
+        '
     - name: Preserve reproducible history seed in artifact
       if: steps.cfg.outputs.run_mode != 'control'
-      run: |
-        python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<'PRIVATE_COMMAND'
+      run: 'python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<''PRIVATE_COMMAND''
+
         cp reference/predictions.json pipeline-output/reference-predictions.json
+
         cp reference/manifest.json pipeline-output/reference-manifest.json
+
         PRIVATE_COMMAND
+
+        '
     - name: Replay original football models
       if: steps.cfg.outputs.run_mode != 'control'
       working-directory: football
-      run: |
-        python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<'PRIVATE_COMMAND'
-        mvn -B compile exec:java -Dexec.mainClass=com.example.experiment.ExperimentReplay -Dexec.args="../pipeline-output/football-inputs.json ../pipeline-output/football-replay.json"
+      run: 'python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<''PRIVATE_COMMAND''
+
+        mvn -B compile exec:java -Dexec.mainClass=com.example.experiment.ExperimentReplay -Dexec.args="../pipeline-output/football-inputs.json
+        ../pipeline-output/football-replay.json"
+
         PRIVATE_COMMAND
+
+        '
     - name: Replay original basketball models
       if: steps.cfg.outputs.run_mode != 'control'
       working-directory: basketball
-      run: |
-        python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<'PRIVATE_COMMAND'
-        mvn -B compile exec:java -Dexec.mainClass=com.basketbol.experiment.ExperimentReplay -Dexec.args="../pipeline-output/basketball-inputs.json ../pipeline-output/basketball-replay.json"
+      run: 'python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<''PRIVATE_COMMAND''
+
+        mvn -B compile exec:java -Dexec.mainClass=com.basketbol.experiment.ExperimentReplay -Dexec.args="../pipeline-output/basketball-inputs.json
+        ../pipeline-output/basketball-replay.json"
+
         PRIVATE_COMMAND
+
+        '
     - name: Add experimental goal and total history features
       if: steps.cfg.outputs.run_mode != 'control'
-      run: |
-        python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<'PRIVATE_COMMAND'
+      run: 'python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<''PRIVATE_COMMAND''
+
         python experiments/ensemble_validation/history_markets.py --output pipeline-output
+
         PRIVATE_COMMAND
-    - name: Freeze conditional calibration shadow predictions
-      if: steps.cfg.outputs.run_mode != 'control'
-      run: |
-        python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<'PRIVATE_COMMAND'
-        python experiments/ensemble_validation/conditional_rules.py freeze --output pipeline-output --previous previous
-        PRIVATE_COMMAND
-    - name: Freeze earlier-day rule predictions before refreshing labels
-      if: steps.cfg.outputs.run_mode != 'control'
-      run: |
-        python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<'PRIVATE_COMMAND'
-        python experiments/ensemble_validation/daybook.py freeze --output pipeline-output --previous previous
-        PRIVATE_COMMAND
-    - name: Discover and freeze two-condition history rules (shadow only)
-      if: steps.cfg.outputs.run_mode != 'control'
-      run: |
-        python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<'PRIVATE_COMMAND'
-        python experiments/ensemble_validation/mine_rules.py --input pipeline-output --output pipeline-output --previous previous --bootstrap rule-bootstrap --target-date '${{ steps.cfg.outputs.target_date }}'
-        PRIVATE_COMMAND
-    - name: Learn outcomes and freeze independent model forecasts
+
+        '
+    - name: Run frozen primary model without research training
       if: steps.cfg.outputs.run_mode != 'control'
       env:
         OPENBLAS_NUM_THREADS: '1'
-      run: |
-        python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<'PRIVATE_COMMAND'
-        python experiments/ensemble_validation/outcome_learning.py --dataset pipeline-output/rule-mining-dataset.json --output pipeline-output --previous previous --target-date '${{ steps.cfg.outputs.target_date }}'
+      run: 'python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<''PRIVATE_COMMAND''
+
+        python experiments/ensemble_validation/primary_forecast.py --output pipeline-output --previous previous --target-date ''${{
+        steps.cfg.outputs.target_date }}''
+
         PRIVATE_COMMAND
+
+        '
+    - name: Carry optional bootstrap for isolated research runner
+      run: if [ -d rule-bootstrap ]; then cp -r rule-bootstrap pipeline-output/research-bootstrap; fi
+    - name: Save encrypted primary forecasts before background work
+      uses: ./.github/actions/private-upload
+      with:
+        name: primary-forecasts-${{ steps.cfg.outputs.target_date }}
+        path: pipeline-output/
+        retention-days: 30
+        key: ${{ secrets.PRIVATE_ARTIFACT_KEY }}
+    - name: Publish primary HTML immediately without waiting for research
+      if: steps.cfg.outputs.run_mode != 'control'
+      env:
+        PRIVATE_REPORT_TOKEN: ${{ secrets.FATHERTAHMIN_WRITE_TOKEN || secrets.ADMIN_USER }}
+        REPORT_SOURCE_TOKEN: ${{ github.token }}
+      run: 'python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<''PRIVATE_COMMAND''
+
+        python experiments/ensemble_validation/publish_primary.py --output pipeline-output --target-date ''${{ steps.cfg.outputs.target_date
+        }}''
+
+        PRIVATE_COMMAND
+
+        '
+    - name: Upload failed-run diagnostics
+      if: failure()
+      uses: ./.github/actions/private-upload
+      with:
+        name: ensemble-market-validation-diagnostics
+        path: pipeline-output/
+        retention-days: 7
+        key: ${{ secrets.PRIVATE_ARTIFACT_KEY }}
+    - name: Prepare private diagnostic directory
+      if: always()
+      run: mkdir -p "$RUNNER_TEMP/tahmin-private-logs"
+    - name: Upload encrypted application diagnostics
+      if: always()
+      uses: ./.github/actions/private-upload
+      with:
+        name: private-logs-benchmark-${{ github.run_id }}
+        path: ${{ runner.temp }}/tahmin-private-logs
+        key: ${{ secrets.PRIVATE_ARTIFACT_KEY }}
+        retention-days: '7'
+  research:
+    name: Background research and outcome reports
+    needs: primary
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        persist-credentials: false
+    - name: Use the promoted replay implementation on this runner
+      run: "for sport in football basketball; do\n  rsync -a --delete \"promoted/replay/$sport/src/\" \"$sport/src/\"\n  cp \"promoted/replay/$sport/pom.xml\"\
+        \ \"$sport/pom.xml\"\ndone\ncp promoted/artifact.py scripts/privacy/artifact.py\n"
+    - name: Require private artifact key
+      env:
+        PRIVATE_ARTIFACT_KEY: ${{ secrets.PRIVATE_ARTIFACT_KEY }}
+      run: "python3 - <<'PYKEY'\nimport os, base64\ntry:\n k=base64.b64decode(os.environ.get(\"PRIVATE_ARTIFACT_KEY\", \"\"),validate=True)\n\
+        \ assert len(k)==32\nexcept Exception:\n raise SystemExit(\"Configure PRIVATE_ARTIFACT_KEY before enabling this workflow\")\n\
+        PYKEY\n"
+    - uses: actions/checkout@v4
+      if: needs.primary.outputs.run_mode != 'control'
+      with:
+        repository: sukrutureli/fathertahmin
+        ref: ${{ needs.primary.outputs.published_ref }}
+        path: published
+        persist-credentials: false
+        token: ${{ secrets.FATHERTAHMIN_READ_TOKEN || secrets.FATHERTAHMIN_WRITE_TOKEN || secrets.ADMIN_USER }}
+    - uses: actions/checkout@v4
+      if: needs.primary.outputs.run_mode != 'control'
+      with:
+        repository: sukrutureli/fathertahmin
+        ref: 700bc50bd7b63a616a8b9a61d4aa6de2f7e2a14c
+        path: archive
+        persist-credentials: false
+        token: ${{ secrets.FATHERTAHMIN_READ_TOKEN || secrets.FATHERTAHMIN_WRITE_TOKEN || secrets.ADMIN_USER }}
+    - name: Restore exact primary checkpoint
+      uses: ./.github/actions/private-download
+      with:
+        name: primary-forecasts-${{ needs.primary.outputs.target_date }}
+        run-id: ${{ github.run_id }}
+        github-token: ${{ github.token }}
+        path: pipeline-output
+        key: ${{ secrets.PRIVATE_ARTIFACT_KEY }}
+    - name: Restore previous research journals
+      uses: ./.github/actions/private-download
+      with:
+        name: ${{ needs.primary.outputs.previous_artifact }}
+        run-id: ${{ needs.primary.outputs.previous_run_id }}
+        github-token: ${{ github.token }}
+        path: previous
+        key: ${{ secrets.PRIVATE_ARTIFACT_KEY }}
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+    - name: Install independent outcome learner dependency
+      run: 'python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<''PRIVATE_COMMAND''
+
+        python -m pip install numpy==2.3.5
+
+        PRIVATE_COMMAND
+
+        '
+    - uses: actions/setup-java@v4
+      with:
+        distribution: temurin
+        java-version: '17'
+        cache: maven
+        cache-dependency-path: 'football/pom.xml
+
+          basketball/pom.xml
+
+          '
+    - name: Compile result refresh tools in research runner
+      run: 'python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<''PRIVATE_COMMAND''
+
+        mvn -B -f football/pom.xml compile
+
+        mvn -B -f basketball/pom.xml compile
+
+        PRIVATE_COMMAND
+
+        '
+    - name: Verify feature and validation rules
+      run: 'python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<''PRIVATE_COMMAND''
+
+        python -m unittest discover -s experiments/ensemble_validation -v
+
+        PRIVATE_COMMAND
+
+        '
+    - name: Restore reference and optional bootstrap from primary checkpoint
+      run: 'python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<''PRIVATE_COMMAND''
+
+        mkdir -p reference
+
+        if [ -f pipeline-output/reference-manifest.json ]; then cp pipeline-output/reference-manifest.json reference/manifest.json;
+        fi
+
+        if [ -f pipeline-output/reference-predictions.json ]; then cp pipeline-output/reference-predictions.json reference/predictions.json;
+        fi
+
+        if [ -d pipeline-output/research-bootstrap ]; then cp -r pipeline-output/research-bootstrap rule-bootstrap; fi
+
+        PRIVATE_COMMAND
+
+        '
+    - name: Freeze conditional calibration shadow predictions
+      if: needs.primary.outputs.run_mode != 'control'
+      run: 'python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<''PRIVATE_COMMAND''
+
+        python experiments/ensemble_validation/conditional_rules.py freeze --output pipeline-output --previous previous
+
+        PRIVATE_COMMAND
+
+        '
+    - name: Freeze earlier-day rule predictions before refreshing labels
+      if: needs.primary.outputs.run_mode != 'control'
+      run: 'python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<''PRIVATE_COMMAND''
+
+        python experiments/ensemble_validation/daybook.py freeze --output pipeline-output --previous previous
+
+        PRIVATE_COMMAND
+
+        '
+    - name: Discover and freeze two-condition history rules (shadow only)
+      if: needs.primary.outputs.run_mode != 'control'
+      run: 'python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<''PRIVATE_COMMAND''
+
+        python experiments/ensemble_validation/mine_rules.py --input pipeline-output --output pipeline-output --previous previous --bootstrap
+        rule-bootstrap --target-date ''${{ needs.primary.outputs.target_date }}''
+
+        PRIVATE_COMMAND
+
+        '
+    - name: Learn outcomes and freeze independent model forecasts
+      if: needs.primary.outputs.run_mode != 'control'
+      env:
+        OPENBLAS_NUM_THREADS: '1'
+      run: 'python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<''PRIVATE_COMMAND''
+
+        python experiments/ensemble_validation/outcome_learning.py --dataset pipeline-output/rule-mining-dataset.json --output pipeline-output
+        --previous previous --target-date ''${{ needs.primary.outputs.target_date }}''
+
+        PRIVATE_COMMAND
+
+        '
     - name: Freeze independently validated football score distribution
-      if: steps.cfg.outputs.run_mode != 'control'
-      run: |
-        python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<'PRIVATE_COMMAND'
+      if: needs.primary.outputs.run_mode != 'control'
+      run: 'python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<''PRIVATE_COMMAND''
+
         python experiments/ensemble_validation/score_distribution.py freeze --output pipeline-output --previous previous
+
         PRIVATE_COMMAND
+
+        '
     - name: Freeze top-half confidence selections before refreshing labels
-      if: steps.cfg.outputs.run_mode != 'control'
-      run: |
-        python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<'PRIVATE_COMMAND'
+      if: needs.primary.outputs.run_mode != 'control'
+      run: 'python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<''PRIVATE_COMMAND''
+
         python experiments/ensemble_validation/selection.py freeze --output pipeline-output --previous previous
+
         PRIVATE_COMMAND
+
+        '
     - name: Freeze one market choice and score per match
-      if: steps.cfg.outputs.run_mode != 'control'
-      run: |
-        python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<'PRIVATE_COMMAND'
+      if: needs.primary.outputs.run_mode != 'control'
+      run: 'python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<''PRIVATE_COMMAND''
+
         python experiments/ensemble_validation/match_choice.py freeze --output pipeline-output --previous previous
+
         PRIVATE_COMMAND
+
+        '
     - name: Prepare separate opponent and competition research candidates
       env:
         OPENBLAS_NUM_THREADS: '1'
-      run: |
-        python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<'PRIVATE_COMMAND'
-        python experiments/ensemble_validation/context_experiment.py prepare --output pipeline-output --previous previous --target-date '${{ steps.cfg.outputs.target_date }}'
+      run: 'python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<''PRIVATE_COMMAND''
+
+        python experiments/ensemble_validation/context_experiment.py prepare --output pipeline-output --previous previous --target-date
+        ''${{ needs.primary.outputs.target_date }}''
+
         PRIVATE_COMMAND
+
+        '
     - name: Lock opponent model and freeze stability cohort before results
       env:
         OPENBLAS_NUM_THREADS: '1'
-      run: |
-        python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<'PRIVATE_COMMAND'
-        python experiments/ensemble_validation/locked_stability.py freeze --output pipeline-output --previous previous --target-date '${{ steps.cfg.outputs.target_date }}'
+      run: 'python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<''PRIVATE_COMMAND''
+
+        python experiments/ensemble_validation/locked_stability.py freeze --output pipeline-output --previous previous --target-date
+        ''${{ needs.primary.outputs.target_date }}''
+
         PRIVATE_COMMAND
+
+        '
     - name: Freeze choices with available initial prices before results
-      run: |
-        python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<'PRIVATE_COMMAND'
+      run: 'python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<''PRIVATE_COMMAND''
+
         python experiments/ensemble_validation/priced_choices.py freeze --output pipeline-output
+
         PRIVATE_COMMAND
+
+        '
     - name: Freeze separate score research candidates (daily only)
-      if: steps.cfg.outputs.run_mode != 'control'
-      run: |
-        python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<'PRIVATE_COMMAND'
+      if: needs.primary.outputs.run_mode != 'control'
+      run: 'python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<''PRIVATE_COMMAND''
+
         python experiments/ensemble_validation/score_research.py freeze --output pipeline-output --previous previous
+
         PRIVATE_COMMAND
+
+        '
     - name: Freeze complete-market offered choices before results
-      if: steps.cfg.outputs.run_mode != 'control'
-      run: |
-        python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<'PRIVATE_COMMAND'
+      if: needs.primary.outputs.run_mode != 'control'
+      run: 'python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<''PRIVATE_COMMAND''
+
         python experiments/ensemble_validation/complete_prices.py freeze --output pipeline-output
+
         PRIVATE_COMMAND
+
+        '
     - name: Freeze separate same-competition ten-percent candidate
-      if: steps.cfg.outputs.run_mode != 'control'
-      run: |
-        python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<'PRIVATE_COMMAND'
+      if: needs.primary.outputs.run_mode != 'control'
+      run: 'python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<''PRIVATE_COMMAND''
+
         python experiments/ensemble_validation/competition_blend.py freeze --output pipeline-output
+
         PRIVATE_COMMAND
+
+        '
     - name: Save immutable forecasts before HTTP settlement
-      if: steps.cfg.outputs.run_mode != 'control'
+      if: needs.primary.outputs.run_mode != 'control'
       uses: ./.github/actions/private-upload
       with:
-        name: frozen-forecasts-${{ steps.cfg.outputs.target_date }}
+        name: frozen-forecasts-${{ needs.primary.outputs.target_date }}
         path: pipeline-output/
         retention-days: 30
         key: ${{ secrets.PRIVATE_ARTIFACT_KEY }}
     - name: Refresh today's finished football outcomes (artifact only)
       if: github.event_name != 'push'
       working-directory: football
-      run: |
-        python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<'PRIVATE_COMMAND'
-        mvn -B exec:java -Dexec.mainClass=com.example.experiment.OutcomeRefresh -Dexec.args="../pipeline-output/football-replay.json ../pipeline-output/football-outcome-audit.json ${{ steps.cfg.outputs.refresh_flag }}"
+      run: 'python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<''PRIVATE_COMMAND''
+
+        mvn -B exec:java -Dexec.mainClass=com.example.experiment.OutcomeRefresh -Dexec.args="../pipeline-output/football-replay.json
+        ../pipeline-output/football-outcome-audit.json ${{ needs.primary.outputs.refresh_flag }}"
+
         PRIVATE_COMMAND
+
+        '
     - name: Refresh today's finished basketball outcomes (artifact only)
       if: github.event_name != 'push'
       working-directory: basketball
-      run: |
-        python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<'PRIVATE_COMMAND'
-        mvn -B exec:java -Dexec.mainClass=com.basketbol.experiment.OutcomeRefresh -Dexec.args="../pipeline-output/basketball-replay.json ../pipeline-output/basketball-outcome-audit.json ${{ steps.cfg.outputs.refresh_flag }}"
+      run: 'python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<''PRIVATE_COMMAND''
+
+        mvn -B exec:java -Dexec.mainClass=com.basketbol.experiment.OutcomeRefresh -Dexec.args="../pipeline-output/basketball-replay.json
+        ../pipeline-output/basketball-outcome-audit.json ${{ needs.primary.outputs.refresh_flag }}"
+
         PRIVATE_COMMAND
+
+        '
     - name: Validate baseline parity and train on earlier days only
-      if: steps.cfg.outputs.run_mode != 'control' || steps.cfg.outputs.checkpoint_recovery == 'true'
-      run: |
-        python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<'PRIVATE_COMMAND'
+      if: needs.primary.outputs.run_mode != 'control' || needs.primary.outputs.checkpoint_recovery == 'true'
+      run: 'python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<''PRIVATE_COMMAND''
+
         python experiments/ensemble_validation/report.py --output pipeline-output
+
         PRIVATE_COMMAND
+
+        '
     - name: Diagnose incorrect forecasts by historical features
       if: github.event_name != 'push'
-      run: |
-        python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<'PRIVATE_COMMAND'
+      run: 'python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<''PRIVATE_COMMAND''
+
         python experiments/ensemble_validation/error_diagnostics.py --output pipeline-output
+
         PRIVATE_COMMAND
+
+        '
     - name: Settle saved predictions and update daily journal
       if: github.event_name != 'push'
-      run: |
-        python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<'PRIVATE_COMMAND'
+      run: 'python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<''PRIVATE_COMMAND''
+
         python experiments/ensemble_validation/daybook.py settle --output pipeline-output --previous previous
+
         PRIVATE_COMMAND
+
+        '
     - name: Evaluate conditional calibration shadow predictions
-      run: |
-        python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<'PRIVATE_COMMAND'
+      run: 'python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<''PRIVATE_COMMAND''
+
         python experiments/ensemble_validation/conditional_rules.py settle --output pipeline-output --previous previous
+
         PRIVATE_COMMAND
+
+        '
     - name: Settle immutable subgroup rule forecasts
       if: github.event_name != 'push'
-      run: |
-        python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<'PRIVATE_COMMAND'
-        python experiments/ensemble_validation/mine_rules.py --settle --input pipeline-output --output pipeline-output --target-date '${{ steps.cfg.outputs.target_date }}'
+      run: 'python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<''PRIVATE_COMMAND''
+
+        python experiments/ensemble_validation/mine_rules.py --settle --input pipeline-output --output pipeline-output --target-date
+        ''${{ needs.primary.outputs.target_date }}''
+
         PRIVATE_COMMAND
+
+        '
     - name: Settle independent learned forecasts
       if: github.event_name != 'push'
       env:
         OPENBLAS_NUM_THREADS: '1'
-      run: |
-        python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<'PRIVATE_COMMAND'
-        python experiments/ensemble_validation/outcome_learning.py --settle --dataset pipeline-output/rule-mining-dataset.json --output pipeline-output --target-date '${{ steps.cfg.outputs.target_date }}'
+      run: 'python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<''PRIVATE_COMMAND''
+
+        python experiments/ensemble_validation/outcome_learning.py --settle --dataset pipeline-output/rule-mining-dataset.json --output
+        pipeline-output --target-date ''${{ needs.primary.outputs.target_date }}''
+
         PRIVATE_COMMAND
+
+        '
     - name: Evaluate selected cohorts without rewriting selections
       if: github.event_name != 'push'
-      run: |
-        python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<'PRIVATE_COMMAND'
+      run: 'python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<''PRIVATE_COMMAND''
+
         python experiments/ensemble_validation/selection.py settle --output pipeline-output --previous previous
+
         PRIVATE_COMMAND
+
+        '
     - name: Evaluate single-choice shortlist and render sortable HTML
-      run: |
-        python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<'PRIVATE_COMMAND'
+      run: 'python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<''PRIVATE_COMMAND''
+
         python experiments/ensemble_validation/match_choice.py settle --output pipeline-output --previous previous
+
         PRIVATE_COMMAND
+
+        '
     - name: Compare each system's own market and confidence subsets
       if: github.event_name != 'push'
       env:
         OPENBLAS_NUM_THREADS: '1'
-      run: |
-        python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<'PRIVATE_COMMAND'
-        python experiments/ensemble_validation/context_experiment.py settle --output pipeline-output --target-date '${{ steps.cfg.outputs.target_date }}'
+      run: 'python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<''PRIVATE_COMMAND''
+
+        python experiments/ensemble_validation/context_experiment.py settle --output pipeline-output --target-date ''${{ needs.primary.outputs.target_date
+        }}''
+
         PRIVATE_COMMAND
+
+        '
     - name: Evaluate immutable modal football scores
       if: hashFiles('pipeline-output/score-before-results.json') != ''
-      run: |
-        python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<'PRIVATE_COMMAND'
+      run: 'python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<''PRIVATE_COMMAND''
+
         python experiments/ensemble_validation/score_distribution.py settle --output pipeline-output
+
         PRIVATE_COMMAND
+
+        '
     - name: Measure fixed opponent model over prospective days
       env:
         OPENBLAS_NUM_THREADS: '1'
-      run: |
-        python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<'PRIVATE_COMMAND'
-        python experiments/ensemble_validation/locked_stability.py settle --output pipeline-output --previous previous --target-date '${{ steps.cfg.outputs.target_date }}'
+      run: 'python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<''PRIVATE_COMMAND''
+
+        python experiments/ensemble_validation/locked_stability.py settle --output pipeline-output --previous previous --target-date
+        ''${{ needs.primary.outputs.target_date }}''
+
         PRIVATE_COMMAND
+
+        '
     - name: Verify provenance and history boundaries
-      if: steps.cfg.outputs.run_mode != 'control'
+      if: needs.primary.outputs.run_mode != 'control'
       env:
-        HOLDOUT_DATE: ${{ steps.cfg.outputs.target_date }}
+        HOLDOUT_DATE: ${{ needs.primary.outputs.target_date }}
         SOURCE_SHA: ${{ github.sha }}
         RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
-      run: |
-        python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<'PRIVATE_COMMAND'
-        python - <<'PY'
-        import json, os, subprocess
-        from pathlib import Path
-        root = Path("pipeline-output")
-        for sport in ("football", "basketball"):
-            rows = json.loads((root / (sport + "-replay.json")).read_text())
-            assert len({(r["date"], r["eventId"]) for r in rows}) == len(rows)
-            for row in rows:
-                assert row["role"] == ("holdout" if row["date"] == os.environ["HOLDOUT_DATE"] else "training")
-                for variant in row["variants"].values():
-                    for side in ("home", "away"):
-                        assert all(r["date"] < row["date"] for r in variant.get("audit", {}).get(side, {}).get("rows", []))
-        manifest = json.loads((root / "input-manifest.json").read_text())
-        manifest.update({"sourceSha": os.environ["SOURCE_SHA"], "runUrl": os.environ["RUN_URL"], "publishedSha": subprocess.check_output(["git", "-C", "published", "rev-parse", "HEAD"], text=True).strip(), "archiveSha": subprocess.check_output(["git", "-C", "archive", "rev-parse", "HEAD"], text=True).strip(), "referenceManifest": json.loads(Path("reference/manifest.json").read_text())})
-        (root / "input-manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2))
-        PY
-        PRIVATE_COMMAND
+      run: "python3 \"$GITHUB_WORKSPACE/scripts/privacy/run_private.py\" <<'PRIVATE_COMMAND'\npython - <<'PY'\nimport json, os, subprocess\n\
+        from pathlib import Path\nroot = Path(\"pipeline-output\")\nfor sport in (\"football\", \"basketball\"):\n    rows = json.loads((root\
+        \ / (sport + \"-replay.json\")).read_text())\n    assert len({(r[\"date\"], r[\"eventId\"]) for r in rows}) == len(rows)\n \
+        \   for row in rows:\n        assert row[\"role\"] == (\"holdout\" if row[\"date\"] == os.environ[\"HOLDOUT_DATE\"] else \"\
+        training\")\n        for variant in row[\"variants\"].values():\n            for side in (\"home\", \"away\"):\n           \
+        \     assert all(r[\"date\"] < row[\"date\"] for r in variant.get(\"audit\", {}).get(side, {}).get(\"rows\", []))\nmanifest\
+        \ = json.loads((root / \"input-manifest.json\").read_text())\nmanifest.update({\"sourceSha\": os.environ[\"SOURCE_SHA\"], \"\
+        runUrl\": os.environ[\"RUN_URL\"], \"publishedSha\": subprocess.check_output([\"git\", \"-C\", \"published\", \"rev-parse\"\
+        , \"HEAD\"], text=True).strip(), \"archiveSha\": subprocess.check_output([\"git\", \"-C\", \"archive\", \"rev-parse\", \"HEAD\"\
+        ], text=True).strip(), \"referenceManifest\": json.loads(Path(\"reference/manifest.json\").read_text())})\n(root / \"input-manifest.json\"\
+        ).write_text(json.dumps(manifest, ensure_ascii=False, indent=2))\nPY\nPRIVATE_COMMAND\n"
     - name: Evaluate separate frozen score research
-      run: |
-        python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<'PRIVATE_COMMAND'
+      run: 'python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<''PRIVATE_COMMAND''
+
         python experiments/ensemble_validation/score_research.py settle --output pipeline-output
+
         PRIVATE_COMMAND
+
+        '
     - name: Measure frozen same-competition candidate without refitting
-      run: |
-        python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<'PRIVATE_COMMAND'
+      run: 'python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<''PRIVATE_COMMAND''
+
         python experiments/ensemble_validation/competition_blend.py settle --output pipeline-output
+
         PRIVATE_COMMAND
+
+        '
     - name: Prove control preserved forecasts and model parameters
-      if: steps.cfg.outputs.run_mode == 'control'
-      run: |
-        python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<'PRIVATE_COMMAND'
+      if: needs.primary.outputs.run_mode == 'control'
+      run: 'python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<''PRIVATE_COMMAND''
+
         python experiments/ensemble_validation/control_runtime.py verify --output pipeline-output
+
         PRIVATE_COMMAND
+
+        '
     - name: Render private artifact previews
-      run: |
-        python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<'PRIVATE_COMMAND'
-        google-chrome --headless=new --no-sandbox --disable-gpu --screenshot="$PWD/pipeline-output/desktop.png" --window-size=1440,1000 "file://$PWD/pipeline-output/models.html" >/tmp/render.log 2>&1
-        google-chrome --headless=new --no-sandbox --disable-gpu --screenshot="$PWD/pipeline-output/mobile.png" --window-size=390,844 "file://$PWD/pipeline-output/index.html" >>/tmp/render.log 2>&1
+      run: 'python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<''PRIVATE_COMMAND''
+
+        google-chrome --headless=new --no-sandbox --disable-gpu --screenshot="$PWD/pipeline-output/desktop.png" --window-size=1440,1000
+        "file://$PWD/pipeline-output/models.html" >/tmp/render.log 2>&1
+
+        google-chrome --headless=new --no-sandbox --disable-gpu --screenshot="$PWD/pipeline-output/mobile.png" --window-size=390,844
+        "file://$PWD/pipeline-output/index.html" >>/tmp/render.log 2>&1
+
         PRIVATE_COMMAND
+
+        '
     - name: Record production trigger without changing frozen forecast files
       env:
         PRODUCTION_KEY: ${{ inputs.production_run_id }}
-      run: |
-        python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<'PRIVATE_COMMAND'
-        python3 - <<'PY'
+      run: 'python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<''PRIVATE_COMMAND''
+
+        python3 - <<''PY''
+
         import json,os,re
+
         from pathlib import Path
-        key=os.environ.get('PRODUCTION_KEY','')
-        if key and not re.fullmatch(r'\d+(?:-previous)?',key):raise ValueError('Invalid production request key')
-        Path('pipeline-output/production-trigger.json').write_text(json.dumps({'requestKey':key or None,'mode':'${{ steps.cfg.outputs.run_mode }}','targetDate':'${{ steps.cfg.outputs.target_date }}'}))
+
+        key=os.environ.get(''PRODUCTION_KEY'','''')
+
+        if key and not re.fullmatch(r''\d+(?:-previous)?'',key):raise ValueError(''Invalid production request key'')
+
+        Path(''pipeline-output/production-trigger.json'').write_text(json.dumps({''requestKey'':key or None,''mode'':''${{ needs.primary.outputs.run_mode
+        }}'',''targetDate'':''${{ needs.primary.outputs.target_date }}''}))
+
         PY
+
         PRIVATE_COMMAND
+
+        '
     - name: Show initial odds and MBS in prediction HTML
-      run: |
-        python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<'PRIVATE_COMMAND'
+      run: 'python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<''PRIVATE_COMMAND''
+
         python experiments/ensemble_validation/display_odds.py --output pipeline-output
+
         python experiments/ensemble_validation/new_reports.py --output pipeline-output
+
         PRIVATE_COMMAND
+
+        '
     - uses: ./.github/actions/private-upload
       with:
-        name: ensemble-market-validation-${{ steps.cfg.outputs.target_date }}
+        name: ensemble-market-validation-${{ needs.primary.outputs.target_date }}
         path: pipeline-output/
         retention-days: 30
         key: ${{ secrets.PRIVATE_ARTIFACT_KEY }}
@@ -515,10 +806,14 @@ jobs:
       env:
         PRIVATE_REPORT_TOKEN: ${{ secrets.FATHERTAHMIN_WRITE_TOKEN || secrets.ADMIN_USER }}
         REPORT_SOURCE_TOKEN: ${{ github.token }}
-      run: |
-        python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<'PRIVATE_COMMAND'
-        python experiments/ensemble_validation/private_reports.py --root pipeline-output --source-run '${{ github.run_id }}' --target-date '${{ steps.cfg.outputs.target_date }}'
+      run: 'python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<''PRIVATE_COMMAND''
+
+        python experiments/ensemble_validation/private_reports.py --root pipeline-output --source-run ''${{ github.run_id }}'' --target-date
+        ''${{ needs.primary.outputs.target_date }}''
+
         PRIVATE_COMMAND
+
+        '
     - name: Upload failed-run diagnostics
       if: failure()
       uses: ./.github/actions/private-upload
@@ -540,5 +835,3 @@ jobs:
         retention-days: '7'
 env:
   GITHUB_TOKEN: ${{ secrets.FATHERTAHMIN_READ_TOKEN || secrets.FATHERTAHMIN_WRITE_TOKEN || secrets.ADMIN_USER }}
-
-

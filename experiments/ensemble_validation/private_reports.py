@@ -18,7 +18,7 @@ JSON_FILES=['priced-complete-evaluation.json','competition-evaluation.json','sco
  'error-diagnostics.json']
 HTML_FILES=['ayni-lig-deneyi.html','futbol-skor-deneyi.html','futbol-yeni.html','basketbol-yeni.html','day-by-day.html','errors.html','context-comparison.html','stability.html',
  'models.html','selection.html','outcome-learning.html','best-matches.html']
-SNAPSHOTS=['priced-complete-before-results.json','competition-before-results.json','score-research-before-results.json','priced-before-results.json','before-results-predictions.json','conditional-before-results.json',
+SNAPSHOTS=['primary-context-before-results.json','priced-complete-before-results.json','competition-before-results.json','score-research-before-results.json','priced-before-results.json','before-results-predictions.json','conditional-before-results.json',
  'learned-before-results.json','mined-before-results.json','selection-before-results.json',
  'match-choice-before-results.json','context-before-results.json','score-before-results.json',
  'stability-before-results.json']
