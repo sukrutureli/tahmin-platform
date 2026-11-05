@@ -35,7 +35,7 @@ def archive(root,today=None,history=False):
                 if p.is_file() and not p.is_symlink():shutil.copyfile(p,out/p.name)
             if folder.name >= '2026-11-02':
                 manifest=json.loads((folder/'new-report-manifest.json').read_text())
-                if manifest['targetDate']!=folder.name or manifest['selectionPolicy']!='available-price-v1' or manifest['version']!='opponent-locked-v1':
+                if manifest['targetDate']!=folder.name or manifest['selectionPolicy'] not in ('available-price-v1','complete-market-price-v2') or manifest['version']!='opponent-locked-v1':
                     raise ValueError('Promoted report identity mismatch')
                 for sport in ('futbol','basketbol'):
                     n=sport+'-yeni.html'; data=(folder/n).read_bytes()

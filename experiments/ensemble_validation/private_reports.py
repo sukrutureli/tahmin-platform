@@ -10,7 +10,7 @@ PREFIX='deney/current/'
 LIMIT=1024*1024
 HTML_LIMIT=4*1024*1024
 TOTAL=16*1024*1024
-JSON_FILES=['competition-evaluation.json','score-research-evaluation.json','priced-evaluation.json','new-report-manifest.json','production-trigger.json','display-metadata.json','daily-evaluation.json','daily-journal.json','conditional-evaluation.json',
+JSON_FILES=['priced-complete-evaluation.json','competition-evaluation.json','score-research-evaluation.json','priced-evaluation.json','new-report-manifest.json','production-trigger.json','display-metadata.json','daily-evaluation.json','daily-journal.json','conditional-evaluation.json',
  'learned-daily-evaluation.json','mined-daily-evaluation.json','selection-evaluation.json',
  'selection-journal.json','match-choice-evaluation.json','match-choice-journal.json',
  'context-evaluation.json','stability-evaluation.json','stability-journal.json',
@@ -18,7 +18,7 @@ JSON_FILES=['competition-evaluation.json','score-research-evaluation.json','pric
  'error-diagnostics.json']
 HTML_FILES=['ayni-lig-deneyi.html','futbol-skor-deneyi.html','futbol-yeni.html','basketbol-yeni.html','day-by-day.html','errors.html','context-comparison.html','stability.html',
  'models.html','selection.html','outcome-learning.html','best-matches.html']
-SNAPSHOTS=['competition-before-results.json','score-research-before-results.json','priced-before-results.json','before-results-predictions.json','conditional-before-results.json',
+SNAPSHOTS=['priced-complete-before-results.json','competition-before-results.json','score-research-before-results.json','priced-before-results.json','before-results-predictions.json','conditional-before-results.json',
  'learned-before-results.json','mined-before-results.json','selection-before-results.json',
  'match-choice-before-results.json','context-before-results.json','score-before-results.json',
  'stability-before-results.json']
@@ -92,7 +92,7 @@ def publish(api,files,manifest,today=None):
         owned=set(JSON_FILES+HTML_FILES+['snapshot-index.json','history-coverage.json','checkpoint-manifest.json'])
         paths={x['path']:x for x in entries['tree'] if x['path'].startswith(PREFIX)}
         files=dict(files);files['checkpoint-manifest.json']=encoded(manifest)
-        dated={name:files[name] for name in ['competition-evaluation.json','ayni-lig-deneyi.html','futbol-skor-deneyi.html','score-research-evaluation.json','futbol-yeni.html','basketbol-yeni.html','new-report-manifest.json','checkpoint-manifest.json','priced-evaluation.json','stability-evaluation.json','context-evaluation.json','daily-evaluation.json'] if name in files}
+        dated={name:files[name] for name in ['priced-complete-evaluation.json','competition-evaluation.json','ayni-lig-deneyi.html','futbol-skor-deneyi.html','score-research-evaluation.json','futbol-yeni.html','basketbol-yeni.html','new-report-manifest.json','checkpoint-manifest.json','priced-evaluation.json','stability-evaluation.json','context-evaluation.json','daily-evaluation.json'] if name in files}
         if manifest['targetDate'] not in keep:dated={n:v for n,v in dated.items() if not n.endswith('.html')}
         # Git blob hashes make identical reruns a no-op.
         def blob(text):

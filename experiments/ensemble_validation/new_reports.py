@@ -7,7 +7,8 @@ from responsive_report import STYLE,SCRIPT
 from display_odds import display_values,KEYS,valid_number
 from report import GROUPS,result,parse_score
 from score_details import football_score
-from priced_choices import freeze as priced_freeze,settle as priced_settle
+from complete_prices import freeze as priced_freeze,settle as priced_settle
+from priced_choices import freeze as legacy_freeze,settle as legacy_settle
 
 LEGACY_FILTER_SCRIPT="<script>\n(()=>{const input=document.getElementById('min-odds'),search=document.getElementById('match-search'),mbs=document.getElementById('mbs-filter'),pick=document.getElementById('pick-filter'),finished=document.getElementById('hide-finished'),started=document.getElementById('hide-started'),rows=[...document.querySelectorAll('.match-list tr')],count=document.getElementById('filter-count');\nfunction normalize(value){return value.replace(/ı/g,'i').normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').toLowerCase();}\nfor(const value of [...new Set(rows.map(row=>row.dataset.pick).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'tr'))){const option=document.createElement('option');option.value=value;option.textContent=value;pick.appendChild(option);}\nfunction filter(){const terms=normalize(search.value).trim().split(/\\s+/).filter(Boolean);const raw=input.value.trim(),min=raw===''?null:Number(raw.replace(',','.')),now=Date.now();let n=0;for(const row of rows){const odd=Number(row.dataset.odds),kickoff=Date.parse(row.dataset.kickoff||'');const below=min!==null&&Number.isFinite(min)&&!(odd>1&&odd>=min),wrongMbs=mbs.value!==''&&row.dataset.mbs!==mbs.value,wrongPick=pick.value!==''&&row.dataset.pick!==pick.value,done=finished.checked&&row.dataset.finished==='1',begun=started.checked&&Number.isFinite(kickoff)&&kickoff<=now;row.hidden=below||wrongMbs||wrongPick||done||begun||!terms.every(term=>normalize(row.dataset.search||'').includes(term));if(!row.hidden)n++;}count.textContent=n+' / '+rows.length+' maç';}\ninput.addEventListener('input',filter);search.addEventListener('input',filter);mbs.addEventListener('change',filter);pick.addEventListener('change',filter);finished.addEventListener('change',filter);started.addEventListener('change',filter);document.getElementById('clear-odds').addEventListener('click',()=>{input.value='';search.value='';mbs.value='';pick.value='';finished.checked=false;started.checked=false;filter();});setInterval(filter,30000);window.addEventListener('focus',filter);filter();})();\n</script>"
 
@@ -29,7 +30,7 @@ def reports(root):
     if not preview and book['modelSha256']!=model_hash:raise ValueError('Frozen model hash mismatch')
     before={p.name:sha(p) for p in root.glob('*before-results*.json')};before[model.name]=model_hash
     config=read(model)['protocol'];payload=read(model)['payload'];summary={}
-    priced=priced_freeze(root);priced_settle(root)
+    priced=(priced_freeze if target>='2026-11-05' else legacy_freeze)(root);(priced_settle if target>='2026-11-05' else legacy_settle)(root)
     for sport,folder,title in [('football','futbol','⚽ Futbol'),('basketball','basketbol','🏀 Basketbol')]:
         labels={(r['date'],str(r['eventId'])):r for r in read(root/(sport+'-replay.json'))}
         entries=priced['systems'][sport]['experiment']
@@ -37,7 +38,7 @@ def reports(root):
         for e in entries:
             row=labels.get((target,str(e['eventId'])))
             if row is None:raise ValueError('Fixture missing in saved replay')
-            c=e.get('chosen');score=e.get('score')
+            c=e.get('chosen');score=e.get('score') if c else None
             line=2.5 if sport=='football' else (row.get('odds') or {}).get('hOverUnderValue',0)
             es.append((e,row,c,score,line))
         es.sort(key=lambda x:(-(x[2]['confidence'] if x[2] else -1),str(x[0]['eventId'])))
@@ -48,7 +49,7 @@ def reports(root):
             p=c['confidence'] if c else 0;m=c['market'] if c else None;i=c['option'] if c else None
             base_label=GROUPS[sport][m][i] if c else ''
             pick_filter=('KG '+base_label) if m=='BTTS' else base_label
-            label=('KG '+base_label) if m=='BTTS' else (f'{line:g} '+base_label) if m=='OU' else (base_label or 'Oranlı tercih yok')
+            label=('KG '+base_label) if m=='BTTS' else (f'{line:g} '+base_label) if m=='OU' else (base_label or 'Tahmin yok')
             price,mbs=display_values(dict(row,sport=sport),m,i)
             if c:price=f"{c['price']:.2f}"
             name=html.escape(e['name'])+f'<span class="bet-meta">Oran <b>{price}</b> · MBS <b>{mbs}</b></span>'
@@ -57,7 +58,7 @@ def reports(root):
             if y is not None:finished+=1;hits+=int(y==i)
             late=not e.get('prospectiveBeforeKickoff',False)
             position=positions.get(str(e['eventId']),0)
-            tier='tier-late' if late else 'tier-25' if position<math.ceil(len(eligible)*.25) else 'tier-50' if position<math.ceil(len(eligible)*.5) else 'tier-75' if position<math.ceil(len(eligible)*.75) else 'tier-rest'
+            tier='tier-rest' if not c else 'tier-late' if late else 'tier-25' if position<math.ceil(len(eligible)*.25) else 'tier-50' if position<math.ceil(len(eligible)*.5) else 'tier-75' if position<math.ceil(len(eligible)*.75) else 'tier-rest'
             markets=[]
             for market,keys in KEYS[sport].items():
                 tiles=[]
@@ -90,7 +91,7 @@ def reports(root):
         state='Başlangıç günü · 14 günlük bağımsız ölçüme dahil değil.' if preview else 'Sabit model · bağımsız izleme · ana kıyas ilk %50.'
         provenance=read(root/'control-provenance.json') if (root/'control-provenance.json').exists() else {}
         updated=provenance.get('completedAt') or book.get('createdAt','')
-        body=f'<h1>{title} · {target}</h1><p>{html.escape(state)} Oranı bulunan seçeneklerden en yüksek güvenli tercih ve uyumlu skor.</p><p>{len(es)} maç · sonuçlanan tercihler {finished} · doğru {hits}. Son kontrol: {html.escape(updated)}</p>'
+        body=f'<h1>{title} · {target}</h1><p>{html.escape(state)} Tüm oranları geçerli pazarlardan en yüksek güvenli tercih ve uyumlu skor.</p><p>{len(es)} maç · sonuçlanan tercihler {finished} · doğru {hits}. Son kontrol: {html.escape(updated)}</p>'
         body+='<nav><button id="sort-time" type="button" aria-pressed="false">Saate göre</button><button id="sort-confidence" type="button" aria-pressed="true">Güvene göre ↓</button><span id="sort-status">Güven: yüksekten düşüğe</span></nav>'
         body+='<div class="odds-filter"><label for="match-search">Maç ara</label><input id="match-search" type="search" placeholder="Takım veya maç adı" autocomplete="off"><label for="min-odds">En düşük oran</label><input id="min-odds" type="number" inputmode="decimal" min="1" step="0.05" placeholder="Örn. 1.50"><label for="mbs-filter">MBS</label><select id="mbs-filter"><option value="">Tümü</option><option value="1">1</option><option value="2">2</option><option value="3">3</option></select><label for="pick-filter">Tercih</label><select id="pick-filter"><option value="">Tümü</option></select><label class="check-filter"><input id="hide-finished" type="checkbox"> Sonuçlananları gizle</label><label class="check-filter" title="İstanbul saatine ve planlanan başlangıca göre"><input id="hide-started" type="checkbox"> Başlamışları gizle</label><button id="clear-odds" type="button">Filtreleri temizle</button><span id="filter-count" aria-live="polite"></span></div>'
         if target>='2026-10-28':

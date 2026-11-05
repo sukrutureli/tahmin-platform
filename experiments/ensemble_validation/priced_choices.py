@@ -25,15 +25,15 @@ def choose(entry,row,sport):
             if valid_number(price,1):options.append({'market':market,'option':i,'confidence':p,'price':price})
     return max(options,key=lambda x:x['confidence']) if options else None
 
-def freeze(root,now=None):
-    root=Path(root);path=root/FILE
+def freeze(root,now=None,*,filename=FILE,policy=POLICY,chooser=choose):
+    root=Path(root);path=root/filename
     model=root/'stability-model.json';locked=root/'stability-before-results.json'
     source=locked if locked.exists() else root/'context-before-results.json'
     book=read(source);target=book['targetDate'];preview=not locked.exists()
     if preview and target!='2026-10-18':raise ValueError('Missing locked snapshot')
     if path.exists():
         saved=read(path);body={k:v for k,v in saved.items() if k!='snapshotSha256'}
-        if saved['snapshotSha256']!=signature(body) or saved['sourceSha256']!=digest(source) or saved['modelSha256']!=digest(model) or saved['policy']!=POLICY:raise ValueError('Frozen priced choices changed')
+        if saved['snapshotSha256']!=signature(body) or saved['sourceSha256']!=digest(source) or saved['modelSha256']!=digest(model) or saved['policy']!=policy:raise ValueError('Frozen priced choices changed')
         return saved
     now=now or datetime.now(timezone.utc);payload=read(model)['payload'];systems={}
     from conditional_score import football_score,basketball_score
@@ -44,7 +44,7 @@ def freeze(root,now=None):
             for original in book['systems'][sport].get(name,[]):
                 e=copy.deepcopy(original);row=labels.get(str(e['eventId']))
                 if row is None:raise ValueError('Missing priced fixture input')
-                c=choose(e,row,sport);e['chosen']=c
+                c=chooser(e,row,sport);e['chosen']=c
                 try:before=now<datetime.fromisoformat(target+'T'+e['time']).replace(tzinfo=ZoneInfo('Europe/Istanbul'))
                 except (ValueError,KeyError,TypeError):before=False
                 e['prospectiveBeforeKickoff']=bool(not preview and before and e.get('prospectiveBeforeKickoff'))
@@ -56,7 +56,7 @@ def freeze(root,now=None):
                     e['score']=sc['score']
                 out.append(e)
             systems[sport]['main' if name=='main' else 'experiment']=out
-    saved={'policy':POLICY,'targetDate':target,'createdAt':now.isoformat(),'previewOnly':preview,'sourceSha256':digest(source),'modelSha256':digest(model),'systems':systems}
+    saved={'policy':policy,'targetDate':target,'createdAt':now.isoformat(),'previewOnly':preview,'sourceSha256':digest(source),'modelSha256':digest(model),'systems':systems}
     saved['snapshotSha256']=signature(saved);write(path,saved);return saved
 
 def compare(book,root,prospective):
@@ -77,10 +77,10 @@ def compare(book,root,prospective):
                 blocks.append({'sport':sport,'system':name,'fraction':fraction,'plannedCount':len(group),'count':n,'hits':sum(hit),'accuracy':sum(hit)/n if n else None,'interval95':wilson(sum(hit),n) if n else None,'brier':sum((a-b)**2 for a,b in zip(p,hit))/n if n else None,'logLoss':-sum(math.log(max(1e-12,a if b else 1-a)) for a,b in zip(p,hit))/n if n else None,'scoreMAE':sum(errors)/len(errors) if errors else None,'scoreCount':len(errors)})
     return blocks
 
-def settle(root):
-    root=Path(root);book=freeze(root)
-    report={'policy':POLICY,'targetDate':book['targetDate'],'createdAt':book['createdAt'],'snapshotSha256':book['snapshotSha256'],'previewOnly':book['previewOnly'],'beforeKickoff':compare(book,root,True),'allIncludingLate':compare(book,root,False),'coverage':{s:{k:{'fixtures':len(es),'noPricedChoice':sum(e['chosen'] is None for e in es)} for k,es in ss.items()} for s,ss in book['systems'].items()}}
-    write(root/'priced-evaluation.json',report);return report
+def settle(root,*,filename=FILE,policy=POLICY,chooser=choose,evaluation_file='priced-evaluation.json'):
+    root=Path(root);book=freeze(root,filename=filename,policy=policy,chooser=chooser)
+    report={'policy':policy,'targetDate':book['targetDate'],'createdAt':book['createdAt'],'snapshotSha256':book['snapshotSha256'],'previewOnly':book['previewOnly'],'beforeKickoff':compare(book,root,True),'allIncludingLate':compare(book,root,False),'coverage':{s:{k:{'fixtures':len(es),'noPricedChoice':sum(e['chosen'] is None for e in es)} for k,es in ss.items()} for s,ss in book['systems'].items()}}
+    write(root/evaluation_file,report);return report
 
 if __name__=='__main__':
     p=argparse.ArgumentParser();p.add_argument('mode',choices=['freeze','settle']);p.add_argument('--output',type=Path,required=True);a=p.parse_args()

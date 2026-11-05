@@ -336,6 +336,12 @@ jobs:
         python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<'PRIVATE_COMMAND'
         python experiments/ensemble_validation/score_research.py freeze --output pipeline-output --previous previous
         PRIVATE_COMMAND
+    - name: Freeze complete-market offered choices before results
+      if: steps.cfg.outputs.run_mode != 'control'
+      run: |
+        python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<'PRIVATE_COMMAND'
+        python experiments/ensemble_validation/complete_prices.py freeze --output pipeline-output
+        PRIVATE_COMMAND
     - name: Freeze separate same-competition ten-percent candidate
       if: steps.cfg.outputs.run_mode != 'control'
       run: |
