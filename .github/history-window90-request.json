@@ -1,9 +1,9 @@
 {
-  "mode": "freeze",
+  "mode": "settle",
   "targetDate": "2026-11-06",
-  "sourceRunId": "42120844121",
-  "sourceArtifactId": 13459445956,
+  "sourceRunId": "42276667620",
+  "sourceArtifactId": 13533279933,
   "pricedSourceSha256": "10b0b87f2492016790467aa7375395b62fe4dfc51eddcd28b88138f4130c2816",
-  "freezeRunId": "",
+  "freezeRunId": "42128623311",
   "freezeSourceRunId": "42120844121"
 }
