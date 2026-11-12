@@ -105,7 +105,7 @@ def publish(api,files,manifest,today=None):
                 if n.endswith('.html') and not (manifest['targetDate'] >= '2026-11-02' and n in ('futbol-yeni.html','basketbol-yeni.html')):
                     p='raporlar/'+manifest['targetDate']+'/'+n
                     if not any(x['path']==p and x['sha']==blob(v) for x in entries['tree']):updates.append({'path':p,'mode':'100644','type':'blob','content':v})
-        if manifest['targetDate'] in keep and manifest['targetDate'] >= '2026-11-02':
+        if manifest['targetDate'] in keep and manifest['targetDate'] >= '2026-11-02' and not any(x['path']=='raporlar/'+manifest['targetDate']+'/primary-control.json' for x in entries['tree']):
             for sport in ('futbol','basketbol'):
                 n=sport+'-yeni.html'
                 if n not in files:continue

@@ -104,3 +104,12 @@ class RecoveryTests(unittest.TestCase):
             with self.assertRaises(ValueError):verify_source(api,changed,'40026399108','2026-10-24',True)
         steps[0]['conclusion']='failure'
         with self.assertRaises(ValueError):verify_source(api,run,'40026399108','2026-10-24',True)
+
+
+class CanonicalOwnershipTests(unittest.TestCase):
+    def test_research_export_preserves_control_owned_canonical_html(self):
+        from datetime import date
+        api=FakeApi(entries=[{'path':'raporlar/2026-11-12/primary-control.json','sha':'stamp','type':'blob'}])
+        publish(api,{'futbol-yeni.html':'old research football','basketbol-yeni.html':'old research basketball'},{'targetDate':'2026-11-12','sourceRunId':'1'},today=date(2026,11,12))
+        updates=[e for path,method,body in api.writes if path.endswith('/git/trees') for e in body['tree']]
+        self.assertFalse(any(e['path'] in ['raporlar/2026-11-12/futbol.html','raporlar/2026-11-12/basketbol.html'] for e in updates))

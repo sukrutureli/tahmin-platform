@@ -1,0 +1,138 @@
+{
+  "name": "Primary HTML after Control",
+  "on": {
+    "workflow_run": {
+      "workflows": [
+        "Control"
+      ],
+      "types": [
+        "completed"
+      ],
+      "branches": [
+        "main"
+      ]
+    },
+    "push": {
+      "branches": [
+        "main"
+      ],
+      "paths": [
+        ".github/primary-control-request.json"
+      ]
+    },
+    "workflow_dispatch": {
+      "inputs": {
+        "control_run_id": {
+          "description": "Existing CONTROL run with successful football and basketball jobs",
+          "required": true,
+          "type": "string"
+        },
+        "target_date": {
+          "description": "Optional exact control date",
+          "required": false,
+          "type": "string"
+        }
+      }
+    }
+  },
+  "permissions": {
+    "contents": "read",
+    "actions": "read"
+  },
+  "concurrency": {
+    "group": "primary-html-control",
+    "cancel-in-progress": false
+  },
+  "jobs": {
+    "refresh": {
+      "if": "github.ref == 'refs/heads/main' && (github.event_name != 'workflow_run' || (github.event.workflow_run.head_branch == 'main' && github.event.workflow_run.head_repository.full_name == github.repository))",
+      "runs-on": "ubuntu-latest",
+      "timeout-minutes": 20,
+      "env": {
+        "GH_TOKEN": "${{ github.token }}",
+        "PRIVATE_REPORT_TOKEN": "${{ secrets.FATHERTAHMIN_WRITE_TOKEN || secrets.ADMIN_USER }}"
+      },
+      "steps": [
+        {
+          "uses": "actions/checkout@v4",
+          "with": {
+            "ref": "main",
+            "persist-credentials": false
+          }
+        },
+        {
+          "name": "Use the compatible encrypted checkpoint reader",
+          "run": "cp promoted/artifact.py scripts/privacy/artifact.py"
+        },
+        {
+          "name": "Resolve completed CONTROL request",
+          "id": "cfg",
+          "env": {
+            "EVENT_RUN": "${{ github.event.workflow_run.id }}",
+            "INPUT_RUN": "${{ inputs.control_run_id }}",
+            "INPUT_DATE": "${{ inputs.target_date }}"
+          },
+          "run": "python3 \"$GITHUB_WORKSPACE/scripts/privacy/run_private.py\" <<'PRIVATE_COMMAND'\npython3 - <<'PY'\nimport json,os,subprocess\nreq=json.load(open('.github/primary-control-request.json')) if not (os.environ.get('EVENT_RUN') or os.environ.get('INPUT_RUN')) else {}\nrun=os.environ.get('EVENT_RUN') or os.environ.get('INPUT_RUN') or str(req['controlRunId'])\nday=os.environ.get('INPUT_DATE') or req.get('targetDate','')\ncmd=['python3','scripts/primary_control.py','resolve','--control-run',run]\nif day:cmd+=['--date',day]\nsubprocess.run(cmd,check=True)\nPY\nPRIVATE_COMMAND\n"
+        },
+        {
+          "name": "Restore immutable primary checkpoint",
+          "uses": "./.github/actions/private-download",
+          "with": {
+            "name": "${{ steps.cfg.outputs.origin_name }}",
+            "run-id": "${{ steps.cfg.outputs.origin_run }}",
+            "github-token": "${{ github.token }}",
+            "path": "pipeline-output",
+            "key": "${{ secrets.PRIVATE_ARTIFACT_KEY }}"
+          }
+        },
+        {
+          "name": "Read football CONTROL results",
+          "uses": "./.github/actions/private-download",
+          "with": {
+            "name": "football-control-public",
+            "run-id": "${{ steps.cfg.outputs.control_run }}",
+            "github-token": "${{ github.token }}",
+            "path": "control-football",
+            "key": "${{ secrets.PRIVATE_ARTIFACT_KEY }}"
+          }
+        },
+        {
+          "name": "Read basketball CONTROL results",
+          "uses": "./.github/actions/private-download",
+          "with": {
+            "name": "basketball-control-public",
+            "run-id": "${{ steps.cfg.outputs.control_run }}",
+            "github-token": "${{ github.token }}",
+            "path": "control-basketball",
+            "key": "${{ secrets.PRIVATE_ARTIFACT_KEY }}"
+          }
+        },
+        {
+          "uses": "actions/setup-python@v5",
+          "with": {
+            "python-version": "3.11"
+          }
+        },
+        {
+          "name": "Verify primary CONTROL boundaries",
+          "run": "python3 -m unittest discover -s tests -p test_primary_control.py -v"
+        },
+        {
+          "name": "Render frozen choices with CONTROL results only",
+          "run": "python3 \"$GITHUB_WORKSPACE/scripts/privacy/run_private.py\" <<'PRIVATE_COMMAND'\npython3 -m pip install numpy==2.3.5\npython3 scripts/primary_control.py render\nPRIVATE_COMMAND\n"
+        },
+        {
+          "name": "Preserve encrypted diagnostics",
+          "if": "always()",
+          "uses": "./.github/actions/private-upload",
+          "with": {
+            "name": "private-primary-control-logs-${{ github.run_id }}",
+            "path": "${{ runner.temp }}/tahmin-private-logs",
+            "key": "${{ secrets.PRIVATE_ARTIFACT_KEY }}",
+            "retention-days": "7"
+          }
+        }
+      ]
+    }
+  }
+}

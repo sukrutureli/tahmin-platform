@@ -21,3 +21,22 @@ class ArchiveTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             r=Path(d);(r/'futbol').mkdir();(r/'futbol/futbol.html').write_text('<body>no verified date</body>')
             self.assertEqual(archive(r,date(2026,10,18)),[])
+
+    def test_recovery_folder_does_not_break_control_or_publish_unapproved_html(self):
+        with tempfile.TemporaryDirectory() as d:
+            r=Path(d);p=r/'deney/reports/2026-11-12';p.mkdir(parents=True)
+            (p/'recovery-checkpoint-manifest.json').write_text('{}');(p/'futbol-yeni.html').write_text('recovery copy')
+            archive(r,date(2026,11,12))
+            self.assertFalse((r/'raporlar/2026-11-12/futbol.html').exists())
+    def test_research_archive_cannot_overwrite_primary_control(self):
+        import json,hashlib
+        with tempfile.TemporaryDirectory() as d:
+            r=Path(d);p=r/'deney/reports/2026-11-12';p.mkdir(parents=True)
+            out=r/'raporlar/2026-11-12';out.mkdir(parents=True)
+            (out/'primary-control.json').write_text('{}');(out/'futbol.html').write_text('fresh control')
+            m={'targetDate':'2026-11-12','selectionPolicy':'complete-market-price-v2','version':'opponent-locked-v1','reports':{}}
+            for sport in ['futbol','basketbol']:
+                raw=('old research '+sport).encode();(p/(sport+'-yeni.html')).write_bytes(raw);m['reports'][sport]={'sha256':hashlib.sha256(raw).hexdigest()}
+            (p/'new-report-manifest.json').write_text(json.dumps(m))
+            archive(r,date(2026,11,12))
+            self.assertEqual((out/'futbol.html').read_text(),'fresh control')

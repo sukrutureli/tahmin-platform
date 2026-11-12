@@ -31,7 +31,11 @@ def archive(root,today=None,history=False):
     for folder in (root/'deney/reports').glob('????-??-??'):
         if folder.name in keep:
             out=dest/folder.name;out.mkdir(exist_ok=True)
+            # Recovery copies have their own manifest and never take ownership of canonical HTML.
+            if folder.name >= '2026-11-02' and not (folder/'new-report-manifest.json').is_file() and (folder/'recovery-checkpoint-manifest.json').is_file():continue
+            primary_control=(out/'primary-control.json').is_file()
             for p in folder.glob('*.html'):
+                if primary_control and p.name in ('futbol-yeni.html','basketbol-yeni.html'):continue
                 if p.is_file() and not p.is_symlink():shutil.copyfile(p,out/p.name)
             if folder.name >= '2026-11-02':
                 manifest=json.loads((folder/'new-report-manifest.json').read_text())
@@ -40,7 +44,7 @@ def archive(root,today=None,history=False):
                 for sport in ('futbol','basketbol'):
                     n=sport+'-yeni.html'; data=(folder/n).read_bytes()
                     if hashlib.sha256(data).hexdigest()!=manifest['reports'][sport]['sha256']:raise ValueError('Invalid report digest')
-                    (out/(sport+'.html')).write_bytes(data)
+                    if not primary_control:(out/(sport+'.html')).write_bytes(data)
                     (out/n).unlink(missing_ok=True)
     # Only date-named folders in the dedicated HTML archive are pruned.
     for folder in dest.iterdir():
