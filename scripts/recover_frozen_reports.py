@@ -15,9 +15,10 @@ HTML_REPORTS=['futbol-yeni.html','basketbol-yeni.html','day-by-day.html']
 def sha(p):return hashlib.sha256(Path(p).read_bytes()).hexdigest()
 def read(p):return json.loads(Path(p).read_text())
 def write(p,v):Path(p).write_text(json.dumps(v,ensure_ascii=False,indent=2,allow_nan=False)+'\n')
+def api_url(repo,path):return 'https://api.github.com/repos/'+repo+('/'+path if path else '')
 def api(path,repo=REPO,token=None,method='GET',body=None):
  token=token or os.environ['GH_TOKEN']
- req=Request('https://api.github.com/repos/'+repo+'/'+path,data=json.dumps(body,ensure_ascii=False).encode() if body is not None else None,method=method,headers={'Authorization':'Bearer '+token,'Accept':'application/vnd.github+json','Content-Type':'application/json','User-Agent':'frozen-checkpoint-recovery'})
+ req=Request(api_url(repo,path),data=json.dumps(body,ensure_ascii=False).encode() if body is not None else None,method=method,headers={'Authorization':'Bearer '+token,'Accept':'application/vnd.github+json','Content-Type':'application/json','User-Agent':'frozen-checkpoint-recovery'})
  with urlopen(req,timeout=50) as r:
   b=r.read();return json.loads(b) if b else None
 def source_spec(date,request):
@@ -43,8 +44,23 @@ def verify(date,request):
  if parent['conclusion']!='success' or parent['path']!='.github/workflows/ensemble-market-validation.yml' or parent['head_sha']!=CODE:raise ValueError('Unverified preceding journal run')
  pa=api('actions/runs/'+request['previousRunId']+'/artifacts?per_page=100')['artifacts']
  if not any(x['id']==13812246535 and x['name']=='ensemble-market-validation-2026-11-10' and not x['expired'] for x in pa):raise ValueError('Preceding artifact missing')
+ resume=request.get('resume',{}).get(date)
+ resumed=False
+ if resume:
+  expected=('43167157241',13920274065,'frozen-recovery-2026-11-11','97577ff6819ee256c7edc319fd07abbbb55ad91463f06450fb30f63f64c0193d')
+  actual=(str(resume['runId']),int(resume['artifactId']),resume['artifactName'],resume['artifactSha256'])
+  if date!='2026-11-11' or actual!=expected:raise ValueError('Unapproved export continuation')
+  pr=api('actions/runs/'+expected[0])
+  if pr['status']!='completed' or pr['conclusion']!='failure' or pr['head_sha']!='880b501712d6f882d0b5e6ec5aad868fc45c3428' or pr['path']!='.github/workflows/recover-frozen-reports.yml' or pr['head_branch']!='experiment/ensemble-market-validation':raise ValueError('Unverified export continuation run')
+  js=api('actions/runs/'+expected[0]+'/jobs?per_page=100')['jobs']
+  st=next(j for j in js if j['name']=='Settle frozen 2026-11-11')['steps']
+  for required in ['Settle existing forecasts without fitting or mining','Save encrypted recovered checkpoint']:
+   if not any(x['name']==required and x['conclusion']=='success' for x in st):raise ValueError('Continuation did not finish settlement')
+  aa=api('actions/runs/'+expected[0]+'/artifacts?per_page=100')['artifacts']
+  if not any(x['id']==expected[1] and x['name']==expected[2] and not x['expired'] and x.get('digest')=='sha256:'+expected[3] for x in aa):raise ValueError('Continuation artifact mismatch')
+  run,name=expected[0],expected[2];resumed=True
  with open(os.environ['GITHUB_OUTPUT'],'a') as out:
-  out.write('source_run='+run+'\nsource_name='+name+'\n')
+  out.write('source_run='+run+'\nsource_name='+name+'\nresume='+str(resumed).lower()+'\n')
 def protected(root):
  names=[p for p in root.glob('*.json') if 'before-results' in p.name or p.name.startswith('primary-context-') or p.name in ['stability-model.json','frozen-today-rules.json','outcome-learning.json','score-distribution.json','input-manifest.json','rule-mining-dataset.json']]
  return {p.name:sha(p) for p in names}
@@ -95,11 +111,26 @@ def report_files(root,date):
   if p.exists():
    v=read(p)
    if v.get('targetDate',v.get('date'))==date:ix.append({'file':n,'sha256':sha(p),**{k:v[k] for k in ['targetDate','date','createdAt','modelSha256'] if k in v}})
+ if (root/'live-history.json').exists():
+  h=read(root/'live-history.json')
+  if h.get('targetDate')==date:
+   coverage={}
+   for sport in ['football','basketball']:
+    rows=[r for r in h.get('fixtures',[]) if r.get('sport')==sport]
+    coverage[sport]={'attemptedFixtures':len(rows),'bothSidesWithRows':sum(len(r.get('sides',[]))==2 and all(x.get('rows') for x in r['sides']) for r in rows)}
+   out['history-coverage.json']=json.dumps({k:h.get(k) for k in ['targetDate','startedAt','completedAt','rateLimited','stoppedEarly','secondsPerSport']}|{'requestCount':len(h.get('requests',[])),'errorCount':len(h.get('errors',[])),'coverage':coverage},separators=(',',':'))+'\n'
+ status={}
+ from collections import Counter
+ for sport in ['football','basketball']:
+  ap=root/(sport+'-outcome-audit.json')
+  rows=[r for r in read(root/(sport+'-replay.json')) if r.get('date')==date and r.get('role')=='holdout']
+  status[sport]={'recordedRows':len(rows),'httpConfirmedFinished':sum(r.get('resultSource')=='live HTTP finished scoreboard' for r in rows),'statusCounts':dict(Counter(x.get('status','unknown') for x in read(ap))) if ap.exists() else {},'note':'Not-finished API replies do not distinguish live, postponed and unavailable fixtures; never force a final result.'}
+ out['outcome-status-summary.json']=json.dumps({'targetDate':date,'sports':status},separators=(',',':'))+'\n'
  out['recovery-snapshot-index.json']=json.dumps(ix,ensure_ascii=False,separators=(',',':'))+'\n'
  out['recovery-provenance.json']=json.dumps(read(root/'recovery-provenance.json'),ensure_ascii=False,separators=(',',':'))+'\n'
  return out
 def validate_paths(paths,date):
- allowed=set(JSON_REPORTS+HTML_REPORTS+['recovery-snapshot-index.json','recovery-provenance.json','recovery-checkpoint-manifest.json'])
+ allowed=set(JSON_REPORTS+HTML_REPORTS+['recovery-snapshot-index.json','recovery-provenance.json','recovery-checkpoint-manifest.json','history-coverage.json','outcome-status-summary.json'])
  for p in paths:
   if p=='deney/current/recovery-checkpoint-manifest.json':continue
   prefix='deney/reports/'+date+'/'
@@ -109,7 +140,7 @@ def publish(root,date,request):
  arts=api('actions/runs/'+os.environ['GITHUB_RUN_ID']+'/artifacts?per_page=100')['artifacts']
  name='frozen-recovery-'+date
  a=next(x for x in arts if x['name']==name and not x['expired'])
- manifest={'targetDate':date,'sourceRunId':os.environ['GITHUB_RUN_ID'],'sourceSha':os.environ['GITHUB_SHA'],'sourceWorkflow':'.github/workflows/recover-frozen-reports.yml','sourceArtifact':name,'sourceArtifactId':a['id'],'artifactDigest':a.get('digest'),'artifactUrl':'https://github.com/'+REPO+'/actions/runs/'+os.environ['GITHUB_RUN_ID']+'/artifacts/'+str(a['id']),'frozenSource':request['sources'][date],'codeRef':CODE,'modelSha256':MODEL,'policy':'complete-market-price-v2','immutableForecastsUnchanged':True,'partialResearch':date=='2026-11-12','reports':{n:{'sha256':hashlib.sha256(v.encode()).hexdigest(),'bytes':len(v.encode())} for n,v in files.items()}}
+ manifest={'targetDate':date,'sourceRunId':os.environ['GITHUB_RUN_ID'],'sourceSha':os.environ['GITHUB_SHA'],'sourceWorkflow':'.github/workflows/recover-frozen-reports.yml','sourceArtifact':name,'sourceArtifactId':a['id'],'artifactDigest':a.get('digest'),'artifactUrl':'https://github.com/'+REPO+'/actions/runs/'+os.environ['GITHUB_RUN_ID']+'/artifacts/'+str(a['id']),'frozenSource':request['sources'][date],'codeRef':CODE,'modelSha256':MODEL,'policy':'complete-market-price-v2','immutableForecastsUnchanged':True,'partialResearch':date=='2026-11-12','exportContinuation':request.get('resume',{}).get(date),'reports':{n:{'sha256':hashlib.sha256(v.encode()).hexdigest(),'bytes':len(v.encode())} for n,v in files.items()}}
  text=json.dumps(manifest,ensure_ascii=False,indent=2)+'\n'
  files['recovery-checkpoint-manifest.json']=text
  changes={'deney/reports/'+date+'/'+n:v for n,v in files.items()}

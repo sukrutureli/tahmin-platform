@@ -3,6 +3,9 @@ from pathlib import Path
 spec=importlib.util.spec_from_file_location('recovery',str(Path(__file__).with_name('recover_frozen_reports.py')))
 m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
 class RecoveryTests(unittest.TestCase):
+ def test_repository_api_url_has_no_empty_path_slash(self):
+  self.assertEqual(m.api_url('owner/repo',''),'https://api.github.com/repos/owner/repo')
+  self.assertEqual(m.api_url('owner/repo','git/ref/heads/main'),'https://api.github.com/repos/owner/repo/git/ref/heads/main')
  def test_only_private_report_paths(self):
   m.validate_paths(['deney/reports/2026-11-11/priced-complete-evaluation.json','deney/current/recovery-checkpoint-manifest.json'],'2026-11-11')
   for p in ['raporlar/2026-11-11/futbol.html','.github/workflows/control.yml','deney/current/checkpoint-manifest.json','deney/reports/2026-11-12/priced-complete-evaluation.json','deney/reports/2026-11-11/../../futbol.html']:
