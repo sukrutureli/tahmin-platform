@@ -48,8 +48,7 @@ class PrimaryControlTests(unittest.TestCase):
   paths=next(body['tree'] for path,body in a.writes if path.endswith('/git/trees'))
   self.assertEqual({x['path'] for x in paths},{'raporlar/'+day+'/'+n for n in ['futbol.html','basketbol.html','primary-control.json']})
  def test_workflow_has_no_research_or_training_dependency(self):
-  import yaml
-  w=yaml.safe_load(Path('.github/workflows/primary-control.yml').read_text())
+  w=json.loads(Path('.github/workflows/primary-control.yml').read_text())
   j=w['jobs']['refresh'];self.assertNotIn('needs',j)
   runs='\n'.join(s.get('run','') for s in j['steps'])
   self.assertNotIn('freeze',runs);self.assertNotIn('mine_rules',runs);self.assertNotIn('mvn',runs)
