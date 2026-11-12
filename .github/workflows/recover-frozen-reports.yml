@@ -1,0 +1,275 @@
+{
+  "name": "Recover frozen experiment reports",
+  "run-name": "Settle preserved checkpoints 2026-11-11 and 2026-11-12",
+  "on": {
+    "push": {
+      "branches": [
+        "experiment/ensemble-market-validation"
+      ],
+      "paths": [
+        ".github/frozen-recovery-request.json"
+      ]
+    }
+  },
+  "permissions": {
+    "contents": "read",
+    "actions": "read"
+  },
+  "concurrency": {
+    "group": "isolated-frozen-recovery",
+    "cancel-in-progress": false
+  },
+  "jobs": {
+    "yesterday": {
+      "name": "Settle frozen 2026-11-11",
+      "if": "github.ref == 'refs/heads/experiment/ensemble-market-validation'",
+      "runs-on": "ubuntu-latest",
+      "timeout-minutes": 45,
+      "env": {
+        "OPENBLAS_NUM_THREADS": "1",
+        "GH_TOKEN": "${{ github.token }}"
+      },
+      "steps": [
+        {
+          "uses": "actions/checkout@v4",
+          "with": {
+            "ref": "be2074e5905c6cc52e95985555ed9614010ca9ab",
+            "persist-credentials": false
+          }
+        },
+        {
+          "uses": "actions/checkout@v4",
+          "with": {
+            "ref": "${{ github.sha }}",
+            "path": "recovery-code",
+            "persist-credentials": false
+          }
+        },
+        {
+          "name": "Verify fixed recovery sources",
+          "id": "cfg",
+          "run": "python3 recovery-code/scripts/recover_frozen_reports.py verify --request recovery-code/.github/frozen-recovery-request.json --date 2026-11-11"
+        },
+        {
+          "name": "Test recovery boundaries",
+          "run": "python3 recovery-code/scripts/test_recover_frozen_reports.py"
+        },
+        {
+          "name": "Use exact promoted replay tools",
+          "run": "for sport in football basketball; do\n  rsync -a --delete \"promoted/replay/$sport/src/\" \"$sport/src/\"\n  cp \"promoted/replay/$sport/pom.xml\" \"$sport/pom.xml\"\ndone\ncp promoted/artifact.py scripts/privacy/artifact.py\n"
+        },
+        {
+          "uses": "./.github/actions/private-download",
+          "with": {
+            "name": "${{ steps.cfg.outputs.source_name }}",
+            "run-id": "${{ steps.cfg.outputs.source_run }}",
+            "github-token": "${{ github.token }}",
+            "path": "pipeline-output",
+            "key": "${{ secrets.PRIVATE_ARTIFACT_KEY }}"
+          }
+        },
+        {
+          "uses": "./.github/actions/private-download",
+          "with": {
+            "name": "ensemble-market-validation-2026-11-10",
+            "run-id": "42920219240",
+            "github-token": "${{ github.token }}",
+            "path": "previous",
+            "key": "${{ secrets.PRIVATE_ARTIFACT_KEY }}"
+          }
+        },
+        {
+          "uses": "actions/setup-python@v5",
+          "with": {
+            "python-version": "3.11"
+          }
+        },
+        {
+          "name": "Lock original forecasts and model",
+          "run": "python3 \"$GITHUB_WORKSPACE/scripts/privacy/run_private.py\" <<'PRIVATE_COMMAND'\npython3 recovery-code/scripts/recover_frozen_reports.py lock --request recovery-code/.github/frozen-recovery-request.json --date 2026-11-11\nPRIVATE_COMMAND\n"
+        },
+        {
+          "uses": "actions/setup-java@v4",
+          "with": {
+            "distribution": "temurin",
+            "java-version": "17",
+            "cache": "maven",
+            "cache-dependency-path": "football/pom.xml\nbasketball/pom.xml"
+          }
+        },
+        {
+          "name": "Compile existing result refresh clients",
+          "run": "python3 \"$GITHUB_WORKSPACE/scripts/privacy/run_private.py\" <<'PRIVATE_COMMAND'\npython3 -m pip install numpy==2.3.5\nmvn -B -f football/pom.xml compile\nmvn -B -f basketball/pom.xml compile\nPRIVATE_COMMAND\n"
+        },
+        {
+          "name": "Refresh finished football results only",
+          "working-directory": "football",
+          "run": "python3 \"$GITHUB_WORKSPACE/scripts/privacy/run_private.py\" <<'PRIVATE_COMMAND'\nmvn -B exec:java -Dexec.mainClass=com.example.experiment.OutcomeRefresh -Dexec.args=\"../pipeline-output/football-replay.json ../pipeline-output/football-outcome-audit.json --missing-only\"\nPRIVATE_COMMAND\n"
+        },
+        {
+          "name": "Refresh finished basketball results only",
+          "working-directory": "basketball",
+          "run": "python3 \"$GITHUB_WORKSPACE/scripts/privacy/run_private.py\" <<'PRIVATE_COMMAND'\nmvn -B exec:java -Dexec.mainClass=com.basketbol.experiment.OutcomeRefresh -Dexec.args=\"../pipeline-output/basketball-replay.json ../pipeline-output/basketball-outcome-audit.json --missing-only\"\nPRIVATE_COMMAND\n"
+        },
+        {
+          "name": "Settle existing forecasts without fitting or mining",
+          "run": "python3 \"$GITHUB_WORKSPACE/scripts/privacy/run_private.py\" <<'PRIVATE_COMMAND'\npython3 recovery-code/scripts/recover_frozen_reports.py settle --request recovery-code/.github/frozen-recovery-request.json --date 2026-11-11\nPRIVATE_COMMAND\n"
+        },
+        {
+          "name": "Save encrypted recovered checkpoint",
+          "uses": "./.github/actions/private-upload",
+          "with": {
+            "name": "frozen-recovery-2026-11-11",
+            "path": "pipeline-output",
+            "retention-days": "30",
+            "key": "${{ secrets.PRIVATE_ARTIFACT_KEY }}"
+          }
+        },
+        {
+          "name": "Publish private experimental reports only",
+          "env": {
+            "PRIVATE_REPORT_TOKEN": "${{ secrets.FATHERTAHMIN_WRITE_TOKEN || secrets.FATHERTAHMIN_READ_TOKEN || secrets.ADMIN_USER }}"
+          },
+          "run": "python3 \"$GITHUB_WORKSPACE/scripts/privacy/run_private.py\" <<'PRIVATE_COMMAND'\npython3 recovery-code/scripts/recover_frozen_reports.py publish --request recovery-code/.github/frozen-recovery-request.json --date 2026-11-11\nPRIVATE_COMMAND\n"
+        },
+        {
+          "name": "Keep recovery logs encrypted",
+          "if": "always()",
+          "uses": "./.github/actions/private-upload",
+          "with": {
+            "name": "private-recovery-logs-2026-11-11",
+            "path": ".private-diagnostics",
+            "retention-days": "7",
+            "key": "${{ secrets.PRIVATE_ARTIFACT_KEY }}"
+          }
+        }
+      ]
+    },
+    "today": {
+      "name": "Settle frozen 2026-11-12",
+      "needs": "yesterday",
+      "if": "github.ref == 'refs/heads/experiment/ensemble-market-validation'",
+      "runs-on": "ubuntu-latest",
+      "timeout-minutes": 45,
+      "env": {
+        "OPENBLAS_NUM_THREADS": "1",
+        "GH_TOKEN": "${{ github.token }}"
+      },
+      "steps": [
+        {
+          "uses": "actions/checkout@v4",
+          "with": {
+            "ref": "be2074e5905c6cc52e95985555ed9614010ca9ab",
+            "persist-credentials": false
+          }
+        },
+        {
+          "uses": "actions/checkout@v4",
+          "with": {
+            "ref": "${{ github.sha }}",
+            "path": "recovery-code",
+            "persist-credentials": false
+          }
+        },
+        {
+          "name": "Verify fixed recovery sources",
+          "id": "cfg",
+          "run": "python3 recovery-code/scripts/recover_frozen_reports.py verify --request recovery-code/.github/frozen-recovery-request.json --date 2026-11-12"
+        },
+        {
+          "name": "Test recovery boundaries",
+          "run": "python3 recovery-code/scripts/test_recover_frozen_reports.py"
+        },
+        {
+          "name": "Use exact promoted replay tools",
+          "run": "for sport in football basketball; do\n  rsync -a --delete \"promoted/replay/$sport/src/\" \"$sport/src/\"\n  cp \"promoted/replay/$sport/pom.xml\" \"$sport/pom.xml\"\ndone\ncp promoted/artifact.py scripts/privacy/artifact.py\n"
+        },
+        {
+          "uses": "./.github/actions/private-download",
+          "with": {
+            "name": "${{ steps.cfg.outputs.source_name }}",
+            "run-id": "${{ steps.cfg.outputs.source_run }}",
+            "github-token": "${{ github.token }}",
+            "path": "pipeline-output",
+            "key": "${{ secrets.PRIVATE_ARTIFACT_KEY }}"
+          }
+        },
+        {
+          "uses": "./.github/actions/private-download",
+          "with": {
+            "name": "ensemble-market-validation-2026-11-10",
+            "run-id": "42920219240",
+            "github-token": "${{ github.token }}",
+            "path": "previous",
+            "key": "${{ secrets.PRIVATE_ARTIFACT_KEY }}"
+          }
+        },
+        {
+          "uses": "actions/setup-python@v5",
+          "with": {
+            "python-version": "3.11"
+          }
+        },
+        {
+          "name": "Lock original forecasts and model",
+          "run": "python3 \"$GITHUB_WORKSPACE/scripts/privacy/run_private.py\" <<'PRIVATE_COMMAND'\npython3 recovery-code/scripts/recover_frozen_reports.py lock --request recovery-code/.github/frozen-recovery-request.json --date 2026-11-12\nPRIVATE_COMMAND\n"
+        },
+        {
+          "uses": "actions/setup-java@v4",
+          "with": {
+            "distribution": "temurin",
+            "java-version": "17",
+            "cache": "maven",
+            "cache-dependency-path": "football/pom.xml\nbasketball/pom.xml"
+          }
+        },
+        {
+          "name": "Compile existing result refresh clients",
+          "run": "python3 \"$GITHUB_WORKSPACE/scripts/privacy/run_private.py\" <<'PRIVATE_COMMAND'\npython3 -m pip install numpy==2.3.5\nmvn -B -f football/pom.xml compile\nmvn -B -f basketball/pom.xml compile\nPRIVATE_COMMAND\n"
+        },
+        {
+          "name": "Refresh finished football results only",
+          "working-directory": "football",
+          "run": "python3 \"$GITHUB_WORKSPACE/scripts/privacy/run_private.py\" <<'PRIVATE_COMMAND'\nmvn -B exec:java -Dexec.mainClass=com.example.experiment.OutcomeRefresh -Dexec.args=\"../pipeline-output/football-replay.json ../pipeline-output/football-outcome-audit.json --missing-only\"\nPRIVATE_COMMAND\n"
+        },
+        {
+          "name": "Refresh finished basketball results only",
+          "working-directory": "basketball",
+          "run": "python3 \"$GITHUB_WORKSPACE/scripts/privacy/run_private.py\" <<'PRIVATE_COMMAND'\nmvn -B exec:java -Dexec.mainClass=com.basketbol.experiment.OutcomeRefresh -Dexec.args=\"../pipeline-output/basketball-replay.json ../pipeline-output/basketball-outcome-audit.json --missing-only\"\nPRIVATE_COMMAND\n"
+        },
+        {
+          "name": "Settle existing forecasts without fitting or mining",
+          "run": "python3 \"$GITHUB_WORKSPACE/scripts/privacy/run_private.py\" <<'PRIVATE_COMMAND'\npython3 recovery-code/scripts/recover_frozen_reports.py settle --request recovery-code/.github/frozen-recovery-request.json --date 2026-11-12\nPRIVATE_COMMAND\n"
+        },
+        {
+          "name": "Save encrypted recovered checkpoint",
+          "uses": "./.github/actions/private-upload",
+          "with": {
+            "name": "frozen-recovery-2026-11-12",
+            "path": "pipeline-output",
+            "retention-days": "30",
+            "key": "${{ secrets.PRIVATE_ARTIFACT_KEY }}"
+          }
+        },
+        {
+          "name": "Publish private experimental reports only",
+          "env": {
+            "PRIVATE_REPORT_TOKEN": "${{ secrets.FATHERTAHMIN_WRITE_TOKEN || secrets.FATHERTAHMIN_READ_TOKEN || secrets.ADMIN_USER }}"
+          },
+          "run": "python3 \"$GITHUB_WORKSPACE/scripts/privacy/run_private.py\" <<'PRIVATE_COMMAND'\npython3 recovery-code/scripts/recover_frozen_reports.py publish --request recovery-code/.github/frozen-recovery-request.json --date 2026-11-12\nPRIVATE_COMMAND\n"
+        },
+        {
+          "name": "Keep recovery logs encrypted",
+          "if": "always()",
+          "uses": "./.github/actions/private-upload",
+          "with": {
+            "name": "private-recovery-logs-2026-11-12",
+            "path": ".private-diagnostics",
+            "retention-days": "7",
+            "key": "${{ secrets.PRIVATE_ARTIFACT_KEY }}"
+          }
+        }
+      ]
+    }
+  }
+}

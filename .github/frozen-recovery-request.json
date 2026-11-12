@@ -1,0 +1,20 @@
+{
+  "codeRef": "be2074e5905c6cc52e95985555ed9614010ca9ab",
+  "publishedRef": "bfaecc2680d1bab331321125ce515430a48736a5",
+  "previousRunId": "42920219240",
+  "previousArtifactId": 13812246535,
+  "sources": {
+    "2026-11-11": {
+      "runId": "42903532498",
+      "artifactId": 13804629578,
+      "artifactName": "frozen-forecasts-2026-11-11",
+      "artifactSha256": "6976ff1c9b912a1ef2bda2d0dbb64d41902ff0e6c19a9affae11a590b75cbd90"
+    },
+    "2026-11-12": {
+      "runId": "43100338146",
+      "artifactId": 13891848797,
+      "artifactName": "primary-forecasts-2026-11-12",
+      "artifactSha256": "f70ac56302d89eed0e4016e391c9c63f345f0e36d7645c47b21c90600c016089"
+    }
+  }
+}
