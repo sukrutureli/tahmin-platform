@@ -41,13 +41,16 @@ def merge_records(records):
 
 def cache_records(root,request_rows,target,collected):
     root=Path(root);found=[];validated=set();payloads=[];rejected=0
+    file_index={}
+    for pattern in ('http-cache/*/*','context-http-cache/*/*'):
+        for path in root.glob(pattern):file_index.setdefault(path.name,path)
     for req in request_rows:
         url=urllib.parse.urlsplit(req.get('url',''))
         if not url.path.endswith('/widget/team/schedule') or req.get('status')!=200 or not req.get('cache'):continue
         sport='football' if url.path.startswith('/soccer/') else 'basketball' if url.path.startswith('/basketball/') else None
         own=number_id(urllib.parse.parse_qs(url.query).get('teId',[None])[0])
         if not sport or not own:continue
-        files=list(root.glob('http-cache/*/'+req['cache']))+list(root.glob('context-http-cache/*/'+req['cache']))
+        files=[file_index[req['cache']]] if req['cache'] in file_index else []
         if not files:continue
         data=json.loads(files[0].read_text()).get('data',{});mid=number_id(data.get('metaData',{}).get('team',{}).get('id'))
         if mid and mid!=own:rejected+=1;continue
@@ -95,7 +98,7 @@ def build_ledger(root,previous,target,extra_requests=(),extra_bindings=()):
                     if r.get('date','9999')>=day['targetDate']:continue
                     c=canonical(f['sport'],ns,side.get('teamId'),r,f.get('collectedAt',''))
                     if c:records.append(c)
-    records,conflicts=merge_records(records);conflicts=sorted(set(conflicts)|set(prior.get('conflictingMatchKeys',[])));records=[r for r in records if r['key'] not in conflicts]
+    records,conflicts=merge_records(records);conflicts=sorted(set(conflicts)|set(prior.get('conflictingMatchKeys',[])));conflict_set=set(conflicts);records=[r for r in records if r['key'] not in conflict_set]
     index=fixture_index(journal);bindings={};identity_conflicts=list(prior.get('identityConflicts',[]))
     for binding in prior.get('identities',[])+list(extra_bindings):
         key=(binding['sport'],binding['date'],str(binding['eventId']))

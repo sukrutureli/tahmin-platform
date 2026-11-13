@@ -11,6 +11,10 @@ from priced_choices import freeze as legacy_freeze
 from complete_prices import freeze as complete_freeze
 from new_reports import reports
 
+def serving_dataset(current,target):
+    """Target rows only; cumulative history is assembled in the research job."""
+    return merge_dataset({s:[r for r in rows if r['date']==target] for s,rows in current.items()},{},target)
+
 def forecast(root,previous,target,enrich=True):
     root=Path(root);previous=Path(previous)
     config=locked.read(Path(locked.__file__).with_name('stability-settings.json'))
@@ -18,8 +22,10 @@ def forecast(root,previous,target,enrich=True):
         if locked.read(root/locked.SNAPSHOT)['targetDate']!=target:raise ValueError('Existing primary day mismatch')
         locked.verify_snapshot(root,config);return reports(root)
     current={s:json.loads((root/(s+'-replay.json')).read_text()) for s in BASE}
-    prior=previous/'rule-mining-dataset.json'
-    data=merge_dataset(current,json.loads(prior.read_text()) if prior.exists() else {},target)
+    # Historical datasets are assembled by mine_rules in the research job.
+    # Frozen serving only reads the target day; copying cumulative research JSON
+    # here needlessly delays HTML and can exhaust the runner.
+    data=serving_dataset(current,target)
     dump(root/'rule-mining-dataset.json',data)
     ledger,index=build_ledger(root,previous,target)
     # Current teams/opponents only. Training-only historical identity reconstruction is research.
