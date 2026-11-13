@@ -6,13 +6,14 @@
   "codeRef": "da8904d0fafa3bb59a53a31c887d292729911c66",
   "previousRunId": "42920219240",
   "previousArtifact": "ensemble-market-validation-2026-11-10",
-  "mode": "partitioned-indexed-ledger-enrichment-inference",
-  "revision": 7,
+  "mode": "partitioned-cache-and-journal-ledger-enrichment-inference",
+  "revision": 8,
   "resumePreparedRunId": "43380667113",
   "resumePreparedArtifactId": 14017815937,
   "resumePreparedDigest": "4f9bc86d916c826db6bf1112b36aa40b0231925e0e639302f00d863cabcc31e4",
   "failedLedgerRunIds": [
     "43384765313",
-    "43385437519"
+    "43385437519",
+    "43386007266"
   ]
 }

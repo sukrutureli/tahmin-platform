@@ -58,6 +58,17 @@ def ledger_part(root,target,part,parts):
     root=Path(root);live=read(root/'live-history.json');requests=live.get('requests',[])
     subset=[request for i,request in enumerate(requests) if i%parts==part]
     records,rejected=cache_records_indexed(cache_index(root),subset,target,live.get('completedAt') or datetime.now(timezone.utc).isoformat())
+    journal=read(root/'live-history-journal.json')
+    for day_index,day in enumerate(journal):
+        if day_index%parts!=part:continue
+        for fixture in day.get('fixtures',[]):
+            for side in fixture.get('sides',[]):
+                ns='broadage' if side.get('source')=='broadage-team-schedule' else 'nesine' if side.get('source')=='nesine-summary-general-and-venue' else None
+                if not ns:continue
+                for row in side.get('rows',[]):
+                    if row.get('date','9999')>=day['targetDate']:continue
+                    item=canonical(fixture['sport'],ns,side.get('teamId'),row,fixture.get('collectedAt',''))
+                    if item:records.append(item)
     dump(root/f'ledger-part-{part}.json',{'part':part,'parts':parts,'records':records,'rejected':rejected})
 
 def build_ledger_from_parts(root,previous,target,parts):
@@ -71,15 +82,6 @@ def build_ledger_from_parts(root,previous,target,parts):
         partitioned.extend((record,part) for record in book['records']);rejected+=book['rejected']
     # Restore original request order across round-robin partitions.
     records += [record for record,part in sorted(partitioned,key=lambda item:(item[0].get('firstCollectedAt',''),item[0]['key'],item[1]))]
-    for day in journal:
-        for fixture in day.get('fixtures',[]):
-            for side in fixture.get('sides',[]):
-                ns='broadage' if side.get('source')=='broadage-team-schedule' else 'nesine' if side.get('source')=='nesine-summary-general-and-venue' else None
-                if not ns:continue
-                for row in side.get('rows',[]):
-                    if row.get('date','9999')>=day['targetDate']:continue
-                    item=canonical(fixture['sport'],ns,side.get('teamId'),row,fixture.get('collectedAt',''))
-                    if item:records.append(item)
     records,conflicts=merge_records(records);conflicts=sorted(set(conflicts)|set(prior.get('conflictingMatchKeys',[])));records=[r for r in records if r['key'] not in conflicts]
     match_index=fixture_index(journal);bindings={};identity_conflicts=list(prior.get('identityConflicts',[]))
     for binding in prior.get('identities',[]):
