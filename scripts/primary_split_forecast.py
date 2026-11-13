@@ -54,12 +54,23 @@ def cache_records_indexed(index,request_rows,target,collected):
             if item:found.append(item)
     return found,rejected
 
-def build_ledger_indexed(root,previous,target,extra_requests=(),extra_bindings=()):
+def ledger_part(root,target,part,parts):
+    root=Path(root);live=read(root/'live-history.json');requests=live.get('requests',[])
+    subset=[request for i,request in enumerate(requests) if i%parts==part]
+    records,rejected=cache_records_indexed(cache_index(root),subset,target,live.get('completedAt') or datetime.now(timezone.utc).isoformat())
+    dump(root/f'ledger-part-{part}.json',{'part':part,'parts':parts,'records':records,'rejected':rejected})
+
+def build_ledger_from_parts(root,previous,target,parts):
     root=Path(root);previous=Path(previous) if previous else root
     old=previous/'context-ledger.json';prior=read(old) if old.exists() else {};records=list(prior.get('matches',[]))
-    journal=read(root/'live-history-journal.json');live=read(root/'live-history.json');index_files=cache_index(root)
-    current,rejected=cache_records_indexed(index_files,live.get('requests',[]),target,live.get('completedAt') or datetime.now(timezone.utc).isoformat());records+=current
-    extra,extra_rejected=cache_records_indexed(index_files,list(extra_requests),target,datetime.now(timezone.utc).isoformat());records+=extra;rejected+=extra_rejected
+    journal=read(root/'live-history-journal.json');rejected=0
+    partitioned=[]
+    for part in range(parts):
+        book=read(root/f'ledger-part-{part}.json')
+        if book.get('part')!=part or book.get('parts')!=parts:raise ValueError('Ledger partition mismatch')
+        partitioned.extend((record,part) for record in book['records']);rejected+=book['rejected']
+    # Restore original request order across round-robin partitions.
+    records += [record for record,part in sorted(partitioned,key=lambda item:(item[0].get('firstCollectedAt',''),item[0]['key'],item[1]))]
     for day in journal:
         for fixture in day.get('fixtures',[]):
             for side in fixture.get('sides',[]):
@@ -71,7 +82,7 @@ def build_ledger_indexed(root,previous,target,extra_requests=(),extra_bindings=(
                     if item:records.append(item)
     records,conflicts=merge_records(records);conflicts=sorted(set(conflicts)|set(prior.get('conflictingMatchKeys',[])));records=[r for r in records if r['key'] not in conflicts]
     match_index=fixture_index(journal);bindings={};identity_conflicts=list(prior.get('identityConflicts',[]))
-    for binding in prior.get('identities',[])+list(extra_bindings):
+    for binding in prior.get('identities',[]):
         key=(binding['sport'],binding['date'],str(binding['eventId']))
         if list(key) in identity_conflicts:continue
         current=match_index.get(key) or bindings.get(key)
@@ -82,8 +93,26 @@ def build_ledger_indexed(root,previous,target,extra_requests=(),extra_bindings=(
     out={'identities':[b for k,b in bindings.items() if list(k) not in identity_conflicts],'identityConflicts':identity_conflicts,'createdAt':datetime.now(timezone.utc).isoformat(),'targetDate':target,'matches':records,'conflictingMatchKeys':conflicts,'rejectedCacheIdentities':rejected,'seasonPolicy':'Provider season ID if supplied; otherwise explicit missing. League features use trailing 365 days, no guessed season.','policy':'IDs only; exact sport/provider namespaces; one row per finished match; all feature outcomes strictly before fixture day. Backfilled historical features are retrospective.'}
     dump(root/'context-ledger.json',out);return out,match_index
 
-def ledger_stage(root,previous,target):
-    dataset(root,previous,target);build_ledger_indexed(root,previous,target)
+def extend_ledger(root,target,extra_requests,extra_bindings):
+    root=Path(root);base=read(root/'context-ledger.json')
+    if base.get('targetDate')!=target:raise ValueError('Ledger target changed')
+    extra,rejected=cache_records_indexed(cache_index(root),list(extra_requests),target,datetime.now(timezone.utc).isoformat())
+    records,conflicts=merge_records(list(base['matches'])+extra)
+    conflicts=sorted(set(conflicts)|set(base.get('conflictingMatchKeys',[])));records=[r for r in records if r['key'] not in conflicts]
+    journal=read(root/'live-history-journal.json');match_index=fixture_index(journal);bindings={};identity_conflicts=list(base.get('identityConflicts',[]))
+    for binding in list(base.get('identities',[]))+list(extra_bindings):
+        key=(binding['sport'],binding['date'],str(binding['eventId']))
+        if list(key) in identity_conflicts:continue
+        current=match_index.get(key) or bindings.get(key)
+        if current and any(current.get(k)!=binding.get(k) for k in ['home','away','namespace','tournamentId']):identity_conflicts.append(list(key));continue
+        bindings.setdefault(key,binding)
+    for key,binding in bindings.items():
+        if list(key) not in identity_conflicts:match_index.setdefault(key,binding)
+    base.update({'identities':[b for k,b in bindings.items() if list(k) not in identity_conflicts],'identityConflicts':identity_conflicts,'createdAt':datetime.now(timezone.utc).isoformat(),'matches':records,'conflictingMatchKeys':conflicts,'rejectedCacheIdentities':base.get('rejectedCacheIdentities',0)+rejected})
+    dump(root/'context-ledger.json',base);return base,match_index
+
+def ledger_final(root,previous,target,parts):
+    dataset(root,previous,target);build_ledger_from_parts(root,previous,target,parts)
 
 def enrich(root,previous,target):
     ledger=read(root/'context-ledger.json')
@@ -97,7 +126,7 @@ def freeze(root,previous,target):
         locked.verify_snapshot(root,config); return reports(root)
     data=dataset(root,previous,target);extra=read(root/'context-enrichment.json')
     if extra.get('targetDate')!=target or extra.get('maxTeams')!=8 or extra.get('maxSeconds')!=90:raise ValueError('Enrichment boundary changed')
-    ledger,index=build_ledger_indexed(root,previous,target,extra['requests'],extra['identityBindings'])
+    ledger,index=extend_ledger(root,target,extra['requests'],extra['identityBindings'])
     ctx=Context(ledger,index);bank=[];systems={};now=datetime.now(timezone.utc).isoformat()
     for sport in BASE:
         entries=[]
@@ -118,4 +147,8 @@ def freeze(root,previous,target):
     locked.verify_snapshot(root,config);legacy_freeze(root);complete_freeze(root);return reports(root)
 
 if __name__=='__main__':
-    p=argparse.ArgumentParser();p.add_argument('mode',choices=['ledger','enrich','freeze']);p.add_argument('--output',type=Path,required=True);p.add_argument('--previous',type=Path,required=True);p.add_argument('--target-date',required=True);a=p.parse_args();{'ledger':ledger_stage,'enrich':enrich,'freeze':freeze}[a.mode](a.output,a.previous,a.target_date)
+    p=argparse.ArgumentParser();p.add_argument('mode',choices=['ledger-part','ledger-final','enrich','freeze']);p.add_argument('--output',type=Path,required=True);p.add_argument('--previous',type=Path,required=True);p.add_argument('--target-date',required=True);p.add_argument('--part',type=int);p.add_argument('--parts',type=int,default=4);a=p.parse_args()
+    if a.mode=='ledger-part':ledger_part(a.output,a.target_date,a.part,a.parts)
+    elif a.mode=='ledger-final':ledger_final(a.output,a.previous,a.target_date,a.parts)
+    elif a.mode=='enrich':enrich(a.output,a.previous,a.target_date)
+    else:freeze(a.output,a.previous,a.target_date)

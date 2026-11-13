@@ -1,6 +1,6 @@
 {
   "name": "Recover 2026-11-13 primary checkpoint",
-  "run-name": "Resume 2026-11-13 with ledger, enrichment and inference stages",
+  "run-name": "Resume 2026-11-13 with partitioned ledger, enrichment and inference",
   "on": {
     "push": {
       "branches": [
@@ -208,7 +208,7 @@
       "needs": "ledger"
     },
     "ledger": {
-      "name": "Build deterministic context ledger",
+      "name": "Merge deterministic context ledger partitions",
       "runs-on": "ubuntu-latest",
       "timeout-minutes": 8,
       "env": {
@@ -255,8 +255,48 @@
           }
         },
         {
-          "name": "Restore prepared state",
-          "run": "mv prepared-state/pipeline-output pipeline-output"
+          "uses": "./.github/actions/private-download",
+          "with": {
+            "name": "primary-ledger-part-0-2026-11-13",
+            "run-id": "${{ github.run_id }}",
+            "github-token": "${{ github.token }}",
+            "path": "part0-state",
+            "key": "${{ secrets.PRIVATE_ARTIFACT_KEY }}"
+          }
+        },
+        {
+          "uses": "./.github/actions/private-download",
+          "with": {
+            "name": "primary-ledger-part-1-2026-11-13",
+            "run-id": "${{ github.run_id }}",
+            "github-token": "${{ github.token }}",
+            "path": "part1-state",
+            "key": "${{ secrets.PRIVATE_ARTIFACT_KEY }}"
+          }
+        },
+        {
+          "uses": "./.github/actions/private-download",
+          "with": {
+            "name": "primary-ledger-part-2-2026-11-13",
+            "run-id": "${{ github.run_id }}",
+            "github-token": "${{ github.token }}",
+            "path": "part2-state",
+            "key": "${{ secrets.PRIVATE_ARTIFACT_KEY }}"
+          }
+        },
+        {
+          "uses": "./.github/actions/private-download",
+          "with": {
+            "name": "primary-ledger-part-3-2026-11-13",
+            "run-id": "${{ github.run_id }}",
+            "github-token": "${{ github.token }}",
+            "path": "part3-state",
+            "key": "${{ secrets.PRIVATE_ARTIFACT_KEY }}"
+          }
+        },
+        {
+          "name": "Restore prepared state and partitions",
+          "run": "mv prepared-state/pipeline-output pipeline-output\ncp part*-state/ledger-part-*.json pipeline-output/"
         },
         {
           "uses": "actions/setup-python@v5",
@@ -269,11 +309,11 @@
           "run": "python3 -m pip install numpy==2.3.5"
         },
         {
-          "name": "Build the unchanged ledger",
+          "name": "Merge ledger partitions with unchanged rules",
           "env": {
             "PYTHONPATH": "${{ github.workspace }}/experiments/ensemble_validation"
           },
-          "run": "python3 \"$GITHUB_WORKSPACE/scripts/privacy/run_private.py\" <<'PRIVATE_COMMAND'\npython recovery-code/scripts/primary_split_forecast.py ledger --output pipeline-output --previous previous --target-date '2026-11-13'\nPRIVATE_COMMAND"
+          "run": "python3 \"$GITHUB_WORKSPACE/scripts/privacy/run_private.py\" <<'PRIVATE_COMMAND'\npython recovery-code/scripts/primary_split_forecast.py ledger-final --output pipeline-output --previous previous --target-date '2026-11-13' --parts 4\nPRIVATE_COMMAND"
         },
         {
           "name": "Stage ledger state",
@@ -288,7 +328,92 @@
             "retention-days": "7"
           }
         }
-      ]
+      ],
+      "needs": "parts"
+    },
+    "parts": {
+      "name": "Extract context ledger request partition ${{ matrix.part }}",
+      "runs-on": "ubuntu-latest",
+      "timeout-minutes": 8,
+      "env": {
+        "OPENBLAS_NUM_THREADS": "1"
+      },
+      "steps": [
+        {
+          "uses": "actions/checkout@v4",
+          "with": {
+            "ref": "da8904d0fafa3bb59a53a31c887d292729911c66",
+            "persist-credentials": false
+          }
+        },
+        {
+          "uses": "actions/checkout@v4",
+          "with": {
+            "ref": "${{ github.sha }}",
+            "path": "recovery-code",
+            "persist-credentials": false
+          }
+        },
+        {
+          "name": "Use promoted privacy implementation",
+          "run": "cp promoted/artifact.py scripts/privacy/artifact.py"
+        },
+        {
+          "uses": "./.github/actions/private-download",
+          "with": {
+            "name": "primary-prepared-2026-11-13",
+            "run-id": "43380667113",
+            "github-token": "${{ github.token }}",
+            "path": "prepared-state",
+            "key": "${{ secrets.PRIVATE_ARTIFACT_KEY }}"
+          }
+        },
+        {
+          "name": "Restore prepared state",
+          "run": "mv prepared-state/pipeline-output pipeline-output"
+        },
+        {
+          "uses": "actions/setup-python@v5",
+          "with": {
+            "python-version": "3.11"
+          }
+        },
+        {
+          "name": "Install fixed dependency",
+          "run": "python3 -m pip install numpy==2.3.5"
+        },
+        {
+          "name": "Extract one immutable request partition",
+          "env": {
+            "PYTHONPATH": "${{ github.workspace }}/experiments/ensemble_validation"
+          },
+          "run": "python3 \"$GITHUB_WORKSPACE/scripts/privacy/run_private.py\" <<'PRIVATE_COMMAND'\npython recovery-code/scripts/primary_split_forecast.py ledger-part --output pipeline-output --previous pipeline-output --target-date '2026-11-13' --part '${{ matrix.part }}' --parts 4\nPRIVATE_COMMAND"
+        },
+        {
+          "name": "Stage partition",
+          "run": "mkdir -p part-state && cp \"pipeline-output/ledger-part-${{ matrix.part }}.json\" part-state/"
+        },
+        {
+          "uses": "./.github/actions/private-upload",
+          "with": {
+            "name": "primary-ledger-part-${{ matrix.part }}-2026-11-13",
+            "path": "part-state",
+            "key": "${{ secrets.PRIVATE_ARTIFACT_KEY }}",
+            "retention-days": "7"
+          }
+        }
+      ],
+      "strategy": {
+        "fail-fast": false,
+        "matrix": {
+          "part": [
+            0,
+            1,
+            2,
+            3
+          ]
+        }
+      }
     }
   }
 }
