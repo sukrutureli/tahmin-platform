@@ -1,0 +1,38 @@
+{
+  "name": "Resume failed Nov 14 primary production",
+  "on": {
+    "push": {
+      "branches": [
+        "experiment/ensemble-market-validation"
+      ],
+      "paths": [
+        ".github/primary-daily-repair-request.json"
+      ]
+    }
+  },
+  "permissions": {
+    "contents": "read",
+    "actions": "write"
+  },
+  "jobs": {
+    "dispatch": {
+      "runs-on": "ubuntu-latest",
+      "timeout-minutes": 5,
+      "steps": [
+        {
+          "uses": "actions/checkout@v4",
+          "with": {
+            "persist-credentials": false
+          }
+        },
+        {
+          "name": "Dispatch corrected daily primary once",
+          "env": {
+            "GH_TOKEN": "${{ github.token }}"
+          },
+          "run": "gh api --method POST repos/sukrutureli/tahmin-platform/actions/workflows/ensemble-market-validation.yml/dispatches -f ref=main -f 'inputs[mode]=daily' -f 'inputs[target_date]=2026-11-14' -f 'inputs[source_run_id]=42920219240' -f 'inputs[published_ref]=46dc64063138cc4faa10ea59ceba10b0fd55d7c8' -f 'inputs[production_run_id]=43506785307'"
+        }
+      ]
+    }
+  }
+}
