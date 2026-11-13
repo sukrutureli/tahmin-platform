@@ -1,0 +1,61 @@
+{
+  "name": "Inspect encrypted primary repair failure",
+  "on": {
+    "push": {
+      "branches": [
+        "experiment/ensemble-market-validation"
+      ],
+      "paths": [
+        ".github/repair-diagnostic-request.json"
+      ]
+    }
+  },
+  "permissions": {
+    "contents": "read",
+    "actions": "read"
+  },
+  "jobs": {
+    "inspect": {
+      "runs-on": "ubuntu-latest",
+      "timeout-minutes": 10,
+      "steps": [
+        {
+          "uses": "actions/checkout@v4",
+          "with": {
+            "ref": "main",
+            "persist-credentials": false
+          }
+        },
+        {
+          "uses": "actions/checkout@v4",
+          "with": {
+            "ref": "${{ github.sha }}",
+            "path": "recovery-code",
+            "persist-credentials": false
+          }
+        },
+        {
+          "run": "cp promoted/artifact.py scripts/privacy/artifact.py"
+        },
+        {
+          "uses": "./.github/actions/private-download",
+          "with": {
+            "name": "private-primary-control-logs-43529293624",
+            "run-id": "43529293624",
+            "github-token": "${{ github.token }}",
+            "path": "diagnostics",
+            "key": "${{ secrets.PRIVATE_ARTIFACT_KEY }}"
+          }
+        },
+        {
+          "name": "Export only exception metadata to private report",
+          "env": {
+            "PYTHONPATH": "${{ github.workspace }}/experiments/ensemble_validation",
+            "PRIVATE_REPORT_TOKEN": "${{ secrets.FATHERTAHMIN_WRITE_TOKEN || secrets.ADMIN_USER }}"
+          },
+          "run": "python3 \"$GITHUB_WORKSPACE/scripts/privacy/run_private.py\" <<'PRIVATE_COMMAND'\npython recovery-code/scripts/export_repair_diagnostic.py\nPRIVATE_COMMAND"
+        }
+      ]
+    }
+  }
+}
