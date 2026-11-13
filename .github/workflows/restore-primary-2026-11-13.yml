@@ -1,0 +1,79 @@
+{
+  "name": "Restore verified Nov 13 primary HTML",
+  "on": {
+    "push": {
+      "branches": [
+        "experiment/ensemble-market-validation"
+      ],
+      "paths": [
+        ".github/primary-restore-request.json"
+      ]
+    }
+  },
+  "permissions": {
+    "contents": "read",
+    "actions": "read"
+  },
+  "jobs": {
+    "restore": {
+      "runs-on": "ubuntu-latest",
+      "timeout-minutes": 10,
+      "steps": [
+        {
+          "uses": "actions/checkout@v4",
+          "with": {
+            "ref": "da8904d0fafa3bb59a53a31c887d292729911c66",
+            "persist-credentials": false
+          }
+        },
+        {
+          "uses": "actions/checkout@v4",
+          "with": {
+            "ref": "${{ github.sha }}",
+            "path": "recovery-code",
+            "persist-credentials": false
+          }
+        },
+        {
+          "name": "Use compatible checkpoint reader",
+          "run": "cp promoted/artifact.py scripts/privacy/artifact.py"
+        },
+        {
+          "uses": "./.github/actions/private-download",
+          "with": {
+            "name": "primary-forecasts-2026-11-13",
+            "run-id": "43528252854",
+            "github-token": "${{ github.token }}",
+            "path": "pipeline-output",
+            "key": "${{ secrets.PRIVATE_ARTIFACT_KEY }}"
+          }
+        },
+        {
+          "uses": "actions/setup-python@v5",
+          "with": {
+            "python-version": "3.11"
+          }
+        },
+        {
+          "name": "Verify model, artifact and HTML hashes; restore dated pages",
+          "env": {
+            "PYTHONPATH": "${{ github.workspace }}/experiments/ensemble_validation",
+            "REPORT_SOURCE_TOKEN": "${{ github.token }}",
+            "PRIVATE_REPORT_TOKEN": "${{ secrets.FATHERTAHMIN_WRITE_TOKEN || secrets.ADMIN_USER }}"
+          },
+          "run": "python3 \"$GITHUB_WORKSPACE/scripts/privacy/run_private.py\" <<'PRIVATE_COMMAND'\npython recovery-code/scripts/publish_verified_nov13.py\nPRIVATE_COMMAND"
+        },
+        {
+          "uses": "./.github/actions/private-upload",
+          "if": "always()",
+          "with": {
+            "name": "private-restore-logs",
+            "path": "${{ runner.temp }}/tahmin-private-logs",
+            "key": "${{ secrets.PRIVATE_ARTIFACT_KEY }}",
+            "retention-days": "7"
+          }
+        }
+      ]
+    }
+  }
+}
