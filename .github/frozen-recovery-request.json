@@ -17,7 +17,7 @@
       "artifactSha256": "f70ac56302d89eed0e4016e391c9c63f345f0e36d7645c47b21c90600c016089"
     }
   },
-  "revision": 2,
+  "revision": 3,
   "resume": {
     "2026-11-11": {
       "runId": "43167157241",
@@ -25,5 +25,7 @@
       "artifactName": "frozen-recovery-2026-11-11",
       "artifactSha256": "97577ff6819ee256c7edc319fd07abbbb55ad91463f06450fb30f63f64c0193d"
     }
-  }
+  },
+  "settleDate": "2026-11-12",
+  "reason": "Refresh only newly completed HTTP results; immutable forecasts remain unchanged"
 }
