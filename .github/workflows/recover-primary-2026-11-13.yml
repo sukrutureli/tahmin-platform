@@ -1,6 +1,6 @@
 {
   "name": "Recover 2026-11-13 primary checkpoint",
-  "run-name": "Resume 2026-11-13 from verified prepared checkpoint",
+  "run-name": "Resume 2026-11-13 with exact module path",
   "on": {
     "push": {
       "branches": [
@@ -84,7 +84,10 @@
         },
         {
           "name": "Run unchanged frozen inference from preserved enrichment",
-          "run": "python3 \"$GITHUB_WORKSPACE/scripts/privacy/run_private.py\" <<'PRIVATE_COMMAND'\npython recovery-code/scripts/primary_split_forecast.py freeze --output pipeline-output --previous previous --target-date '2026-11-13'\nPRIVATE_COMMAND"
+          "run": "python3 \"$GITHUB_WORKSPACE/scripts/privacy/run_private.py\" <<'PRIVATE_COMMAND'\npython recovery-code/scripts/primary_split_forecast.py freeze --output pipeline-output --previous previous --target-date '2026-11-13'\nPRIVATE_COMMAND",
+          "env": {
+            "PYTHONPATH": "${{ github.workspace }}/experiments/ensemble_validation"
+          }
         },
         {
           "uses": "./.github/actions/private-upload",
@@ -183,7 +186,10 @@
         },
         {
           "name": "Run the unchanged bounded enrichment",
-          "run": "python3 \"$GITHUB_WORKSPACE/scripts/privacy/run_private.py\" <<'PRIVATE_COMMAND'\npython recovery-code/scripts/primary_split_forecast.py enrich --output pipeline-output --previous previous --target-date '2026-11-13'\nPRIVATE_COMMAND"
+          "run": "python3 \"$GITHUB_WORKSPACE/scripts/privacy/run_private.py\" <<'PRIVATE_COMMAND'\npython recovery-code/scripts/primary_split_forecast.py enrich --output pipeline-output --previous previous --target-date '2026-11-13'\nPRIVATE_COMMAND",
+          "env": {
+            "PYTHONPATH": "${{ github.workspace }}/experiments/ensemble_validation"
+          }
         },
         {
           "name": "Stage enriched state",
