@@ -26,6 +26,13 @@
           }
         },
         {
+          "name": "Stop superseded primary run before locked-pipeline verification",
+          "env": {
+            "GH_TOKEN": "${{ github.token }}"
+          },
+          "run": "gh api --method POST repos/sukrutureli/tahmin-platform/actions/runs/43529162974/cancel"
+        },
+        {
           "name": "Dispatch corrected daily primary once",
           "env": {
             "GH_TOKEN": "${{ github.token }}"
