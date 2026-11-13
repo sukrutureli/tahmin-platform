@@ -6,6 +6,7 @@
   "codeRef": "da8904d0fafa3bb59a53a31c887d292729911c66",
   "previousRunId": "42920219240",
   "previousArtifact": "ensemble-market-validation-2026-11-10",
-  "mode": "bounded-stage-recovery",
-  "revision": 1
+  "mode": "four-bounded-encrypted-stages",
+  "revision": 2,
+  "failedSplitRunId": "43380667113"
 }

@@ -1,6 +1,6 @@
 {
   "name": "Recover 2026-11-13 primary checkpoint",
-  "run-name": "Recover primary 2026-11-13 in bounded encrypted stages",
+  "run-name": "Recover primary 2026-11-13 in four bounded encrypted stages",
   "on": {
     "push": {
       "branches": [
@@ -222,7 +222,7 @@
     },
     "forecast": {
       "name": "Freeze primary forecasts and publish HTML",
-      "needs": "prepare",
+      "needs": "enrich",
       "runs-on": "ubuntu-latest",
       "timeout-minutes": 20,
       "env": {
@@ -233,6 +233,114 @@
           "uses": "actions/checkout@v4",
           "with": {
             "ref": "da8904d0fafa3bb59a53a31c887d292729911c66",
+            "persist-credentials": false
+          }
+        },
+        {
+          "uses": "actions/checkout@v4",
+          "with": {
+            "ref": "${{ github.sha }}",
+            "path": "recovery-code",
+            "persist-credentials": false
+          }
+        },
+        {
+          "name": "Use promoted privacy implementation",
+          "run": "cp promoted/artifact.py scripts/privacy/artifact.py"
+        },
+        {
+          "uses": "./.github/actions/private-download",
+          "with": {
+            "name": "ensemble-market-validation-2026-11-10",
+            "run-id": "42920219240",
+            "github-token": "${{ github.token }}",
+            "path": "previous",
+            "key": "${{ secrets.PRIVATE_ARTIFACT_KEY }}"
+          }
+        },
+        {
+          "uses": "./.github/actions/private-download",
+          "with": {
+            "name": "primary-enriched-2026-11-13",
+            "run-id": "${{ github.run_id }}",
+            "github-token": "${{ github.token }}",
+            "path": "enriched-state",
+            "key": "${{ secrets.PRIVATE_ARTIFACT_KEY }}"
+          }
+        },
+        {
+          "name": "Restore enriched state",
+          "run": "mv enriched-state/pipeline-output pipeline-output"
+        },
+        {
+          "uses": "actions/setup-python@v5",
+          "with": {
+            "python-version": "3.11"
+          }
+        },
+        {
+          "name": "Install fixed dependency",
+          "run": "python3 -m pip install numpy==2.3.5"
+        },
+        {
+          "name": "Run unchanged frozen inference from preserved enrichment",
+          "run": "python3 \"$GITHUB_WORKSPACE/scripts/privacy/run_private.py\" <<'PRIVATE_COMMAND'\npython recovery-code/scripts/primary_split_forecast.py freeze --output pipeline-output --previous previous --target-date '2026-11-13'\nPRIVATE_COMMAND"
+        },
+        {
+          "uses": "./.github/actions/private-upload",
+          "with": {
+            "name": "primary-forecasts-2026-11-13",
+            "path": "pipeline-output",
+            "key": "${{ secrets.PRIVATE_ARTIFACT_KEY }}",
+            "retention-days": "30"
+          }
+        },
+        {
+          "name": "Publish private primary HTML",
+          "env": {
+            "PRIVATE_REPORT_TOKEN": "${{ secrets.FATHERTAHMIN_WRITE_TOKEN || secrets.ADMIN_USER }}",
+            "REPORT_SOURCE_TOKEN": "${{ github.token }}"
+          },
+          "run": "python3 \"$GITHUB_WORKSPACE/scripts/privacy/run_private.py\" <<'PRIVATE_COMMAND'\npython experiments/ensemble_validation/publish_primary.py --output pipeline-output --target-date '2026-11-13'\nPRIVATE_COMMAND"
+        },
+        {
+          "name": "Keep logs encrypted",
+          "if": "always()",
+          "run": "mkdir -p \"$RUNNER_TEMP/tahmin-private-logs\""
+        },
+        {
+          "uses": "./.github/actions/private-upload",
+          "if": "always()",
+          "with": {
+            "name": "private-split-forecast-logs-2026-11-13",
+            "path": "${{ runner.temp }}/tahmin-private-logs",
+            "key": "${{ secrets.PRIVATE_ARTIFACT_KEY }}",
+            "retention-days": "7"
+          }
+        }
+      ]
+    },
+    "enrich": {
+      "name": "Bounded context enrichment",
+      "needs": "prepare",
+      "runs-on": "ubuntu-latest",
+      "timeout-minutes": 10,
+      "env": {
+        "OPENBLAS_NUM_THREADS": "1"
+      },
+      "steps": [
+        {
+          "uses": "actions/checkout@v4",
+          "with": {
+            "ref": "da8904d0fafa3bb59a53a31c887d292729911c66",
+            "persist-credentials": false
+          }
+        },
+        {
+          "uses": "actions/checkout@v4",
+          "with": {
+            "ref": "${{ github.sha }}",
+            "path": "recovery-code",
             "persist-credentials": false
           }
         },
@@ -275,37 +383,18 @@
           "run": "python3 -m pip install numpy==2.3.5"
         },
         {
-          "name": "Run unchanged frozen primary model",
-          "run": "python3 \"$GITHUB_WORKSPACE/scripts/privacy/run_private.py\" <<'PRIVATE_COMMAND'\npython experiments/ensemble_validation/primary_forecast.py --output pipeline-output --previous previous --target-date '2026-11-13'\nPRIVATE_COMMAND"
+          "name": "Run the unchanged bounded enrichment",
+          "run": "python3 \"$GITHUB_WORKSPACE/scripts/privacy/run_private.py\" <<'PRIVATE_COMMAND'\npython recovery-code/scripts/primary_split_forecast.py enrich --output pipeline-output --previous previous --target-date '2026-11-13'\nPRIVATE_COMMAND"
+        },
+        {
+          "name": "Stage enriched state",
+          "run": "mkdir -p enriched-state && mv pipeline-output enriched-state/"
         },
         {
           "uses": "./.github/actions/private-upload",
           "with": {
-            "name": "primary-forecasts-2026-11-13",
-            "path": "pipeline-output",
-            "key": "${{ secrets.PRIVATE_ARTIFACT_KEY }}",
-            "retention-days": "30"
-          }
-        },
-        {
-          "name": "Publish private primary HTML",
-          "env": {
-            "PRIVATE_REPORT_TOKEN": "${{ secrets.FATHERTAHMIN_WRITE_TOKEN || secrets.ADMIN_USER }}",
-            "REPORT_SOURCE_TOKEN": "${{ github.token }}"
-          },
-          "run": "python3 \"$GITHUB_WORKSPACE/scripts/privacy/run_private.py\" <<'PRIVATE_COMMAND'\npython experiments/ensemble_validation/publish_primary.py --output pipeline-output --target-date '2026-11-13'\nPRIVATE_COMMAND"
-        },
-        {
-          "name": "Keep logs encrypted",
-          "if": "always()",
-          "run": "mkdir -p \"$RUNNER_TEMP/tahmin-private-logs\""
-        },
-        {
-          "uses": "./.github/actions/private-upload",
-          "if": "always()",
-          "with": {
-            "name": "private-split-forecast-logs-2026-11-13",
-            "path": "${{ runner.temp }}/tahmin-private-logs",
+            "name": "primary-enriched-2026-11-13",
+            "path": "enriched-state",
             "key": "${{ secrets.PRIVATE_ARTIFACT_KEY }}",
             "retention-days": "7"
           }
