@@ -2,7 +2,7 @@
 import argparse,copy,json,shutil,tempfile
 from datetime import datetime,timezone
 from pathlib import Path
-from context_features import build_ledger,bounded_enrichment,Context
+from context_features_fast import build_ledger,bounded_enrichment,Context
 from mine_rules import merge_dataset
 from report import BASE,GROUPS,candidate_vector,parse_score
 from prepare import dump

@@ -1,1 +1,1 @@
-{"targetDate":"2026-11-13","controlRunId":"43523834634","reason":"Refresh verified recovered primary HTML with already completed Control results"}
+{"targetDate":"2026-11-13","controlRunId":"43523834634","revision":2,"reason":"Restore exact hash-locked pipeline and use separate serving-only cache accelerator"}
