@@ -52,4 +52,25 @@ class PrimaryControlTests(unittest.TestCase):
   j=w['jobs']['refresh'];self.assertNotIn('needs',j)
   runs='\n'.join(s.get('run','') for s in j['steps'])
   self.assertNotIn('freeze',runs);self.assertNotIn('mine_rules',runs);self.assertNotIn('mvn',runs)
+ def test_only_exact_audited_recovery_can_supply_control(self):
+  from datetime import date
+  ready={'targetDate':'2026-11-13','policy':'complete-market-price-v2','modelSha256':m.MODEL,'sourceRunId':'43528252854','sourceArtifactId':14085134532}
+  class Source:
+   sha='0239f0b4fdb0898f1e1a268765a834e15972c407'
+   digest='sha256:d072bb01e7b5a06a2f56de6dd6f6fcf1372b77afb8de2632a0f48bc2b31e81fd'
+   def call(self,path):
+    if '/runs/55/jobs' in path:return {'jobs':[{'name':n,'conclusion':'success'} for n in ['Football CONTROL','Basketball CONTROL']]}
+    if '/runs/55/artifacts' in path:return {'artifacts':[{'name':n} for n in ['football-control-public','basketball-control-public']]}
+    if path.endswith('/runs/55'):return {'path':'.github/workflows/control.yml','head_branch':'main','status':'completed','head_repository':{'full_name':m.SOURCE}}
+    if '/jobs?' in path:return {'jobs':[{'name':'Freeze primary forecasts and publish HTML','conclusion':'success'}]}
+    if '/artifacts?' in path:return {'artifacts':[{'id':14085134532,'name':'primary-forecasts-2026-11-13','digest':self.digest}]}
+    return {'path':'.github/workflows/recover-primary-2026-11-13.yml','head_branch':'experiment/ensemble-market-validation','head_sha':self.sha,'conclusion':'success'}
+  source=Source()
+  with patch.object(m,'file_json',return_value=ready),patch.object(m,'datetime') as clock:
+   clock.now.return_value.date.return_value=date(2026,11,14)
+   self.assertEqual(m.resolve(source,None,'55','2026-11-13')['checkpoint']['id'],14085134532)
+   source.sha='0'*40
+   with self.assertRaises(ValueError):m.resolve(source,None,'55','2026-11-13')
+   source.sha=Source.sha;source.digest='wrong'
+   with self.assertRaises(ValueError):m.resolve(source,None,'55','2026-11-13')
 if __name__=='__main__':unittest.main()

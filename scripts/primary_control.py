@@ -35,12 +35,18 @@ def resolve(source,private,control_id,explicit=None):
  ready=file_json(private,'raporlar/'+day+'/primary-ready.json')
  if ready.get('targetDate')!=day or ready.get('policy')!='complete-market-price-v2' or ready.get('modelSha256')!=MODEL:raise ValueError('Primary forecast identity mismatch')
  origin=str(ready['sourceRunId']);r=source.call(SOURCE+'/actions/runs/'+origin)
- if r.get('head_branch')!='main' or r.get('path')!='.github/workflows/ensemble-market-validation.yml':raise ValueError('Untrusted primary source')
+ normal=r.get('head_branch')=='main' and r.get('path')=='.github/workflows/ensemble-market-validation.yml'
+ recovered=(origin=='43528252854' and day=='2026-11-13' and r.get('head_branch')=='experiment/ensemble-market-validation'
+            and r.get('path')=='.github/workflows/recover-primary-2026-11-13.yml'
+            and r.get('head_sha')=='0239f0b4fdb0898f1e1a268765a834e15972c407' and r.get('conclusion')=='success')
+ if not (normal or recovered):raise ValueError('Untrusted primary source')
  js=source.call(SOURCE+'/actions/runs/'+origin+'/jobs?per_page=100')['jobs']
- if not any(j['name']=='Primary forecast and immediate HTML' and j['conclusion']=='success' for j in js):raise ValueError('Primary forecast job was not successful')
+ job_name='Freeze primary forecasts and publish HTML' if recovered else 'Primary forecast and immediate HTML'
+ if not any(j['name']==job_name and j['conclusion']=='success' for j in js):raise ValueError('Primary forecast job was not successful')
  aa=source.call(SOURCE+'/actions/runs/'+origin+'/artifacts?per_page=100')['artifacts']
  checkpoint=next((a for a in aa if a['id']==ready['sourceArtifactId'] and a['name']=='primary-forecasts-'+day and not a.get('expired')),None)
  if not checkpoint:raise ValueError('Verified primary checkpoint unavailable')
+ if recovered and (checkpoint['id']!=14085134532 or checkpoint.get('digest')!='sha256:d072bb01e7b5a06a2f56de6dd6f6fcf1372b77afb8de2632a0f48bc2b31e81fd'):raise ValueError('Recovery checkpoint digest mismatch')
  return {'targetDate':day,'controlRunId':control_id,'origin':ready,'checkpoint':{'runId':origin,'name':checkpoint['name'],'id':checkpoint['id'],'digest':checkpoint.get('digest')}}
 def protected(root):
  return {p.name:digest(p) for p in root.glob('*.json') if 'before-results' in p.name or p.name.startswith('primary-context-') or p.name in ['stability-model.json','input-manifest.json','rule-mining-dataset.json']}
