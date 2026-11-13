@@ -1,6 +1,6 @@
 {
   "name": "Recover 2026-11-13 primary checkpoint",
-  "run-name": "Resume 2026-11-13 with exact module path",
+  "run-name": "Resume 2026-11-13 with ledger, enrichment and inference stages",
   "on": {
     "push": {
       "branches": [
@@ -163,16 +163,16 @@
         {
           "uses": "./.github/actions/private-download",
           "with": {
-            "name": "primary-prepared-2026-11-13",
-            "run-id": "43380667113",
+            "name": "primary-ledger-2026-11-13",
+            "run-id": "${{ github.run_id }}",
             "github-token": "${{ github.token }}",
-            "path": "prepared-state",
+            "path": "ledger-state",
             "key": "${{ secrets.PRIVATE_ARTIFACT_KEY }}"
           }
         },
         {
-          "name": "Restore prepared state",
-          "run": "mv prepared-state/pipeline-output pipeline-output"
+          "name": "Restore ledger state",
+          "run": "mv ledger-state/pipeline-output pipeline-output"
         },
         {
           "uses": "actions/setup-python@v5",
@@ -200,6 +200,90 @@
           "with": {
             "name": "primary-enriched-2026-11-13",
             "path": "enriched-state",
+            "key": "${{ secrets.PRIVATE_ARTIFACT_KEY }}",
+            "retention-days": "7"
+          }
+        }
+      ],
+      "needs": "ledger"
+    },
+    "ledger": {
+      "name": "Build deterministic context ledger",
+      "runs-on": "ubuntu-latest",
+      "timeout-minutes": 8,
+      "env": {
+        "OPENBLAS_NUM_THREADS": "1"
+      },
+      "steps": [
+        {
+          "uses": "actions/checkout@v4",
+          "with": {
+            "ref": "da8904d0fafa3bb59a53a31c887d292729911c66",
+            "persist-credentials": false
+          }
+        },
+        {
+          "uses": "actions/checkout@v4",
+          "with": {
+            "ref": "${{ github.sha }}",
+            "path": "recovery-code",
+            "persist-credentials": false
+          }
+        },
+        {
+          "name": "Use promoted privacy implementation",
+          "run": "cp promoted/artifact.py scripts/privacy/artifact.py"
+        },
+        {
+          "uses": "./.github/actions/private-download",
+          "with": {
+            "name": "ensemble-market-validation-2026-11-10",
+            "run-id": "42920219240",
+            "github-token": "${{ github.token }}",
+            "path": "previous",
+            "key": "${{ secrets.PRIVATE_ARTIFACT_KEY }}"
+          }
+        },
+        {
+          "uses": "./.github/actions/private-download",
+          "with": {
+            "name": "primary-prepared-2026-11-13",
+            "run-id": "43380667113",
+            "github-token": "${{ github.token }}",
+            "path": "prepared-state",
+            "key": "${{ secrets.PRIVATE_ARTIFACT_KEY }}"
+          }
+        },
+        {
+          "name": "Restore prepared state",
+          "run": "mv prepared-state/pipeline-output pipeline-output"
+        },
+        {
+          "uses": "actions/setup-python@v5",
+          "with": {
+            "python-version": "3.11"
+          }
+        },
+        {
+          "name": "Install fixed dependency",
+          "run": "python3 -m pip install numpy==2.3.5"
+        },
+        {
+          "name": "Build the unchanged ledger",
+          "env": {
+            "PYTHONPATH": "${{ github.workspace }}/experiments/ensemble_validation"
+          },
+          "run": "python3 \"$GITHUB_WORKSPACE/scripts/privacy/run_private.py\" <<'PRIVATE_COMMAND'\npython recovery-code/scripts/primary_split_forecast.py ledger --output pipeline-output --previous previous --target-date '2026-11-13'\nPRIVATE_COMMAND"
+        },
+        {
+          "name": "Stage ledger state",
+          "run": "mkdir -p ledger-state && mv pipeline-output ledger-state/"
+        },
+        {
+          "uses": "./.github/actions/private-upload",
+          "with": {
+            "name": "primary-ledger-2026-11-13",
+            "path": "ledger-state",
             "key": "${{ secrets.PRIVATE_ARTIFACT_KEY }}",
             "retention-days": "7"
           }

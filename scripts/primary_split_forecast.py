@@ -20,9 +20,13 @@ def dataset(root,previous,target):
     dump(root/'rule-mining-dataset.json',data)
     return data
 
+def ledger_stage(root,previous,target):
+    dataset(root,previous,target)
+    build_ledger(root,previous,target)
+
 def enrich(root,previous,target):
-    data=dataset(root,previous,target)
-    ledger,index=build_ledger(root,previous,target)
+    ledger=read(root/'context-ledger.json')
+    if ledger.get('targetDate')!=target: raise ValueError('Ledger target changed')
     return bounded_enrichment(root,target,ledger,max_teams=8)
 
 def freeze(root,previous,target):
@@ -63,5 +67,5 @@ def freeze(root,previous,target):
     locked.verify_snapshot(root,config); legacy_freeze(root); complete_freeze(root); return reports(root)
 
 if __name__=='__main__':
-    p=argparse.ArgumentParser(); p.add_argument('mode',choices=['enrich','freeze']); p.add_argument('--output',type=Path,required=True); p.add_argument('--previous',type=Path,required=True); p.add_argument('--target-date',required=True); a=p.parse_args()
-    (enrich if a.mode=='enrich' else freeze)(a.output,a.previous,a.target_date)
+    p=argparse.ArgumentParser(); p.add_argument('mode',choices=['ledger','enrich','freeze']); p.add_argument('--output',type=Path,required=True); p.add_argument('--previous',type=Path,required=True); p.add_argument('--target-date',required=True); a=p.parse_args()
+    {'ledger':ledger_stage,'enrich':enrich,'freeze':freeze}[a.mode](a.output,a.previous,a.target_date)
