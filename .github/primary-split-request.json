@@ -1,0 +1,11 @@
+{
+  "targetDate": "2026-11-13",
+  "dailyRunId": "43305955926",
+  "failedEnsembleRunId": "43306794596",
+  "publishedRef": "c1c6e706a68acedfed6d8a40014ce13cb0e6e6d9",
+  "codeRef": "da8904d0fafa3bb59a53a31c887d292729911c66",
+  "previousRunId": "42920219240",
+  "previousArtifact": "ensemble-market-validation-2026-11-10",
+  "mode": "bounded-stage-recovery",
+  "revision": 1
+}
