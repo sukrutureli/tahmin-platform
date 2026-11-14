@@ -48,7 +48,7 @@ def verify(date,request):
  if parent['conclusion']!='success' or parent['path']!='.github/workflows/ensemble-market-validation.yml' or parent['head_sha']!=CODE:raise ValueError('Unverified preceding journal run')
  pa=api('actions/runs/'+request['previousRunId']+'/artifacts?per_page=100')['artifacts']
  if not any(x['id']==13812246535 and x['name']=='ensemble-market-validation-2026-11-10' and x.get('digest')=='sha256:05622f4adf8ad7c8383627c88a434d15eed6f8dd9314ae6faa0992864194387c' and not x['expired'] for x in pa):raise ValueError('Preceding artifact mismatch')
- with open(os.environ['GITHUB_OUTPUT'],'a') as out:out.write('source_run='+run+'\\nsource_name='+name+'\\nresume=false\\n')
+ with open(os.environ['GITHUB_OUTPUT'],'a') as out:out.write('source_run='+run+'\nsource_name='+name+'\nresume=false\n')
 def protected(root):
  names=[p for p in root.glob('*.json') if 'before-results' in p.name or p.name.startswith('primary-context-') or p.name in ['stability-model.json','frozen-today-rules.json','outcome-learning.json','score-distribution.json','input-manifest.json','rule-mining-dataset.json']]
  return {p.name:sha(p) for p in names}

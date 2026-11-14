@@ -1,4 +1,5 @@
-import importlib.util,json,tempfile,unittest
+import importlib.util,json,tempfile,unittest,os
+from unittest.mock import patch
 from pathlib import Path
 spec=importlib.util.spec_from_file_location('recovery',str(Path(__file__).with_name('recover_frozen_reports.py')))
 m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
@@ -21,4 +22,17 @@ class RecoveryTests(unittest.TestCase):
    self.assertEqual(m.source_spec(day,req),s)
    req['sources'][day]['artifactId']+=1
    with self.assertRaises(ValueError):m.source_spec(day,req)
+ def test_verified_download_outputs_are_separate_lines(self):
+  day='2026-11-13';run,aid,name,digest=m.ALLOWED[day]
+  request={'codeRef':m.CODE,'previousRunId':'42920219240','previousArtifactId':13812246535,'sources':{day:{'runId':run,'artifactId':aid,'artifactName':name,'artifactSha256':digest}}}
+  def fake(path):
+   if path=='actions/runs/'+run:return {'head_sha':'0239f0b4fdb0898f1e1a268765a834e15972c407','path':'.github/workflows/recover-primary-2026-11-13.yml','head_branch':'experiment/ensemble-market-validation','conclusion':'success','status':'completed','run_attempt':1}
+   if path.endswith(run+'/jobs?per_page=100'):return {'jobs':[{'name':'Freeze primary forecasts and publish HTML','conclusion':'success'}]}
+   if path.endswith(run+'/artifacts?per_page=100'):return {'artifacts':[{'id':aid,'name':name,'digest':'sha256:'+digest,'expired':False}]}
+   if path=='actions/runs/42920219240':return {'conclusion':'success','path':'.github/workflows/ensemble-market-validation.yml','head_sha':m.CODE}
+   return {'artifacts':[{'id':13812246535,'name':'ensemble-market-validation-2026-11-10','digest':'sha256:05622f4adf8ad7c8383627c88a434d15eed6f8dd9314ae6faa0992864194387c','expired':False}]}
+  with tempfile.TemporaryDirectory() as td:
+   output=Path(td)/'outputs'
+   with patch.dict(os.environ,{'GITHUB_REF':m.BRANCH,'GITHUB_OUTPUT':str(output)}),patch.object(m,'api',side_effect=fake):m.verify(day,request)
+   self.assertEqual(output.read_text().splitlines(),['source_run='+run,'source_name='+name,'resume=false'])
 if __name__=='__main__':unittest.main()

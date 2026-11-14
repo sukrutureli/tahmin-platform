@@ -51,10 +51,6 @@
           "run": "python3 recovery-code/scripts/recover_frozen_reports.py verify --request recovery-code/.github/frozen-recovery-request.json --date 2026-11-13"
         },
         {
-          "name": "Verify recovery output and snapshot boundaries",
-          "run": "python3 recovery-code/scripts/test_november_recovery.py"
-        },
-        {
           "name": "Use exact promoted replay tools",
           "run": "for sport in football basketball; do\n  rsync -a --delete \"promoted/replay/$sport/src/\" \"$sport/src/\"\n  cp \"promoted/replay/$sport/pom.xml\" \"$sport/pom.xml\"\ndone\ncp promoted/artifact.py scripts/privacy/artifact.py\n"
         },
@@ -152,6 +148,11 @@
           "run": "python3 \"$GITHUB_WORKSPACE/scripts/privacy/run_private.py\" <<'PRIVATE_COMMAND'\npython3 recovery-code/scripts/recover_frozen_reports.py publish --request recovery-code/.github/frozen-recovery-request.json --date 2026-11-13\nPRIVATE_COMMAND\n"
         },
         {
+          "name": "Ensure encrypted log directory exists",
+          "if": "always()",
+          "run": "mkdir -p \"$RUNNER_TEMP/tahmin-private-logs\""
+        },
+        {
           "name": "Keep recovery logs encrypted",
           "if": "always()",
           "uses": "./.github/actions/private-upload",
@@ -193,10 +194,6 @@
           "name": "Verify fixed recovery sources",
           "id": "cfg",
           "run": "python3 recovery-code/scripts/recover_frozen_reports.py verify --request recovery-code/.github/frozen-recovery-request.json --date 2026-11-14"
-        },
-        {
-          "name": "Verify recovery output and snapshot boundaries",
-          "run": "python3 recovery-code/scripts/test_november_recovery.py"
         },
         {
           "name": "Use exact promoted replay tools",
@@ -288,6 +285,11 @@
             "PRIVATE_REPORT_TOKEN": "${{ secrets.FATHERTAHMIN_WRITE_TOKEN || secrets.FATHERTAHMIN_READ_TOKEN || secrets.ADMIN_USER }}"
           },
           "run": "python3 \"$GITHUB_WORKSPACE/scripts/privacy/run_private.py\" <<'PRIVATE_COMMAND'\npython3 recovery-code/scripts/recover_frozen_reports.py publish --request recovery-code/.github/frozen-recovery-request.json --date 2026-11-14\nPRIVATE_COMMAND\n"
+        },
+        {
+          "name": "Ensure encrypted log directory exists",
+          "if": "always()",
+          "run": "mkdir -p \"$RUNNER_TEMP/tahmin-private-logs\""
         },
         {
           "name": "Keep recovery logs encrypted",

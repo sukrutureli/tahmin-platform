@@ -17,6 +17,7 @@
       "artifactSha256": "a39bb5cb878717260935a362b8a0af36c88283635b52eb9f5664a2efacc38c51"
     }
   },
-  "revision": 4,
-  "reason": "Settle authenticated existing snapshots only; no forecasting, mining, fitting, history collection or canonical HTML publication"
+  "revision": 5,
+  "reason": "Settle authenticated existing snapshots only; no forecasting, mining, fitting, history collection or canonical HTML publication",
+  "repair": "Emit distinct download outputs; no forecast recomputation"
 }
