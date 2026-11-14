@@ -8,8 +8,9 @@ CODE='be2074e5905c6cc52e95985555ed9614010ca9ab'
 BRANCH='refs/heads/experiment/ensemble-market-validation'
 MODEL='35017ecf9f8992909e2f9090c8aff18c0e3c36d838312cb1202a3107c4cd61cb'
 ALLOWED={
- '2026-11-11':('42903532498',13804629578,'frozen-forecasts-2026-11-11','6976ff1c9b912a1ef2bda2d0dbb64d41902ff0e6c19a9affae11a590b75cbd90'),
- '2026-11-12':('43100338146',13891848797,'primary-forecasts-2026-11-12','f70ac56302d89eed0e4016e391c9c63f345f0e36d7645c47b21c90600c016089')}
+ '2026-11-13':('43528252854',14085134532,'primary-forecasts-2026-11-13','d072bb01e7b5a06a2f56de6dd6f6fcf1372b77afb8de2632a0f48bc2b31e81fd'),
+ '2026-11-14':('43529704301',14088412399,'primary-forecasts-2026-11-14','a39bb5cb878717260935a362b8a0af36c88283635b52eb9f5664a2efacc38c51')}
+
 JSON_REPORTS=['priced-complete-evaluation.json','priced-evaluation.json','daily-evaluation.json','context-evaluation.json','stability-evaluation.json','score-research-evaluation.json','competition-evaluation.json']
 HTML_REPORTS=['futbol-yeni.html','basketbol-yeni.html','day-by-day.html']
 def sha(p):return hashlib.sha256(Path(p).read_bytes()).hexdigest()
@@ -31,36 +32,23 @@ def verify(date,request):
  if os.environ.get('GITHUB_REF')!=BRANCH:raise ValueError('Recovery branch mismatch')
  run,aid,name,digest=source_spec(date,request)
  r=api('actions/runs/'+run)
- if (r['path']!='.github/workflows/ensemble-market-validation.yml' or r['head_branch']!='main' or r['head_sha']!=CODE or r['status']!='completed' or r['conclusion']!='failure' or r['run_attempt']!=1):raise ValueError('Unverified source run')
+ expected={
+  '2026-11-13':('0239f0b4fdb0898f1e1a268765a834e15972c407','.github/workflows/recover-primary-2026-11-13.yml','experiment/ensemble-market-validation','success','Freeze primary forecasts and publish HTML'),
+  '2026-11-14':('166b1420c1190f120ef42b016d117afcb2e5afda','.github/workflows/ensemble-market-validation.yml','main','failure','Primary forecast and immediate HTML')}[date]
+ if (r['head_sha'],r['path'],r['head_branch'],r['conclusion'])!=expected[:4] or r['status']!='completed' or r['run_attempt']!=1:raise ValueError('Unverified source run')
  jobs=api('actions/runs/'+run+'/jobs?per_page=100')['jobs']
- primary=next(j for j in jobs if j['name']=='Primary forecast and immediate HTML')
- research=next(j for j in jobs if j['name']=='Background research and outcome reports')
- if primary['conclusion']!='success' or research['conclusion']!='failure':raise ValueError('Unexpected failure stage')
- if date=='2026-11-11' and not any(s['name']=='Save immutable forecasts before HTTP settlement' and s['conclusion']=='success' for s in research['steps']):raise ValueError('Full frozen checkpoint not completed')
+ if not any(j['name']==expected[4] and j['conclusion']=='success' for j in jobs):raise ValueError('Frozen primary job not successful')
+ if date=='2026-11-14':
+  research=next(j for j in jobs if j['name']=='Background research and outcome reports')
+  if research['conclusion']!='failure' or not any(x['name']=='Discover and freeze two-condition history rules (shadow only)' and x['conclusion']=='failure' for x in research['steps']):raise ValueError('Unexpected background failure')
  arts=api('actions/runs/'+run+'/artifacts?per_page=100')['artifacts']
- a=next(x for x in arts if x['id']==aid)
- if a['expired'] or a['name']!=name or a.get('digest')!='sha256:'+digest:raise ValueError('Artifact provenance mismatch')
+ artifact=next(x for x in arts if x['id']==aid)
+ if artifact['expired'] or artifact['name']!=name or artifact.get('digest')!='sha256:'+digest:raise ValueError('Frozen artifact provenance mismatch')
  parent=api('actions/runs/'+request['previousRunId'])
  if parent['conclusion']!='success' or parent['path']!='.github/workflows/ensemble-market-validation.yml' or parent['head_sha']!=CODE:raise ValueError('Unverified preceding journal run')
  pa=api('actions/runs/'+request['previousRunId']+'/artifacts?per_page=100')['artifacts']
- if not any(x['id']==13812246535 and x['name']=='ensemble-market-validation-2026-11-10' and not x['expired'] for x in pa):raise ValueError('Preceding artifact missing')
- resume=request.get('resume',{}).get(date)
- resumed=False
- if resume:
-  expected=('43167157241',13920274065,'frozen-recovery-2026-11-11','97577ff6819ee256c7edc319fd07abbbb55ad91463f06450fb30f63f64c0193d')
-  actual=(str(resume['runId']),int(resume['artifactId']),resume['artifactName'],resume['artifactSha256'])
-  if date!='2026-11-11' or actual!=expected:raise ValueError('Unapproved export continuation')
-  pr=api('actions/runs/'+expected[0])
-  if pr['status']!='completed' or pr['conclusion']!='failure' or pr['head_sha']!='880b501712d6f882d0b5e6ec5aad868fc45c3428' or pr['path']!='.github/workflows/recover-frozen-reports.yml' or pr['head_branch']!='experiment/ensemble-market-validation':raise ValueError('Unverified export continuation run')
-  js=api('actions/runs/'+expected[0]+'/jobs?per_page=100')['jobs']
-  st=next(j for j in js if j['name']=='Settle frozen 2026-11-11')['steps']
-  for required in ['Settle existing forecasts without fitting or mining','Save encrypted recovered checkpoint']:
-   if not any(x['name']==required and x['conclusion']=='success' for x in st):raise ValueError('Continuation did not finish settlement')
-  aa=api('actions/runs/'+expected[0]+'/artifacts?per_page=100')['artifacts']
-  if not any(x['id']==expected[1] and x['name']==expected[2] and not x['expired'] and x.get('digest')=='sha256:'+expected[3] for x in aa):raise ValueError('Continuation artifact mismatch')
-  run,name=expected[0],expected[2];resumed=True
- with open(os.environ['GITHUB_OUTPUT'],'a') as out:
-  out.write('source_run='+run+'\nsource_name='+name+'\nresume='+str(resumed).lower()+'\n')
+ if not any(x['id']==13812246535 and x['name']=='ensemble-market-validation-2026-11-10' and x.get('digest')=='sha256:05622f4adf8ad7c8383627c88a434d15eed6f8dd9314ae6faa0992864194387c' and not x['expired'] for x in pa):raise ValueError('Preceding artifact mismatch')
+ with open(os.environ['GITHUB_OUTPUT'],'a') as out:out.write('source_run='+run+'\\nsource_name='+name+'\\nresume=false\\n')
 def protected(root):
  names=[p for p in root.glob('*.json') if 'before-results' in p.name or p.name.startswith('primary-context-') or p.name in ['stability-model.json','frozen-today-rules.json','outcome-learning.json','score-distribution.json','input-manifest.json','rule-mining-dataset.json']]
  return {p.name:sha(p) for p in names}
@@ -140,7 +128,7 @@ def publish(root,date,request):
  arts=api('actions/runs/'+os.environ['GITHUB_RUN_ID']+'/artifacts?per_page=100')['artifacts']
  name='frozen-recovery-'+date
  a=next(x for x in arts if x['name']==name and not x['expired'])
- manifest={'targetDate':date,'sourceRunId':os.environ['GITHUB_RUN_ID'],'sourceSha':os.environ['GITHUB_SHA'],'sourceWorkflow':'.github/workflows/recover-frozen-reports.yml','sourceArtifact':name,'sourceArtifactId':a['id'],'artifactDigest':a.get('digest'),'artifactUrl':'https://github.com/'+REPO+'/actions/runs/'+os.environ['GITHUB_RUN_ID']+'/artifacts/'+str(a['id']),'frozenSource':request['sources'][date],'codeRef':CODE,'modelSha256':MODEL,'policy':'complete-market-price-v2','immutableForecastsUnchanged':True,'partialResearch':date=='2026-11-12','exportContinuation':request.get('resume',{}).get(date),'reports':{n:{'sha256':hashlib.sha256(v.encode()).hexdigest(),'bytes':len(v.encode())} for n,v in files.items()}}
+ manifest={'targetDate':date,'sourceRunId':os.environ['GITHUB_RUN_ID'],'sourceSha':os.environ['GITHUB_SHA'],'sourceWorkflow':'.github/workflows/recover-frozen-reports.yml','sourceArtifact':name,'sourceArtifactId':a['id'],'artifactDigest':a.get('digest'),'artifactUrl':'https://github.com/'+REPO+'/actions/runs/'+os.environ['GITHUB_RUN_ID']+'/artifacts/'+str(a['id']),'frozenSource':request['sources'][date],'codeRef':CODE,'modelSha256':MODEL,'policy':'complete-market-price-v2','immutableForecastsUnchanged':True,'partialResearch':True,'exportContinuation':request.get('resume',{}).get(date),'reports':{n:{'sha256':hashlib.sha256(v.encode()).hexdigest(),'bytes':len(v.encode())} for n,v in files.items()}}
  text=json.dumps(manifest,ensure_ascii=False,indent=2)+'\n'
  files['recovery-checkpoint-manifest.json']=text
  changes={'deney/reports/'+date+'/'+n:v for n,v in files.items()}
