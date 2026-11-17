@@ -1,23 +1,23 @@
 {
   "codeRef": "be2074e5905c6cc52e95985555ed9614010ca9ab",
-  "publishedRef": "afc45a32fb4721be76e4d70f8b12d6a4ca02185d",
-  "previousRunId": "43687019232",
-  "previousArtifactId": 14151235456,
-  "previousArtifact": "frozen-recovery-2026-11-15",
+  "publishedRef": "741b48c14672c250527b2a35ae153f3a46ed3b97",
+  "previousRunId": "43817181964",
+  "previousArtifactId": 14203445966,
+  "previousArtifact": "frozen-recovery-2026-11-16",
   "sources": {
-    "2026-11-15": {
-      "runId": "43687019232",
-      "artifactId": 14151235456,
-      "artifactName": "frozen-recovery-2026-11-15",
-      "artifactSha256": "bfbc2055a79a1e6884c8b9d84eea2ece491cca7017eaff7c60cdcc078677b058"
-    },
     "2026-11-16": {
-      "runId": "43761624960",
-      "artifactId": 14181117700,
-      "artifactName": "primary-forecasts-2026-11-16",
-      "artifactSha256": "746a6f29d779fc784b99fa6217933d8fe0716b5d45252a074f05896b1e421a27"
+      "runId": "43817181964",
+      "artifactId": 14203445966,
+      "artifactName": "frozen-recovery-2026-11-16",
+      "artifactSha256": "fcecc73a12d4e4c450598188e3fbf735af98f63701dced0341075b78fa7038c7"
+    },
+    "2026-11-17": {
+      "runId": "43960512102",
+      "artifactId": 14274774036,
+      "artifactName": "primary-forecasts-2026-11-17",
+      "artifactSha256": "b33bae6c2e33ba03ac4850e1718366fa072c68abbb753433097704077e580bc6"
     }
   },
-  "revision": 7,
+  "revision": 8,
   "reason": "Settle saved preceding-day forecasts first, then evaluate existing today snapshot; no forecast generation, history collection, training or canonical publication"
 }
