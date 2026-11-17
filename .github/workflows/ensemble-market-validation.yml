@@ -306,6 +306,7 @@ jobs:
     - name: Carry optional bootstrap for isolated research runner
       run: if [ -d rule-bootstrap ]; then cp -r rule-bootstrap pipeline-output/research-bootstrap; fi
     - name: Save encrypted primary forecasts before background work
+      id: primary_checkpoint
       uses: ./.github/actions/private-upload
       with:
         name: primary-forecasts-${{ steps.cfg.outputs.target_date }}
@@ -315,12 +316,14 @@ jobs:
     - name: Publish primary HTML immediately without waiting for research
       if: steps.cfg.outputs.run_mode != 'control'
       env:
+        PRIMARY_ARTIFACT_ID: ${{ steps.primary_checkpoint.outputs.artifact-id }}
+        PRIMARY_ARTIFACT_DIGEST: ${{ steps.primary_checkpoint.outputs.artifact-digest }}
         PRIVATE_REPORT_TOKEN: ${{ secrets.FATHERTAHMIN_WRITE_TOKEN || secrets.ADMIN_USER }}
         REPORT_SOURCE_TOKEN: ${{ github.token }}
       run: 'python3 "$GITHUB_WORKSPACE/scripts/privacy/run_private.py" <<''PRIVATE_COMMAND''
 
         python experiments/ensemble_validation/publish_primary.py --output pipeline-output --target-date ''${{ steps.cfg.outputs.target_date
-        }}''
+        }}'' --artifact-id "$PRIMARY_ARTIFACT_ID" --artifact-digest "$PRIMARY_ARTIFACT_DIGEST"
 
         PRIVATE_COMMAND
 
@@ -835,3 +838,4 @@ jobs:
         retention-days: '7'
 env:
   GITHUB_TOKEN: ${{ secrets.FATHERTAHMIN_READ_TOKEN || secrets.FATHERTAHMIN_WRITE_TOKEN || secrets.ADMIN_USER }}
+

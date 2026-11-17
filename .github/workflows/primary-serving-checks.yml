@@ -3,6 +3,9 @@ on:
   push:
     branches: [main]
     paths:
+      - .github/actions/private-upload/action.yml
+      - tests/test_primary_publication.py
+      - tests/test_publication_resilience.py
       - experiments/ensemble_validation/primary_forecast.py
       - experiments/ensemble_validation/publish_primary.py
       - experiments/ensemble_validation/test_primary_forecast.py

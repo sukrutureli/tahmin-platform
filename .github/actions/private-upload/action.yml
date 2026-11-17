@@ -13,6 +13,13 @@ inputs:
   retention-days:
     default: '7'
     description: Artifact retention
+outputs:
+  artifact-id:
+    description: ID returned by the authenticated encrypted upload
+    value: ${{ steps.upload.outputs.artifact-id }}
+  artifact-digest:
+    description: SHA-256 digest returned by the authenticated encrypted upload
+    value: ${{ steps.upload.outputs.artifact-digest }}
 runs:
   using: composite
   steps:
@@ -27,6 +34,7 @@ runs:
         PYTHONPATH: ${{ runner.temp }}/tahmin-crypto
       run: python3 "$GITHUB_ACTION_PATH/../../../scripts/privacy/artifact.py" pack "$PRIVATE_SOURCE" "$RUNNER_TEMP/private-upload/payload.enc"
     - uses: actions/upload-artifact@v4
+      id: upload
       with:
         name: ${{ inputs.name }}
         path: ${{ runner.temp }}/private-upload/payload.enc
@@ -36,3 +44,4 @@ runs:
       if: always()
       shell: bash
       run: rm -rf "$RUNNER_TEMP/private-upload"
+
