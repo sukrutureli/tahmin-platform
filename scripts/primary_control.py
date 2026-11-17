@@ -24,6 +24,20 @@ def verify_control(run,jobs):
  if run.get('head_repository',{}).get('full_name')!=SOURCE:raise ValueError('Foreign CONTROL source')
  for name in ['Football CONTROL','Basketball CONTROL']:
   if not any(j['name']==name and j['conclusion']=='success' for j in jobs):raise ValueError('CONTROL sport results incomplete')
+def verified_publication_recovery(source,day,origin,run,jobs,ready):
+ if (day,origin,run.get('head_sha'),run.get('conclusion'))!=('2026-11-17','43960512102','055e438324a31e91754ddaa9b137624026590206','failure'):return False
+ if ready.get('sourceArtifactId')!=14274774036:return False
+ marker=ready.get('publicationRecovery',{})
+ if not re.fullmatch(r'[0-9a-f]{40}',marker.get('rendererSha','')) or not str(marker.get('runId','')).isdigit():return False
+ primary=next((j for j in jobs if j['name']=='Primary forecast and immediate HTML'),{})
+ steps=primary.get('steps',[])
+ if primary.get('conclusion')!='failure' or [s['name'] for s in steps if s['conclusion']=='failure']!=['Publish primary HTML immediately without waiting for research']:return False
+ for name in ['Run frozen primary model without research training','Save encrypted primary forecasts before background work']:
+  if not any(s['name']==name and s['conclusion']=='success' for s in steps):return False
+ recovery=source.call(SOURCE+'/actions/runs/'+str(marker['runId']))
+ if (recovery.get('head_branch'),recovery.get('path'),recovery.get('head_sha'),recovery.get('conclusion'))!=('main','.github/workflows/recover-primary-publication.yml',marker['rendererSha'],'success'):return False
+ rjobs=source.call(SOURCE+'/actions/runs/'+str(marker['runId'])+'/jobs?per_page=100')['jobs']
+ return any(j['name']=='Restore and publish preserved primary checkpoint' and j['conclusion']=='success' for j in rjobs)
 def resolve(source,private,control_id,explicit=None):
  run=source.call(SOURCE+'/actions/runs/'+control_id)
  jobs=source.call(SOURCE+'/actions/runs/'+control_id+'/jobs?per_page=100')['jobs'];verify_control(run,jobs)
@@ -42,10 +56,12 @@ def resolve(source,private,control_id,explicit=None):
  if not (normal or recovered):raise ValueError('Untrusted primary source')
  js=source.call(SOURCE+'/actions/runs/'+origin+'/jobs?per_page=100')['jobs']
  job_name='Freeze primary forecasts and publish HTML' if recovered else 'Primary forecast and immediate HTML'
- if not any(j['name']==job_name and j['conclusion']=='success' for j in js):raise ValueError('Primary forecast job was not successful')
+ publication_recovered=verified_publication_recovery(source,day,origin,r,js,ready)
+ if not any(j['name']==job_name and j['conclusion']=='success' for j in js) and not publication_recovered:raise ValueError('Primary forecast job was not successful')
  aa=source.call(SOURCE+'/actions/runs/'+origin+'/artifacts?per_page=100')['artifacts']
  checkpoint=next((a for a in aa if a['id']==ready['sourceArtifactId'] and a['name']=='primary-forecasts-'+day and not a.get('expired')),None)
  if not checkpoint:raise ValueError('Verified primary checkpoint unavailable')
+ if publication_recovered and checkpoint.get('digest')!='sha256:b33bae6c2e33ba03ac4850e1718366fa072c68abbb753433097704077e580bc6':raise ValueError('Publication recovery checkpoint digest mismatch')
  if recovered and (checkpoint['id']!=14085134532 or checkpoint.get('digest')!='sha256:d072bb01e7b5a06a2f56de6dd6f6fcf1372b77afb8de2632a0f48bc2b31e81fd'):raise ValueError('Recovery checkpoint digest mismatch')
  return {'targetDate':day,'controlRunId':control_id,'origin':ready,'checkpoint':{'runId':origin,'name':checkpoint['name'],'id':checkpoint['id'],'digest':checkpoint.get('digest')}}
 def protected(root):
@@ -136,3 +152,4 @@ def main():
   changed=publish(private,root,plan,manifest,proof,os.environ['GITHUB_SHA'])
   print('Primary CONTROL HTML '+('updated' if changed else 'already current')+'; frozen forecasts preserved.')
 if __name__=='__main__':main()
+

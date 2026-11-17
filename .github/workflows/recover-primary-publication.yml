@@ -1,0 +1,107 @@
+{
+  "name": "Recover saved primary publication",
+  "run-name": "Restore 17 November primary HTML from original forecasts",
+  "on": {
+    "push": {
+      "branches": [
+        "main"
+      ],
+      "paths": [
+        ".github/primary-publication-recovery.json"
+      ]
+    }
+  },
+  "permissions": {
+    "contents": "read",
+    "actions": "read"
+  },
+  "concurrency": {
+    "group": "primary-html-control",
+    "cancel-in-progress": false
+  },
+  "jobs": {
+    "repair": {
+      "name": "Restore and publish preserved primary checkpoint",
+      "if": "github.ref == 'refs/heads/main'",
+      "runs-on": "ubuntu-latest",
+      "timeout-minutes": 15,
+      "env": {
+        "GH_TOKEN": "${{ github.token }}",
+        "PRIVATE_REPORT_TOKEN": "${{ secrets.FATHERTAHMIN_WRITE_TOKEN || secrets.ADMIN_USER }}",
+        "OPENBLAS_NUM_THREADS": "1"
+      },
+      "steps": [
+        {
+          "uses": "actions/checkout@v4",
+          "with": {
+            "persist-credentials": false
+          }
+        },
+        {
+          "uses": "actions/setup-python@v5",
+          "with": {
+            "python-version": "3.11"
+          }
+        },
+        {
+          "name": "Verify publication retry and recovery boundaries",
+          "run": "python3 -m unittest discover -s tests -p test_primary_publication.py -v\npython3 -m unittest discover -s tests -p test_primary_control.py -v"
+        },
+        {
+          "name": "Verify exact saved forecast and CONTROL checkpoints",
+          "run": "python3 scripts/privacy/run_private.py <<'PRIVATE_COMMAND'\npython3 scripts/recover_primary_publication.py verify\nPRIVATE_COMMAND\n"
+        },
+        {
+          "uses": "./.github/actions/private-download",
+          "with": {
+            "name": "primary-forecasts-2026-11-17",
+            "run-id": "43960512102",
+            "github-token": "${{ github.token }}",
+            "path": "pipeline-output",
+            "key": "${{ secrets.PRIVATE_ARTIFACT_KEY }}"
+          }
+        },
+        {
+          "uses": "./.github/actions/private-download",
+          "with": {
+            "name": "football-control-public",
+            "run-id": "44120894257",
+            "github-token": "${{ github.token }}",
+            "path": "control-football",
+            "key": "${{ secrets.PRIVATE_ARTIFACT_KEY }}"
+          }
+        },
+        {
+          "uses": "./.github/actions/private-download",
+          "with": {
+            "name": "basketball-control-public",
+            "run-id": "44120894257",
+            "github-token": "${{ github.token }}",
+            "path": "control-basketball",
+            "key": "${{ secrets.PRIVATE_ARTIFACT_KEY }}"
+          }
+        },
+        {
+          "name": "Publish original forecasts and latest verified CONTROL results",
+          "run": "python3 scripts/privacy/run_private.py <<'PRIVATE_COMMAND'\npython3 -m pip install numpy==2.3.5\npython3 scripts/recover_primary_publication.py render\nPRIVATE_COMMAND\n"
+        },
+        {
+          "name": "Ensure private diagnostic directory",
+          "if": "always()",
+          "run": "mkdir -p \"$RUNNER_TEMP/tahmin-private-logs\""
+        },
+        {
+          "name": "Preserve encrypted recovery diagnostics",
+          "if": "always()",
+          "uses": "./.github/actions/private-upload",
+          "with": {
+            "name": "private-publication-recovery-${{ github.run_id }}",
+            "path": "${{ runner.temp }}/tahmin-private-logs",
+            "key": "${{ secrets.PRIVATE_ARTIFACT_KEY }}",
+            "retention-days": "7"
+          }
+        }
+      ]
+    }
+  }
+}
