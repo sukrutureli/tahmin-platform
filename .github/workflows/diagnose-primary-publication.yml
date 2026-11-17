@@ -1,0 +1,58 @@
+{
+  "name": "Inspect preserved primary publication failure",
+  "on": {
+    "push": {
+      "branches": [
+        "experiment/ensemble-market-validation"
+      ],
+      "paths": [
+        ".github/primary-publication-diagnostic.json"
+      ]
+    }
+  },
+  "permissions": {
+    "contents": "read",
+    "actions": "read"
+  },
+  "jobs": {
+    "diagnose": {
+      "runs-on": "ubuntu-latest",
+      "timeout-minutes": 10,
+      "steps": [
+        {
+          "uses": "actions/checkout@v4",
+          "with": {
+            "ref": "055e438324a31e91754ddaa9b137624026590206",
+            "persist-credentials": false
+          }
+        },
+        {
+          "uses": "actions/checkout@v4",
+          "with": {
+            "ref": "${{ github.sha }}",
+            "path": "repair-code",
+            "persist-credentials": false
+          }
+        },
+        {
+          "uses": "./.github/actions/private-download",
+          "with": {
+            "name": "private-logs-benchmark-43960512102",
+            "run-id": "43960512102",
+            "github-token": "${{ github.token }}",
+            "path": "diagnostic-input",
+            "key": "${{ secrets.PRIVATE_ARTIFACT_KEY }}"
+          }
+        },
+        {
+          "name": "Export bounded exception metadata privately",
+          "env": {
+            "GITHUB_TOKEN": "${{ github.token }}",
+            "PRIVATE_REPORT_TOKEN": "${{ secrets.FATHERTAHMIN_WRITE_TOKEN || secrets.ADMIN_USER }}"
+          },
+          "run": "python3 scripts/privacy/run_private.py <<'PRIVATE_COMMAND'\npython3 repair-code/scripts/diagnose_primary_publication.py\nPRIVATE_COMMAND\n"
+        }
+      ]
+    }
+  }
+}
