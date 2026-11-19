@@ -8,8 +8,8 @@ CODE='be2074e5905c6cc52e95985555ed9614010ca9ab'
 BRANCH='refs/heads/experiment/ensemble-market-validation'
 MODEL='35017ecf9f8992909e2f9090c8aff18c0e3c36d838312cb1202a3107c4cd61cb'
 ALLOWED={
- '2026-11-17':('44032629602',14305499023,'frozen-recovery-2026-11-17','ccde922fbd7b91566159fd1a2f084f71ce7fc6c7930d358f017c58e98333ebd2'),
- '2026-11-18':('44176213951',14370409693,'primary-forecasts-2026-11-18','4ce38dae00e36ed6dd4d7c196d52f2d9083b39a79cf6a772dda7ffeb68f1cb32')}
+ '2026-11-18':('44253706049',14405470827,'frozen-recovery-2026-11-18','d0f601227691ac9922d35fdbe5e554d6ed81891101e9848cdfe29d53e69a70dd'),
+ '2026-11-19':('44397932383',14472134578,'primary-forecasts-2026-11-19','277238829f993e4e9c75a9b930d60c628e03613d0a8249a7cf40ef33ce9c46fa')}
 
 JSON_REPORTS=['priced-complete-evaluation.json','priced-evaluation.json','daily-evaluation.json','context-evaluation.json','stability-evaluation.json','score-research-evaluation.json','competition-evaluation.json']
 HTML_REPORTS=['futbol-yeni.html','basketbol-yeni.html','day-by-day.html']
@@ -26,15 +26,15 @@ def source_spec(date,request):
  if date not in ALLOWED:raise ValueError('Unapproved recovery date')
  spec=ALLOWED[date];v=request['sources'][date]
  if (str(v['runId']),int(v['artifactId']),v['artifactName'],v['artifactSha256'])!=spec:raise ValueError('Recovery source changed')
- if request['codeRef']!=CODE or request['previousRunId']!='44032629602' or request['previousArtifactId']!=14305499023:raise ValueError('Recovery parent changed')
+ if request['codeRef']!=CODE or request['previousRunId']!='44253706049' or request['previousArtifactId']!=14405470827:raise ValueError('Recovery parent changed')
  return spec
 EXPECTED={
- '2026-11-17':('44656651b69ffdaa6b77223053cbeaacc4d94522','.github/workflows/recover-frozen-reports.yml','experiment/ensemble-market-validation','success','Settle frozen 2026-11-17'),
- '2026-11-18':('1e7cf73987d31585be376b9887ebec9d9b0db66e','.github/workflows/ensemble-market-validation.yml','main','failure','Primary forecast and immediate HTML')}
+ '2026-11-18':('0fe108b11d3171230bcbdb19f62c7ae34f8e2f36','.github/workflows/recover-frozen-reports.yml','experiment/ensemble-market-validation','success','Settle frozen 2026-11-18'),
+ '2026-11-19':('1e7cf73987d31585be376b9887ebec9d9b0db66e','.github/workflows/ensemble-market-validation.yml','main','failure','Primary forecast and immediate HTML')}
 def verify_source_jobs(date,jobs):
  primary=next(j for j in jobs if j['name']==EXPECTED[date][4])
  if primary['conclusion']!='success':raise ValueError('Frozen source job not successful')
- if date=='2026-11-18':
+ if date=='2026-11-19':
   research=next(j for j in jobs if j['name']=='Background research and outcome reports')
   if research['conclusion']!='failure' or [s['name'] for s in research.get('steps',[]) if s['conclusion']=='failure']!=['Discover and freeze two-condition history rules (shadow only)']:raise ValueError('Unexpected research failure')
 def verify(date,request):
@@ -47,16 +47,16 @@ def verify(date,request):
  arts=api('actions/runs/'+run+'/artifacts?per_page=100')['artifacts'];artifact=next(x for x in arts if x['id']==aid)
  if artifact['expired'] or artifact['name']!=name or artifact.get('digest')!='sha256:'+digest:raise ValueError('Frozen artifact provenance mismatch')
  parent=api('actions/runs/'+request['previousRunId'])
- if (parent['head_sha'],parent['path'],parent['head_branch'],parent['conclusion'])!=EXPECTED['2026-11-17'][:4] or parent['status']!='completed':raise ValueError('Unverified preceding journal run')
+ if (parent['head_sha'],parent['path'],parent['head_branch'],parent['conclusion'])!=EXPECTED['2026-11-18'][:4] or parent['status']!='completed':raise ValueError('Unverified preceding journal run')
  pa=api('actions/runs/'+request['previousRunId']+'/artifacts?per_page=100')['artifacts']
- if not any(x['id']==14305499023 and x['name']=='frozen-recovery-2026-11-17' and x.get('digest')=='sha256:ccde922fbd7b91566159fd1a2f084f71ce7fc6c7930d358f017c58e98333ebd2' and not x['expired'] for x in pa):raise ValueError('Preceding artifact mismatch')
+ if not any(x['id']==14405470827 and x['name']=='frozen-recovery-2026-11-18' and x.get('digest')=='sha256:d0f601227691ac9922d35fdbe5e554d6ed81891101e9848cdfe29d53e69a70dd' and not x['expired'] for x in pa):raise ValueError('Preceding artifact mismatch')
  previous_run=request['previousRunId'];previous_name=request['previousArtifact']
- if date=='2026-11-18':
-  previous_run=os.environ['GITHUB_RUN_ID'];previous_name='frozen-recovery-2026-11-17'
+ if date=='2026-11-19':
+  previous_run=os.environ['GITHUB_RUN_ID'];previous_name='frozen-recovery-2026-11-18'
   current=api('actions/runs/'+previous_run)
   if (current['head_sha'],current['path'],current['head_branch'])!=(os.environ['GITHUB_SHA'],'.github/workflows/recover-frozen-reports.yml',BRANCH.removeprefix('refs/heads/')):raise ValueError('Current recovery provenance mismatch')
   completed=api('actions/runs/'+previous_run+'/jobs?per_page=100')['jobs']
-  if not any(j['name']=='Settle frozen 2026-11-17' and j['conclusion']=='success' for j in completed):raise ValueError('Yesterday recovery is not complete')
+  if not any(j['name']=='Settle frozen 2026-11-18' and j['conclusion']=='success' for j in completed):raise ValueError('Yesterday recovery is not complete')
   recovered=api('actions/runs/'+previous_run+'/artifacts?per_page=100')['artifacts']
   if not any(a['name']==previous_name and not a['expired'] and re.fullmatch('sha256:[0-9a-f]{64}',a.get('digest','')) for a in recovered):raise ValueError('Missing authenticated yesterday checkpoint')
  with open(os.environ['GITHUB_OUTPUT'],'a') as out:out.write('source_run='+run+'\nsource_name='+name+'\nresume=false\nprevious_run='+previous_run+'\nprevious_name='+previous_name+'\n')
@@ -174,6 +174,7 @@ def main():
  elif a.mode=='settle':settle(a.root,a.previous,a.date)
  else:publish(a.root,a.date,req)
 if __name__=='__main__':main()
+
 
 
 

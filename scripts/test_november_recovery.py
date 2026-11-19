@@ -5,7 +5,7 @@ spec=importlib.util.spec_from_file_location('recovery',str(Path(__file__).with_n
 m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
 class RecoveryTests(unittest.TestCase):
  def request(self):
-  return {'codeRef':m.CODE,'previousRunId':'44032629602','previousArtifactId':14305499023,'previousArtifact':'frozen-recovery-2026-11-17','sources':{d:{'runId':v[0],'artifactId':v[1],'artifactName':v[2],'artifactSha256':v[3]} for d,v in m.ALLOWED.items()}}
+  return {'codeRef':m.CODE,'previousRunId':'44253706049','previousArtifactId':14405470827,'previousArtifact':'frozen-recovery-2026-11-18','sources':{d:{'runId':v[0],'artifactId':v[1],'artifactName':v[2],'artifactSha256':v[3]} for d,v in m.ALLOWED.items()}}
  def test_only_private_report_paths(self):
   for day in m.ALLOWED:
    m.validate_paths(['deney/reports/'+day+'/priced-complete-evaluation.json','deney/current/recovery-checkpoint-manifest.json'],day)
@@ -25,35 +25,36 @@ class RecoveryTests(unittest.TestCase):
    bad=copy.deepcopy(req);bad['previousArtifactId']+=1
    with self.assertRaises(ValueError):m.source_spec(day,bad)
  def research_failure_jobs(self):
-  return [{'name':m.EXPECTED['2026-11-18'][4],'conclusion':'success','steps':[]},{'name':'Background research and outcome reports','conclusion':'failure','steps':[{'name':'Discover and freeze two-condition history rules (shadow only)','conclusion':'failure'}]}]
+  return [{'name':m.EXPECTED['2026-11-19'][4],'conclusion':'success','steps':[]},{'name':'Background research and outcome reports','conclusion':'failure','steps':[{'name':'Discover and freeze two-condition history rules (shadow only)','conclusion':'failure'}]}]
  def test_primary_failure_or_unexpected_research_failure_rejected(self):
-  jobs=self.research_failure_jobs();m.verify_source_jobs('2026-11-18',jobs)
+  jobs=self.research_failure_jobs();m.verify_source_jobs('2026-11-19',jobs)
   bad=copy.deepcopy(jobs);bad[0]['conclusion']='failure'
-  with self.assertRaises(ValueError):m.verify_source_jobs('2026-11-18',bad)
+  with self.assertRaises(ValueError):m.verify_source_jobs('2026-11-19',bad)
   bad=copy.deepcopy(jobs);bad[1]['steps'][0]['name']='Other failure'
-  with self.assertRaises(ValueError):m.verify_source_jobs('2026-11-18',bad)
+  with self.assertRaises(ValueError):m.verify_source_jobs('2026-11-19',bad)
  def test_verified_download_outputs_are_separate_lines(self):
   req=self.request()
   for day,spec in m.ALLOWED.items():
    run,aid,name,digest=spec
    def fake(path):
     if path=='actions/runs/999':return {'head_sha':'current','path':'.github/workflows/recover-frozen-reports.yml','head_branch':'experiment/ensemble-market-validation'}
-    if path=='actions/runs/999/jobs?per_page=100':return {'jobs':[{'name':'Settle frozen 2026-11-17','conclusion':'success'}]}
-    if path=='actions/runs/999/artifacts?per_page=100':return {'artifacts':[{'name':'frozen-recovery-2026-11-17','expired':False,'digest':'sha256:'+'a'*64}]}
+    if path=='actions/runs/999/jobs?per_page=100':return {'jobs':[{'name':'Settle frozen 2026-11-18','conclusion':'success'}]}
+    if path=='actions/runs/999/artifacts?per_page=100':return {'artifacts':[{'name':'frozen-recovery-2026-11-18','expired':False,'digest':'sha256:'+'a'*64}]}
     if path.endswith('/jobs?per_page=100'):
      jobs=[{'name':m.EXPECTED[day][4],'conclusion':'success'}]
-     if day=='2026-11-18':jobs=self.research_failure_jobs()
+     if day=='2026-11-19':jobs=self.research_failure_jobs()
      return {'jobs':jobs}
     if path.endswith('/artifacts?per_page=100'):
-     v=m.ALLOWED['2026-11-17'] if '/44032629602/' in path else spec
+     v=m.ALLOWED['2026-11-18'] if '/44253706049/' in path else spec
      return {'artifacts':[{'id':v[1],'name':v[2],'digest':'sha256:'+v[3],'expired':False}]}
-    e=m.EXPECTED['2026-11-17'] if path.endswith('/44032629602') else m.EXPECTED[day]
+    e=m.EXPECTED['2026-11-18'] if path.endswith('/44253706049') else m.EXPECTED[day]
     return dict(zip(['head_sha','path','head_branch','conclusion'],e[:4]),status='completed',run_attempt=1)
    with tempfile.TemporaryDirectory() as td:
     output=Path(td)/'outputs'
     with patch.dict(os.environ,{'GITHUB_REF':m.BRANCH,'GITHUB_OUTPUT':str(output),'GITHUB_RUN_ID':'999','GITHUB_SHA':'current'}),patch.object(m,'api',side_effect=fake):m.verify(day,req)
-    self.assertEqual(output.read_text().splitlines(),['source_run='+run,'source_name='+name,'resume=false','previous_run='+('999' if day=='2026-11-18' else req['previousRunId']),'previous_name=frozen-recovery-2026-11-17'])
+    self.assertEqual(output.read_text().splitlines(),['source_run='+run,'source_name='+name,'resume=false','previous_run='+('999' if day=='2026-11-19' else req['previousRunId']),'previous_name=frozen-recovery-2026-11-18'])
 if __name__=='__main__':unittest.main()
+
 
 
 
