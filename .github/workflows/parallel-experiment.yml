@@ -1,7 +1,8 @@
 name: Parallel experimental reports
 on:
   workflow_run:
-    workflows: [Daily Prediction, Control]
+    # Control already refreshes canonical HTML via primary-control.yml.
+    workflows: [Daily Prediction]
     types: [completed]
     branches: [main]
   push:

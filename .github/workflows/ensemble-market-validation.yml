@@ -31,6 +31,10 @@ run-name: Ensemble ${{ inputs.mode || 'auto' }} ${{ inputs.target_date || 'setti
       production_run_id:
         description: Idempotent production run key
         type: string
+      run_research:
+        description: Explicitly opt into background research; unnecessary for primary HTML or Control
+        type: boolean
+        default: false
 permissions:
   contents: read
   actions: read
@@ -311,7 +315,7 @@ jobs:
       with:
         name: primary-forecasts-${{ steps.cfg.outputs.target_date }}
         path: pipeline-output/
-        retention-days: 30
+        retention-days: 7
         key: ${{ secrets.PRIVATE_ARTIFACT_KEY }}
     - name: Publish primary HTML immediately without waiting for research
       if: steps.cfg.outputs.run_mode != 'control'
@@ -350,6 +354,7 @@ jobs:
   research:
     name: Background research and outcome reports
     needs: primary
+    if: github.event_name == 'workflow_dispatch' && inputs.run_research == true
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
@@ -838,4 +843,3 @@ jobs:
         retention-days: '7'
 env:
   GITHUB_TOKEN: ${{ secrets.FATHERTAHMIN_READ_TOKEN || secrets.FATHERTAHMIN_WRITE_TOKEN || secrets.ADMIN_USER }}
-
