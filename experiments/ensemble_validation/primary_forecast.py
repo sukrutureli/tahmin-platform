@@ -17,6 +17,18 @@ def serving_dataset(current,target):
 
 def forecast(root,previous,target,enrich=True):
     root=Path(root);previous=Path(previous)
+    from user_rules import START_DATE, FILE as RULE_FILE, freeze as rule_freeze
+    # A new policy begins with a new day; existing frozen days keep their original policy.
+    if (root/RULE_FILE).exists():
+        rule_freeze(root,target)
+        return reports(root)
+    if target>=START_DATE and not (root/locked.SNAPSHOT).exists():
+        ledger,index=build_ledger(root,previous,target)
+        if enrich:
+            extra=bounded_enrichment(root,target,ledger,max_teams=8)
+            ledger,index=build_ledger(root,previous,target,extra['requests'],extra['identityBindings'])
+        rule_freeze(root,target,ledger,index)
+        return reports(root)
     config=locked.read(Path(locked.__file__).with_name('stability-settings.json'))
     if (root/locked.SNAPSHOT).exists():
         if locked.read(root/locked.SNAPSHOT)['targetDate']!=target:raise ValueError('Existing primary day mismatch')

@@ -10,6 +10,7 @@ from test_locked_stability import C
 from report import BASE
 from prepare import dump
 class PrimaryTests(unittest.TestCase):
+    @patch('user_rules.START_DATE','9999-12-31')
     def test_frozen_inference_has_no_research_fit_dependency(self):
         with tempfile.TemporaryDirectory() as td:
             root=Path(td)/'out';previous=Path(td)/'previous';root.mkdir();previous.mkdir()

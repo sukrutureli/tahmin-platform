@@ -1,5 +1,13 @@
 # tahmin-platform
 
+## Güncel günlük tercih yöntemi
+
+27 Kasım 2026'dan itibaren yeni günlük futbol/basketbol kayıtları kullanıcının
+aynı turnuvada en fazla 6 maç + genel rekabette en fazla 6 maç, %80/%20 ve son maç
+destek kontrolü kurallarıyla üretilir. Tahmini skor yerine açılır hesap detayı
+gösterilir; Control gerçek skoru günceller ve dondurulmuş tercihleri değiştirmez.
+Önceki günlerin sabit model kayıtları korunur. [Tam kurallar](docs/USER_HISTORY_RULES.md).
+
 Futbol, basketbol ve Nesine veri scraper'ini tek GitHub Actions orkestrasyonu altında toplamak için oluşturulan merkezi repo.
 
 ## Kaynaklar

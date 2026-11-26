@@ -8,8 +8,13 @@ from private_reports import Api,SOURCE,DEST
 
 def prepare(root,target):
     root=Path(root);manifest=json.loads((root/'new-report-manifest.json').read_text())
-    if manifest['targetDate']!=target or manifest['selectionPolicy']!='complete-market-price-v2':raise ValueError('Primary identity mismatch')
-    if manifest['modelSha256']!=hashlib.sha256((root/'stability-model.json').read_bytes()).hexdigest():raise ValueError('Model hash mismatch')
+    from user_rules import POLICY, MODEL, verify
+    new=manifest['selectionPolicy']==POLICY
+    if manifest['targetDate']!=target or manifest['selectionPolicy'] not in ('complete-market-price-v2',POLICY):raise ValueError('Primary identity mismatch')
+    if new:
+        book=verify(root)
+        if book['targetDate']!=target or book['snapshotSha256']!=manifest['pricedSnapshotSha256']:raise ValueError('Rules identity mismatch')
+    if manifest['modelSha256']!=hashlib.sha256((root/(MODEL if new else 'stability-model.json')).read_bytes()).hexdigest():raise ValueError('Model hash mismatch')
     files={}
     for sport in ('futbol','basketbol'):
         data=(root/(sport+'-yeni.html')).read_bytes()

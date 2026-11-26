@@ -47,7 +47,9 @@ def resolve(source,private,control_id,explicit=None):
  for name in ['football-control-public','basketball-control-public']:
   if not any(a['name']==name and not a.get('expired') for a in arts):raise ValueError('CONTROL result artifact unavailable')
  ready=file_json(private,'raporlar/'+day+'/primary-ready.json')
- if ready.get('targetDate')!=day or ready.get('policy')!='complete-market-price-v2' or ready.get('modelSha256')!=MODEL:raise ValueError('Primary forecast identity mismatch')
+ from user_rules import POLICY as RULE_POLICY, MODEL_HASH
+ expected_model=MODEL_HASH if ready.get('policy')==RULE_POLICY else MODEL
+ if ready.get('targetDate')!=day or ready.get('policy') not in ('complete-market-price-v2',RULE_POLICY) or ready.get('modelSha256')!=expected_model:raise ValueError('Primary forecast identity mismatch')
  origin=str(ready['sourceRunId']);r=source.call(SOURCE+'/actions/runs/'+origin)
  normal=r.get('head_branch')=='main' and r.get('path')=='.github/workflows/ensemble-market-validation.yml'
  recovered=(origin=='43528252854' and day=='2026-11-13' and r.get('head_branch')=='experiment/ensemble-market-validation'
@@ -65,7 +67,7 @@ def resolve(source,private,control_id,explicit=None):
  if recovered and (checkpoint['id']!=14085134532 or checkpoint.get('digest')!='sha256:d072bb01e7b5a06a2f56de6dd6f6fcf1372b77afb8de2632a0f48bc2b31e81fd'):raise ValueError('Recovery checkpoint digest mismatch')
  return {'targetDate':day,'controlRunId':control_id,'origin':ready,'checkpoint':{'runId':origin,'name':checkpoint['name'],'id':checkpoint['id'],'digest':checkpoint.get('digest')}}
 def protected(root):
- return {p.name:digest(p) for p in root.glob('*.json') if 'before-results' in p.name or p.name.startswith('primary-context-') or p.name in ['stability-model.json','input-manifest.json','rule-mining-dataset.json']}
+ return {p.name:digest(p) for p in root.glob('*.json') if 'before-results' in p.name or p.name.startswith('primary-context-') or p.name in ['user-rules-model.json','stability-model.json','input-manifest.json','rule-mining-dataset.json']}
 def results_file(root,folder,day):
  p=root/folder/'data'/('RealScores-'+day+'.json')
  if not p.is_file() or p.is_symlink():raise ValueError('Exact-dated CONTROL results missing')
@@ -89,10 +91,14 @@ def apply_results(rows,scores,day):
  return count
 def render(root,control_football,control_basketball,plan):
  day=plan['targetDate'];before=protected(root)
- if digest(root/'stability-model.json')!=plan['origin']['modelSha256']:raise ValueError('Frozen model mismatch')
- import locked_stability as locked
- config=read(Path(locked.__file__).with_name('stability-settings.json'))
- book=locked.verify_snapshot(root,config)
+ from user_rules import POLICY as RULE_POLICY, MODEL as RULE_MODEL, verify as rule_verify, settle as rule_settle
+ rule_mode=plan['origin'].get('policy')==RULE_POLICY
+ if digest(root/(RULE_MODEL if rule_mode else 'stability-model.json'))!=plan['origin']['modelSha256']:raise ValueError('Frozen model mismatch')
+ if rule_mode:book=rule_verify(root)
+ else:
+  import locked_stability as locked
+  config=read(Path(locked.__file__).with_name('stability-settings.json'))
+  book=locked.verify_snapshot(root,config)
  if book['targetDate']!=day:raise ValueError('Frozen day mismatch')
  counts={};input_hashes={}
  for sport,folder,source_root in [('football','futbol',control_football),('basketball','basketbol',control_basketball)]:
@@ -100,8 +106,9 @@ def render(root,control_football,control_basketball,plan):
   replay=root/(sport+'-replay.json');rows=read(replay)
   counts[sport]=apply_results(rows,read(path),day);write(replay,rows)
  from complete_prices import settle
- evaluation=settle(root)
+ evaluation=rule_settle(root) if rule_mode else settle(root)
  if evaluation['snapshotSha256']!=plan['origin']['pricedSnapshotSha256']:raise ValueError('Frozen selections changed')
+ if rule_mode:write(root/'control-provenance.json',{'completedAt':datetime.now(ZoneInfo('Europe/Istanbul')).isoformat(),'controlRunId':plan.get('controlRunId')})
  from new_reports import reports
  manifest=reports(root)
  if protected(root)!=before:raise ValueError('CONTROL modified frozen forecast/model inputs')

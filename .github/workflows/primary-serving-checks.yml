@@ -9,6 +9,10 @@ on:
       - experiments/ensemble_validation/primary_forecast.py
       - experiments/ensemble_validation/publish_primary.py
       - experiments/ensemble_validation/test_primary_forecast.py
+      - experiments/ensemble_validation/user_rules.py
+      - experiments/ensemble_validation/test_user_rules.py
+      - experiments/ensemble_validation/new_reports.py
+      - scripts/primary_control.py
       - .github/workflows/ensemble-market-validation.yml
       - .github/workflows/primary-serving-checks.yml
 permissions:
