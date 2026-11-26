@@ -181,6 +181,8 @@ class RulesTests(unittest.TestCase):
             counts=json.loads(html.unescape(re.search('data-choices="([^"]+)"',doc)[1]))
             self.assertEqual((counts['won'],counts['lost']),(1,1))
             self.assertEqual(doc.count('market-option chosen'),2)
+            self.assertIn('MS1: ✅ Tuttu<br>Alt: ❌ Yattı',doc)
+            self.assertIn('MS1 · %100.0<br>Alt · %100.0',doc)
             report=r.read(root/'user-rules-evaluation.json')['sports']['football'][0]
             self.assertEqual((report['count'],report['hits'],report['plannedCount']),(2,1,1))
             script='\n'.join(re.findall(r'<script>(.*?)</script>',doc,re.S))

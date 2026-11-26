@@ -315,8 +315,8 @@ def detail_html(entry, sport):
     decision = ''.join(f'<div><b>{esc(label(sport, v["market"], v["option"]))}</b>: {pct(v["confidence"])} · son maç desteği <b>{v["supportHits"]}/{v["supportCount"]}</b></div>' for v in top)
     if d.get('skippedMarkets'):decision='<small>Kararsız pazarlar atlandı: '+esc(', '.join(d['skippedMarkets']))+'</small>'+decision
     scopes = ' · '.join(f'{"Ev" if side == "home" else "Dep"}: {scope}, {d["teamCounts"][side]} maç' for side, scope in d['teamScopes'].items())
-    choice = ' + '.join(label(sport,c['market'],c['option'])+' · '+pct(c['confidence']) for c in entry.get('choices',[])) or 'Tahmin yok'
+    choice = '<br>'.join(esc(label(sport,c['market'],c['option'])+' · '+pct(c['confidence'])) for c in entry.get('choices',[])) or 'Tahmin yok'
     return '<details class="calculation-detail"><summary>Hesap detayı <span aria-hidden="true">＋</span></summary><ol>'+\
            '<li><strong>Takım geçmişi</strong><small>'+esc(scopes)+'</small>'+''.join(lines)+'</li>'+\
            '<li><strong>Rekabet ve birleşik yüzdeler</strong>'+''.join(hlines)+'<small>Satırdaki yüzdeler: takım katkısı + rekabet katkısı.</small></li>'+\
-           '<li><strong>İlk iki aday ve son maç kontrolü</strong>'+decision+'<small>'+esc(d['reason'])+'</small><div class="calculation-choice">Seçim: '+esc(choice)+'</div></li></ol></details>'
+           '<li><strong>İlk iki aday ve son maç kontrolü</strong>'+decision+'<small>'+esc(d['reason'])+'</small><div class="calculation-choice">Seçim:<br>'+choice+'</div></li></ol></details>'

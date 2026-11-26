@@ -109,7 +109,7 @@ def render_reports(root,book,target,source,preview,model,model_hash,config,paylo
                 if y is not None:finished-=1;hits-=int(y==i)
                 finished+=result_counts['won']+result_counts['lost'];hits+=result_counts['won']
                 if len(choices)>1:
-                    status=' · '.join(('KG '+GROUPS[sport][v['market']][v['option']] if v['market']=='BTTS' else GROUPS[sport][v['market']][v['option']])+': '+('✅ Tuttu' if yy==v['option'] else '❌ Yattı' if yy is not None else 'İade / doğrulanmadı' if actual else 'Bekleniyor') for v,yy in zip(choices,ys))
+                    status='\n'.join(('KG '+GROUPS[sport][v['market']][v['option']] if v['market']=='BTTS' else GROUPS[sport][v['market']][v['option']])+': '+('✅ Tuttu' if yy==v['option'] else '❌ Yattı' if yy is not None else 'İade / doğrulanmadı' if actual else 'Bekleniyor') for v,yy in zip(choices,ys))
                 extra_attrs=' data-choices="'+html.escape(json.dumps(result_counts),quote=True)+'" data-picks="'+html.escape(json.dumps([('KG '+GROUPS[sport][v['market']][v['option']]) if v['market']=='BTTS' else GROUPS[sport][v['market']][v['option']] for v in choices]),quote=True)+'"'
             cutoff=position+1 if not late and c else 0
             vals=[e.get('time') or '—',title,name,label,'-'.join(str(int(x)) for x in score) if score else '—',f'%{100*p:.1f}' if c else '—','—','-'.join(str(int(x)) for x in actual) if actual else '—',status,'Geç kayıt' if late else 'Maç öncesi','']
@@ -123,7 +123,7 @@ def render_reports(root,book,target,source,preview,model,model_hash,config,paylo
                 choices=''.join('<li><b>'+html.escape('-'.join(map(str,x['score'])))+'</b> · %'+format(100*x['probability'],'.1f')+'</li>' for x in detail['topScores'])
                 score_detail='<details class="score-detail"><summary>'+html.escape(str(vals[4]))+' ▾</summary><ul>'+choices+'</ul></details>'
             if rule_mode:score_detail=detail_html(e,sport)
-            cells=''.join('<td data-label="'+html.escape(h)+'">'+(str(v) if j==2 else market_grid if j==3 else score_detail if j==4 and score_detail else html.escape(str(v)))+'</td>' for j,(h,v) in enumerate(zip(heads,vals)))
+            cells=''.join('<td data-label="'+html.escape(h)+'">'+(str(v) if j==2 else market_grid if j==3 else score_detail if j==4 and score_detail else html.escape(str(v)).replace('\n','<br>') if rule_mode and j==8 else html.escape(str(v)))+'</td>' for j,(h,v) in enumerate(zip(heads,vals)))
             try:kickoff=datetime.fromisoformat(target+'T'+e['time']).replace(tzinfo=ZoneInfo('Europe/Istanbul')).isoformat()
             except (ValueError,TypeError,KeyError):kickoff=''
             rows.append(f'<tr class="{tier}"{extra_attrs} data-search="{html.escape(e["name"],quote=True)}" data-event-id="{html.escape(str(e["eventId"]))}" data-outcome="{outcome}" data-finished="{1 if actual is not None else 0}" data-kickoff="{kickoff}" data-rank="{cutoff}" data-eligible="{len(eligible)}" data-confidence="{p}" data-odds="{min(v["price"] for v in e["choices"]) if rule_mode and e.get("choices") else c["price"] if c else 0}" data-mbs="{html.escape(mbs if mbs != "—" else "")}" data-pick="{html.escape(pick_filter,quote=True)}" data-time="{html.escape(e.get("time") or "99:99")}">{cells}</tr>')
