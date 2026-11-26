@@ -14,7 +14,7 @@
 
 - Tahmini skor ve olası skorlar kaldırılır. Gerçek skor Control sonrasında görünür.
 - Seçilen tercihin yüzdesi güven sıralamasını ve %25/%50/%75 dilimlerini belirler. İkinci aday seçilmişse birincinin yüzdesi kullanılmaz.
-- Tam eşitlikte çift tercih ayrı ayrı vurgulanır ve sonuçlandırılır; birleşik kupon olasılığı uydurulmaz. Filtre özeti maç sayısını ve sonuçlanan tercih sayısını ayrı gösterir. Tercih filtresi çift tercihin herhangi biriyle eşleşir; minimum oran filtresinde çiftin düşük oranı esas alınır.
+- Tam eşitlikte çift tercih ayrı ayrı vurgulanır ve sonuçlandırılır; birleşik kupon olasılığı uydurulmaz. Filtre özeti maç bazındadır: Tuttu (bütün tercihler tuttu), Kısmi tuttu (biri tuttu biri yattı), Yattı (bütün tercihler yattı), Bekliyor. Ana isabet = Tuttu / (Tuttu + Kısmi tuttu + Yattı). Bekleyen, iade/doğrulanmamış ve tahmin verilmeyen maçlar paydaya girmez. Tercih filtresi çift tercihin herhangi biriyle eşleşir; minimum oran filtresinde çiftin düşük oranı esas alınır.
 - Hesap detayı, maç kartı genişliğinde açılır. Takım pay/payda × ağırlık, rekabet pay/payda × ağırlık, toplam yüzde ve ilk iki adayın son maç desteği numaralı gösterilir. Tek tek geçmiş maç listesi gösterilmez.
 - Yeni `user-rules-before-results.json` bir kere yazılır. Control yalnız sonuçları yeniler; snapshot, geçmiş ve yapılandırma SHA-256 değerleri doğrulanır. Yeni değerlendirmeler eski modelin kohortlarıyla karıştırılmaz. Yüzdeler geçmiş sıklıklarıdır, kalibre edilmiş başarı garantisi değildir.
 

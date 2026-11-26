@@ -18,6 +18,31 @@ FILTER_SCRIPT="<script>\n(()=>{const input=document.getElementById('min-odds'),s
 def read(path):return json.loads(path.read_text())
 def sha(path):return hashlib.sha256(path.read_bytes()).hexdigest()
 
+def match_outcome(counts):
+    if counts.get('no-choice'):return 'no-choice'
+    if counts.get('pending'):return 'pending'
+    if counts.get('unverified'):return 'unverified'
+    if counts.get('won') and counts.get('lost'):return 'partial'
+    return 'won' if counts.get('won') else 'lost'
+
+def match_summary(counts,total):
+    settled=counts['won']+counts['partial']+counts['lost']
+    percent=f'%{100*counts["won"]/settled:.1f}' if settled else '—'
+    return f'Filtrelenen: {total} maç · {settled} sonuçlandı · {counts["won"]} tuttu · {counts["partial"]} kısmi tuttu · {counts["lost"]} yattı · {counts["pending"]} bekliyor · {counts["unverified"]} iade / doğrulanmadı · {counts["no-choice"]} tahmin yok · İsabet (maç) {percent}'
+
+MATCH_SUMMARY_SCRIPT='''function updateSummary(visibleRows){
+ const summary=document.getElementById('filtered-summary');if(!summary)return;
+ const counts={won:0,partial:0,lost:0,pending:0,unverified:0,'no-choice':0};
+ for(const row of visibleRows){const state=row.dataset.matchOutcome||'pending';counts[state]++;}
+ const settled=counts.won+counts.partial+counts.lost;
+ const parts=[visibleRows.length+' maç',settled+' sonuçlandı',counts.won+' tuttu',counts.partial+' kısmi tuttu',counts.lost+' yattı',counts.pending+' bekliyor'];
+ if(counts.unverified)parts.push(counts.unverified+' iade / doğrulanmadı');
+ if(counts['no-choice'])parts.push(counts['no-choice']+' tahmin yok');
+ parts.push('İsabet (maç) '+(settled?('%'+(100*counts.won/settled).toLocaleString('tr-TR',{maximumFractionDigits:1})):'—'));
+ summary.textContent='Filtrelenen: '+parts.join(' · ');
+}
+'''
+
 def reports(root):
     root=Path(root)
     from user_rules import FILE as RULE_FILE, MODEL as RULE_MODEL, POLICY as RULE_POLICY, verify as rule_verify, settle as rule_settle, detail_html
@@ -64,6 +89,7 @@ def render_reports(root,book,target,source,preview,model,model_hash,config,paylo
         eligible=[x for x in es if x[2] and x[0].get('prospectiveBeforeKickoff',False)]
         positions={str(x[0]['eventId']):i for i,x in enumerate(eligible)}
         rows=[];hits=finished=0
+        match_counts={k:0 for k in ('won','partial','lost','pending','unverified','no-choice')}
         for rank,(e,row,c,score,line) in enumerate(es):
             p=c['confidence'] if c else 0;m=c['market'] if c else None;i=c['option'] if c else None
             base_label=GROUPS[sport][m][i] if c else ''
@@ -105,12 +131,14 @@ def render_reports(root,book,target,source,preview,model,model_hash,config,paylo
                                'pending':sum(y is None and actual is None for y in ys),
                                'unverified':sum(y is None and actual is not None for y in ys),
                                'no-choice':int(not choices)}
+                match_state=match_outcome(result_counts);match_counts[match_state]+=1
                 # Legacy summary counted one row; new policy counts each displayed selection.
                 if y is not None:finished-=1;hits-=int(y==i)
                 finished+=result_counts['won']+result_counts['lost'];hits+=result_counts['won']
                 if len(choices)>1:
                     status='\n'.join(('KG '+GROUPS[sport][v['market']][v['option']] if v['market']=='BTTS' else GROUPS[sport][v['market']][v['option']])+': '+('✅ Tuttu' if yy==v['option'] else '❌ Yattı' if yy is not None else 'İade / doğrulanmadı' if actual else 'Bekleniyor') for v,yy in zip(choices,ys))
                 extra_attrs=' data-choices="'+html.escape(json.dumps(result_counts),quote=True)+'" data-picks="'+html.escape(json.dumps([('KG '+GROUPS[sport][v['market']][v['option']]) if v['market']=='BTTS' else GROUPS[sport][v['market']][v['option']] for v in choices]),quote=True)+'"'
+                extra_attrs+=' data-match-outcome="'+match_state+'"'
             cutoff=position+1 if not late and c else 0
             vals=[e.get('time') or '—',title,name,label,'-'.join(str(int(x)) for x in score) if score else '—',f'%{100*p:.1f}' if c else '—','—','-'.join(str(int(x)) for x in actual) if actual else '—',status,'Geç kayıt' if late else 'Maç öncesi','']
             heads=['Saat','Spor','Maç','Tek tercih','Skor tahmini','Güven','Tam skor olasılığı','Gerçek skor','Sonuç','Kayıt','']
@@ -132,6 +160,7 @@ def render_reports(root,book,target,source,preview,model,model_hash,config,paylo
         updated=provenance.get('completedAt') or book.get('createdAt','')
         body=f'<h1>{title} · {target}</h1><p>{html.escape(state)} Tüm oranları geçerli pazarlardan en yüksek güvenli tercih ve uyumlu skor.</p><p id="filtered-summary" class="filtered-summary" role="status" aria-live="polite">Filtrelenen: {len(es)} maç · {finished} sonuçlandı · {hits} tuttu · {finished-hits} yattı</p><p>Son kontrol: {html.escape(updated)}</p>'
         if rule_mode:body=body.replace('Tüm oranları geçerli pazarlardan en yüksek güvenli tercih ve uyumlu skor.','Sıralama ve dilimler seçilen tercihin yüzdesine göredir.')
+        if rule_mode:body=body.replace(f'Filtrelenen: {len(es)} maç · {finished} sonuçlandı · {hits} tuttu · {finished-hits} yattı',match_summary(match_counts,len(es)))
         body+='<nav><button id="sort-time" type="button" aria-pressed="false">Saate göre</button><button id="sort-confidence" type="button" aria-pressed="true">Güvene göre ↓</button><span id="sort-status">Güven: yüksekten düşüğe</span></nav>'
         body+='<div class="odds-filter"><label for="match-search">Maç ara</label><input id="match-search" type="search" placeholder="Takım veya maç adı" autocomplete="off"><label for="min-odds">En düşük oran</label><input id="min-odds" type="number" inputmode="decimal" min="1" step="0.05" placeholder="Örn. 1.50"><label for="mbs-filter">MBS</label><select id="mbs-filter"><option value="">Tümü</option><option value="1">1</option><option value="2">2</option><option value="3">3</option></select><label for="pick-filter">Tercih</label><select id="pick-filter"><option value="">Tümü</option></select><label class="check-filter"><input id="hide-finished" type="checkbox"> Sonuçlananları gizle</label><label class="check-filter" title="İstanbul saatine ve planlanan başlangıca göre"><input id="hide-started" type="checkbox"> Başlamışları gizle</label><button id="clear-odds" type="button">Filtreleri temizle</button><span id="filter-count" aria-live="polite"></span></div>'
         if target>='2026-10-28':
@@ -154,8 +183,8 @@ def render_reports(root,book,target,source,preview,model,model_hash,config,paylo
             css+='.match-list td:nth-child(5){grid-column:1/-1!important;font-size:13px;font-weight:400}.match-list td:nth-child(5):before{display:none}.calculation-detail{margin:4px 0 0;padding:0;border:1px solid #c8d9e2;background:#f7fafc;border-radius:10px;width:100%;box-sizing:border-box}.calculation-detail summary{display:flex;justify-content:space-between;align-items:center;padding:12px;font-size:13px;min-height:24px}.calculation-detail[open] summary{border-bottom:1px solid #dce5ec}.calculation-detail ol{padding:0 12px 0 32px;margin:12px 0}.calculation-detail li{padding:0 0 12px 4px;font:400 12px/1.8 system-ui;overflow-wrap:anywhere}.calculation-detail strong,.calculation-detail small{display:block}.calculation-detail strong{font-size:13px;margin-bottom:5px}.calculation-detail small{color:#586e80;line-height:1.5;margin:5px 0}.calculation-choice{margin-top:8px;padding:7px 9px;border-radius:6px;background:#d4f2e5;font-weight:700;color:#005b4b}'
         filter_script=FILTER_SCRIPT if target>='2026-10-28' else LEGACY_FILTER_SCRIPT
         if rule_mode:
-            filter_script=filter_script.replace('let outcome=row.dataset.outcome;', 'if(row.dataset.choices){const c=JSON.parse(row.dataset.choices);for(const k of Object.keys(counts))counts[k]+=c[k]||0;continue;}let outcome=row.dataset.outcome;')
-            filter_script=filter_script.replace("settled+' sonuçlandı'", "settled+' tercih sonuçlandı'")
+            start=filter_script.index('function updateSummary(');end=filter_script.index('function normalize(',start)
+            filter_script=filter_script[:start]+MATCH_SUMMARY_SCRIPT+filter_script[end:]
             filter_script=filter_script.replace("rows.map(row=>row.dataset.pick)", "rows.flatMap(row=>JSON.parse(row.dataset.picks||'[]'))")
             filter_script=filter_script.replace("!pickValues.includes(row.dataset.pick)", "!JSON.parse(row.dataset.picks||'[]').some(p=>pickValues.includes(p))")
         doc='<!doctype html><html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'+title+' · '+target+'</title><style>'+css+'</style></head><body><main>'+body+'</main>'+SCRIPT+filter_script+'</body></html>'

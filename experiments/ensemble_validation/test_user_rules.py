@@ -183,11 +183,25 @@ class RulesTests(unittest.TestCase):
             self.assertEqual(doc.count('market-option chosen'),2)
             self.assertIn('MS1: ✅ Tuttu<br>Alt: ❌ Yattı',doc)
             self.assertIn('MS1 · %100.0<br>Alt · %100.0',doc)
+            self.assertIn('data-match-outcome="partial"',doc)
+            self.assertIn('1 kısmi tuttu',doc)
+            self.assertIn('İsabet (maç) %0.0',doc)
             report=r.read(root/'user-rules-evaluation.json')['sports']['football'][0]
             self.assertEqual((report['count'],report['hits'],report['plannedCount']),(2,1,1))
             script='\n'.join(re.findall(r'<script>(.*?)</script>',doc,re.S))
             checked=subprocess.run(['node','-e','new Function(require("fs").readFileSync(0,"utf8"))'],input=script,text=True,capture_output=True)
             self.assertEqual(checked.returncode,0,checked.stderr)
+
+    def test_match_summary_categories_do_not_double_count_selections(self):
+        from new_reports import match_outcome,match_summary,MATCH_SUMMARY_SCRIPT
+        import subprocess
+        for counts,expected in [({'won':2},'won'),({'won':1,'lost':1},'partial'),({'lost':2},'lost'),
+                                 ({'won':1,'pending':1},'pending'),({'lost':1,'unverified':1},'unverified'),({'no-choice':1},'no-choice')]:
+            self.assertEqual(match_outcome(counts),expected)
+        script="const summary={textContent:''};const document={getElementById:()=>summary};"+MATCH_SUMMARY_SCRIPT+"updateSummary(['won','partial','lost','pending'].map(matchOutcome=>({dataset:{matchOutcome}})));console.log(summary.textContent);"
+        value=subprocess.run(['node','-e',script],text=True,capture_output=True,check=True).stdout
+        self.assertIn('4 maç · 3 sonuçlandı · 1 tuttu · 1 kısmi tuttu · 1 yattı · 1 bekliyor',value)
+        self.assertIn('%33,3',value)
 
 
 if __name__=='__main__':unittest.main()
