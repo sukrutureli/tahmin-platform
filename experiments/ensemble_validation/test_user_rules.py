@@ -222,6 +222,8 @@ class RulesTests(unittest.TestCase):
             counts=json.loads(html.unescape(re.search('data-choices="([^"]+)"',doc)[1]))
             self.assertEqual((counts['won'],counts['lost']),(1,1))
             self.assertEqual(doc.count('market-option chosen'),2)
+            self.assertIn('MS1: <b>1.50</b></span>',doc)
+            self.assertIn('2.5 Alt: <b>1.80</b></span>',doc)
             self.assertIn('MS1: ✅ Tuttu<br>Alt: ❌ Yattı',doc)
             self.assertIn('MS1 · %100.00<br>Alt · %100.00',doc)
             self.assertIn('data-match-outcome="partial"',doc)

@@ -101,6 +101,15 @@ def render_reports(root,book,target,source,preview,model,model_hash,config,paylo
             price,mbs=display_values(dict(row,sport=sport),m,i)
             if c:price=f"{c['price']:.2f}"
             name=html.escape(e['name'])+f'<span class="bet-meta">Oran <b>{price}</b> · MBS <b>{mbs}</b></span>'
+            if rule_mode and len(e.get('choices',[]))>1:
+                named_prices=[]
+                for choice in e['choices']:
+                    caption=GROUPS[sport][choice['market']][choice['option']]
+                    if choice['market']=='MS' and caption=='MSX':caption='MS0'
+                    if choice['market']=='BTTS':caption='KG '+caption
+                    if choice['market']=='OU':caption=f'{line:g} '+caption
+                    named_prices.append('<span class="choice-price" style="display:block">'+html.escape(caption)+': <b>'+format(choice['price'],'.2f')+'</b></span>')
+                name=html.escape(e['name'])+'<span class="bet-meta">'+''.join(named_prices)+f'MBS <b>{mbs}</b></span>'
             actual=parse_score({'scoreline':row.get('realScore')});y=result(row,sport,m) if c else None
             status=(('✅ Kazandı' if y==i else '❌ Kaybetti') if y is not None else ('İade / doğrulanmadı' if actual else 'Bekleniyor')) if c else 'Tercih yok'
             outcome='no-choice' if not c else 'won' if y==i else 'lost' if y is not None else 'unverified' if actual is not None else 'pending'
@@ -192,6 +201,9 @@ def render_reports(root,book,target,source,preview,model,model_hash,config,paylo
             filter_script=filter_script.replace("rows.map(row=>row.dataset.pick)", "rows.flatMap(row=>JSON.parse(row.dataset.picks||'[]'))")
             filter_script=filter_script.replace("!pickValues.includes(row.dataset.pick)", "!JSON.parse(row.dataset.picks||'[]').some(p=>pickValues.includes(p))")
         doc='<!doctype html><html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'+title+' · '+target+'</title><style>'+css+'</style></head><body><main>'+body+'</main>'+SCRIPT+filter_script+'</body></html>'
+        if rule_mode:
+            from selection_filter import upgrade_rule_html
+            doc=upgrade_rule_html(doc)
         name=folder+'-yeni.html';(root/name).write_text(doc)
         summary[folder]={'file':name,'sha256':sha(root/name),'fixtureCount':len(es),'settledChoiceCount':finished,'hits':hits}
     for name,digest in before.items():
