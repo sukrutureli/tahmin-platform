@@ -30,6 +30,17 @@ def example():
 
 
 class RulesTests(unittest.TestCase):
+    def test_percentile_boundaries_include_whole_tied_group(self):
+        es=[{'eventId':str(i),'chosen':{'confidence':p}} for i,p in enumerate([.9,.8,.8,.7,.7,.7,.6])]
+        self.assertEqual(len(r.tied_prefix(es,.25)),3)
+        self.assertEqual(len(r.tied_prefix(es,.5)),6)
+        self.assertEqual(len(r.tied_prefix(es,1)),7)
+        self.assertEqual(r.tied_positions(es),{'0':0,'1':1,'2':1,'3':3,'4':3,'5':3,'6':6})
+        self.assertEqual(r.tied_prefix([], .5),[])
+        # Equality is not inferred from the one-decimal display percentage.
+        close=[{'eventId':'a','chosen':{'confidence':.70004}},{'eventId':'b','chosen':{'confidence':.7}}]
+        self.assertEqual(len(r.tied_prefix(close,.5)),1)
+        self.assertEqual(len(r.tied_prefix([{'eventId':str(i),'chosen':{'confidence':.625}} for i in range(5)],.25)),5)
     def test_screenshot_fractions_and_contrarian_selection(self):
         e=r.calculate(row(),'football',example(),IDENT)
         self.assertEqual(e['markets']['MS'],[.25,.5,.25])

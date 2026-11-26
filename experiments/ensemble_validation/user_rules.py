@@ -264,6 +264,24 @@ def freeze(root, target, ledger=None, index=None, now=None):
     return book
 
 
+def tied_prefix(ranked, fraction):
+    """Include every match equal to the nominal percentile boundary (no fake decimals)."""
+    if not ranked:return []
+    limit=math.ceil(len(ranked)*fraction)
+    if limit<=0:return []
+    threshold=ranked[min(limit,len(ranked))-1]['chosen']['confidence']
+    return [e for e in ranked if e['chosen']['confidence']>threshold or math.isclose(e['chosen']['confidence'],threshold,rel_tol=0,abs_tol=1e-12)]
+
+
+def tied_positions(ranked):
+    positions={};anchor=None;start=0
+    for i,e in enumerate(ranked):
+        p=e['chosen']['confidence']
+        if anchor is None or not math.isclose(p,anchor,rel_tol=0,abs_tol=1e-12):anchor=p;start=i
+        positions[str(e['eventId'])]=start
+    return positions
+
+
 def settle(root):
     """Results only: never refreeze; no score forecasts or model-dependent metrics."""
     book = verify(root); blocks = {}
@@ -273,7 +291,7 @@ def settle(root):
         for before in (True, False):
             ranked = sorted([e for e in systems['experiment'] if e['chosen'] and (not before or e['prospectiveBeforeKickoff'])], key=lambda e: (-e['chosen']['confidence'], str(e['eventId'])))
             for fraction in (.25, .5, .75, 1.):
-                group = ranked[:math.ceil(len(ranked) * fraction)]; samples = []; pending = push = missing = 0
+                group = tied_prefix(ranked,fraction); samples = []; pending = push = missing = 0
                 for e in group:
                     r = rows.get(str(e['eventId']))
                     if r is None: missing += 1; continue

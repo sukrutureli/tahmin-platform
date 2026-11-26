@@ -88,6 +88,9 @@ def render_reports(root,book,target,source,preview,model,model_hash,config,paylo
         es.sort(key=lambda x:(-(x[2]['confidence'] if x[2] else -1),str(x[0]['eventId'])))
         eligible=[x for x in es if x[2] and x[0].get('prospectiveBeforeKickoff',False)]
         positions={str(x[0]['eventId']):i for i,x in enumerate(eligible)}
+        if rule_mode:
+            from user_rules import tied_positions
+            positions=tied_positions([x[0] for x in eligible])
         rows=[];hits=finished=0
         match_counts={k:0 for k in ('won','partial','lost','pending','unverified','no-choice')}
         for rank,(e,row,c,score,line) in enumerate(es):
@@ -168,6 +171,7 @@ def render_reports(root,book,target,source,preview,model,model_hash,config,paylo
             new_controls='<fieldset id="mbs-filter" class="multi-filter"><legend>MBS</legend>'+''.join('<label><input type="checkbox" value="'+v+'">'+v+'</label>' for v in ('1','2','3'))+'</fieldset><fieldset id="pick-filter" class="multi-filter"><legend>Tercih</legend></fieldset><small class="filter-help">Birden fazla seçebilirsin. Seçim yoksa tümü gösterilir.</small>'
             body=body.replace(old_controls,new_controls)
         body+='<fieldset class="rank-filter"><legend>Güven sırası</legend>'+''.join('<label><input type="radio" name="rank-filter" value="'+v+'"'+(' checked' if v=='1' else '')+'> '+label+'</label>' for v,label in [('0.25','İlk %25'),('0.5','İlk %50'),('0.75','İlk %75'),('1','Tümü')])+'</fieldset>'
+        if rule_mode:body+='<small class="filter-help">Dilim sınırındaki yüzdeye eşit bütün maçlar dahildir; maç sayısı belirtilen yüzdeyi aşabilir.</small>'
         body+='<div class="legend"><span class="tier-25">İlk %25</span><span class="tier-50">Sonraki %25</span><span class="tier-75">Üçüncü %25</span><span>Son %25</span></div>'
         body+=f'<section id="{sport}"><table class="match-table"><tbody class="match-list" id="matches-{sport}">'+''.join(rows)+'</tbody></table></section>'
         body+='<details><summary>Bilgi</summary><p>Güven, model olasılığıdır; gerçekleşmiş isabet garantisi değildir. Oranlar ilk kayıttandır, canlı değildir. Eksik oran/MBS “—” gösterilir. Sonuçlar yalnız tamamlanmış HTTP kayıtlarından gelir; canlı/eksik sonuçlar başarı paydasına girmez. Renkler güven sırasını gösterir. Kontrol tahminleri ve modeli değiştirmez.</p></details>'
