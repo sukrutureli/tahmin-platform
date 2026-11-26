@@ -8,9 +8,9 @@ from private_reports import Api,SOURCE,DEST
 
 def prepare(root,target):
     root=Path(root);manifest=json.loads((root/'new-report-manifest.json').read_text())
-    from user_rules import POLICY, MODEL, verify
-    new=manifest['selectionPolicy']==POLICY
-    if manifest['targetDate']!=target or manifest['selectionPolicy'] not in ('complete-market-price-v2',POLICY):raise ValueError('Primary identity mismatch')
+    from user_rules import POLICIES, MODEL, verify
+    new=manifest['selectionPolicy'] in POLICIES
+    if manifest['targetDate']!=target or manifest['selectionPolicy'] not in ('complete-market-price-v2',*POLICIES):raise ValueError('Primary identity mismatch')
     if new:
         book=verify(root)
         if book['targetDate']!=target or book['snapshotSha256']!=manifest['pricedSnapshotSha256']:raise ValueError('Rules identity mismatch')

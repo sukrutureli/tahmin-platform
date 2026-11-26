@@ -12,12 +12,13 @@ from report import GROUPS, result
 from priced_choices import read, write, signature, digest
 from live_history import parse_date
 
-POLICY = 'competition-six-80-20-v1'
+LEGACY_POLICY = 'competition-six-80-20-v1'
+POLICY = 'competition-six-80-20-recency10-v2'
 START_DATE = '2026-11-27'
 FILE = 'user-rules-before-results.json'
 MODEL = 'user-rules-model.json'
 RULES = {
-    'policy': POLICY, 'historyLimit': 6, 'teamWeight': .8, 'h2hWeight': .2,
+    'policy': LEGACY_POLICY, 'historyLimit': 6, 'teamWeight': .8, 'h2hWeight': .2,
     'teamScope': 'same tournament if any, otherwise general; each team separately',
     'h2hScope': 'general, newest six, oriented to current home team',
     'cutoff': 'finished matches strictly before fixture Istanbul date; same-day history excluded if exact kickoff unknown',
@@ -29,8 +30,13 @@ RULES = {
     'odds': 'complete valid market (>1 finite), same safety rule as complete-market-price-v2',
     'scorePrediction': False,
 }
+LEGACY_MODEL_TEXT = json.dumps(RULES, ensure_ascii=False, indent=2, allow_nan=False) + '\n'
+RULES = dict(RULES,policy=POLICY,teamPlainWeight=.9,teamRecencyWeight=.1,
+             recency='Newest to oldest n..1 within each team, maximum six. Normalize within side, then pool by valid observation count; pushes have no vote.')
 MODEL_TEXT = json.dumps(RULES, ensure_ascii=False, indent=2, allow_nan=False) + '\n'
 MODEL_HASH = hashlib.sha256(MODEL_TEXT.encode()).hexdigest()
+POLICY_HASHES = {LEGACY_POLICY:hashlib.sha256(LEGACY_MODEL_TEXT.encode()).hexdigest(),POLICY:MODEL_HASH}
+POLICIES = tuple(POLICY_HASHES)
 
 
 def label(sport, market, option):
@@ -187,12 +193,19 @@ def calculate(row, sport, matches, identity):
         for i, key in enumerate(keys):
             numerator = sum(c[i] for c in counts); n = sum(denominators)
             hcount = sum(y == i for y in hy)
-            team_part = numerator / n * weight
+            recent_nums=[sum((len(ys)-j) for j,y in enumerate(ys) if y==i) for ys in observations]
+            recent_dens=[sum((len(ys)-j) for j,y in enumerate(ys) if y is not None) for ys in observations]
+            plain=numerator/n
+            recent=sum(count*rn/rd for count,rn,rd in zip(denominators,recent_nums,recent_dens))/n
+            team_probability=.9*plain+.1*recent
+            team_part = team_probability * weight
             hpart = hcount / hn * (1 - weight) if hn else 0.
             probability = team_part + hpart
             probs.append(probability)
             metric = {'market': market, 'option': i, 'confidence': probability,
                       'teamNumerators': [c[i] for c in counts], 'teamDenominators': denominators,
+                      'plainProbability':plain,'recentProbability':recent,'blendedTeamProbability':team_probability,
+                      'recentNumerators':recent_nums,'recentDenominators':recent_dens,
                       'teamWeight': weight, 'teamPart': team_part, 'h2hNumerator': hcount,
                       'h2hDenominator': hn, 'h2hPart': hpart,
                       'supportHits': sum(y == i for y in votes), 'supportCount': sum(y is not None for y in votes)}
@@ -220,9 +233,9 @@ def calculate(row, sport, matches, identity):
 
 def verify(root):
     root = Path(root); book = read(root / FILE)
-    if book['policy'] != POLICY or book['snapshotSha256'] != signature({k: v for k, v in book.items() if k != 'snapshotSha256'}):
+    if book['policy'] not in POLICIES or book['snapshotSha256'] != signature({k: v for k, v in book.items() if k != 'snapshotSha256'}):
         raise ValueError('User rules snapshot changed')
-    if digest(root / MODEL) != MODEL_HASH or book['modelSha256'] != MODEL_HASH:
+    if digest(root / MODEL) != POLICY_HASHES[book['policy']] or book['modelSha256'] != POLICY_HASHES[book['policy']]:
         raise ValueError('User rules configuration changed')
     for name, expected in book['inputHashes'].items():
         if digest(root / name) != expected: raise ValueError('User rules frozen inputs changed')
@@ -309,7 +322,7 @@ def settle(root):
                                 'logLoss': -sum(math.log(max(1e-12, p if y else 1-p)) for p,y in samples)/n if n else None,
                                 'pending': pending, 'pushOrUnverified': push, 'missing': missing})
         blocks[sport] = metrics
-    report = {'policy': POLICY, 'targetDate': book['targetDate'], 'snapshotSha256': book['snapshotSha256'], 'sports': blocks}
+    report = {'policy': book['policy'], 'targetDate': book['targetDate'], 'snapshotSha256': book['snapshotSha256'], 'sports': blocks}
     write(Path(root) / 'user-rules-evaluation.json', report)
     return report
 
@@ -317,12 +330,18 @@ def settle(root):
 def detail_html(entry, sport):
     d = entry['calculation']; lines = []
     def esc(s): return html.escape(str(s))
-    def pct(v): return f'%{100*v:.1f}'
+    def pct(v): return f'%{100*v:.2f}'
     for market, values in d['markets'].items():
         for v in values:
             name = label(sport, market, v['option'])
             nums = v['teamNumerators']; den = sum(v['teamDenominators'])
-            lines.append(f'<div><b>{esc(name)}</b>: ({nums[0]} + {nums[1]}) / {den} × {v["teamWeight"]:g} = {pct(v["teamPart"])}</div>')
+            if 'recentProbability' in v:
+                rn=v['recentNumerators'];rd=v['recentDenominators'];ns=v['teamDenominators']
+                lines.append(f'<div><b>{esc(name)}</b>: düz ({nums[0]} + {nums[1]}) / {den} = {pct(v["plainProbability"])}</div>')
+                lines.append(f'<div>Yakın maç: ({ns[0]} × {rn[0]}/{rd[0]} + {ns[1]} × {rn[1]}/{rd[1]}) / {den} = {pct(v["recentProbability"])}</div>')
+                lines.append(f'<div>({pct(v["plainProbability"])} × 0.9 + {pct(v["recentProbability"])} × 0.1) × {v["teamWeight"]:g} = <b>{pct(v["teamPart"])}</b></div>')
+            else:
+                lines.append(f'<div><b>{esc(name)}</b>: ({nums[0]} + {nums[1]}) / {den} × {v["teamWeight"]:g} = {pct(v["teamPart"])}</div>')
     hlines = []
     for market, values in d['markets'].items():
         for v in values:

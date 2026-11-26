@@ -47,9 +47,9 @@ def resolve(source,private,control_id,explicit=None):
  for name in ['football-control-public','basketball-control-public']:
   if not any(a['name']==name and not a.get('expired') for a in arts):raise ValueError('CONTROL result artifact unavailable')
  ready=file_json(private,'raporlar/'+day+'/primary-ready.json')
- from user_rules import POLICY as RULE_POLICY, MODEL_HASH
- expected_model=MODEL_HASH if ready.get('policy')==RULE_POLICY else MODEL
- if ready.get('targetDate')!=day or ready.get('policy') not in ('complete-market-price-v2',RULE_POLICY) or ready.get('modelSha256')!=expected_model:raise ValueError('Primary forecast identity mismatch')
+ from user_rules import POLICIES, POLICY_HASHES
+ expected_model=POLICY_HASHES.get(ready.get('policy'),MODEL)
+ if ready.get('targetDate')!=day or ready.get('policy') not in ('complete-market-price-v2',*POLICIES) or ready.get('modelSha256')!=expected_model:raise ValueError('Primary forecast identity mismatch')
  origin=str(ready['sourceRunId']);r=source.call(SOURCE+'/actions/runs/'+origin)
  normal=r.get('head_branch')=='main' and r.get('path')=='.github/workflows/ensemble-market-validation.yml'
  recovered=(origin=='43528252854' and day=='2026-11-13' and r.get('head_branch')=='experiment/ensemble-market-validation'
@@ -91,8 +91,8 @@ def apply_results(rows,scores,day):
  return count
 def render(root,control_football,control_basketball,plan):
  day=plan['targetDate'];before=protected(root)
- from user_rules import POLICY as RULE_POLICY, MODEL as RULE_MODEL, verify as rule_verify, settle as rule_settle
- rule_mode=plan['origin'].get('policy')==RULE_POLICY
+ from user_rules import POLICIES, MODEL as RULE_MODEL, verify as rule_verify, settle as rule_settle
+ rule_mode=plan['origin'].get('policy') in POLICIES
  if digest(root/(RULE_MODEL if rule_mode else 'stability-model.json'))!=plan['origin']['modelSha256']:raise ValueError('Frozen model mismatch')
  if rule_mode:book=rule_verify(root)
  else:

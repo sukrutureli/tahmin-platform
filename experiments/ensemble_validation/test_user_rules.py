@@ -30,6 +30,33 @@ def example():
 
 
 class RulesTests(unittest.TestCase):
+    def test_ten_percent_recency_and_probability_mass(self):
+        def histories(newest_wins):
+            scores=[(2,0)]*3+[(0,2)]*3
+            if not newest_wins:scores.reverse()
+            out=[]
+            for t in ('n:1','n:2'):
+                for j,(a,b) in enumerate(scores):
+                    if t=='n:2':a,b=b,a # Away losses support MS1.
+                    out.append(match(t+str(j),t,a,b,f'2026-11-{25-j:02d}'))
+            return out
+        for recent,p in [(True,.5214285714285715),(False,.4785714285714286)]:
+            e=r.calculate(row(),'football',histories(recent),IDENT)
+            self.assertAlmostEqual(e['markets']['MS'][0],p)
+            for probabilities in e['markets'].values():self.assertAlmostEqual(sum(probabilities),1)
+        # Fewer samples do not receive extra team influence just because weights differ.
+        data=[match(str(j),'n:1',2,0,f'2026-11-{25-j:02d}') for j in range(6)]
+        data += [match('away','n:2',2,0,'2026-11-25')]
+        e=r.calculate(row(),'football',data,IDENT)
+        self.assertAlmostEqual(e['markets']['MS'][0],6/7)
+
+    def test_legacy_rules_snapshot_still_verifies_without_refreeze(self):
+        with tempfile.TemporaryDirectory() as td:
+            root=Path(td);(root/r.MODEL).write_text(r.LEGACY_MODEL_TEXT)
+            book={'policy':r.LEGACY_POLICY,'targetDate':DAY,'modelSha256':r.POLICY_HASHES[r.LEGACY_POLICY],'inputHashes':{},'systems':{}}
+            book['snapshotSha256']=r.signature(book);r.write(root/r.FILE,book)
+            self.assertEqual(r.verify(root),book)
+            self.assertEqual(r.freeze(root,DAY),book)
     def test_percentile_boundaries_include_whole_tied_group(self):
         es=[{'eventId':str(i),'chosen':{'confidence':p}} for i,p in enumerate([.9,.8,.8,.7,.7,.7,.6])]
         self.assertEqual(len(r.tied_prefix(es,.25)),3)
@@ -43,18 +70,20 @@ class RulesTests(unittest.TestCase):
         self.assertEqual(len(r.tied_prefix([{'eventId':str(i),'chosen':{'confidence':.625}} for i in range(5)],.25)),5)
     def test_screenshot_fractions_and_contrarian_selection(self):
         e=r.calculate(row(),'football',example(),IDENT)
-        self.assertEqual(e['markets']['MS'],[.25,.5,.25])
-        self.assertEqual(e['markets']['OU'],[.625,.375])
-        self.assertEqual(e['markets']['BTTS'],[.75,.25])
+        for actual,expected in zip(e['markets']['MS'],[.235,.515,.25]):self.assertAlmostEqual(actual,expected)
+        self.assertEqual(e['markets']['OU'],[.6125,.3875])
+        for actual,expected in zip(e['markets']['BTTS'],[.755,.245]):self.assertAlmostEqual(actual,expected)
+        self.assertEqual(e['calculation']['markets']['OU'][0]['teamNumerators'],[3,2])
+        self.assertEqual(e['calculation']['markets']['OU'][0]['plainProbability'],.625)
         self.assertEqual((e['chosen']['market'],e['chosen']['option']),('OU',0))
         self.assertEqual([(c['supportHits'],c['supportCount']) for c in e['calculation']['topTwo']],[(2,2),(0,2)])
 
     def test_h2h_orientation_and_80_20(self):
         records=example()+[match('h2h','n:2',0,1,'2025-01-01',opponent='n:1',tournament='99')]
         e=r.calculate(row(),'football',records,IDENT)
-        self.assertAlmostEqual(e['markets']['MS'][0],.25*.8+.2)
-        self.assertAlmostEqual(e['markets']['OU'][0],.625*.8)
-        self.assertAlmostEqual(e['markets']['BTTS'][0],.75*.8)
+        self.assertAlmostEqual(e['markets']['MS'][0],.235*.8+.2)
+        self.assertAlmostEqual(e['markets']['OU'][0],.6125*.8)
+        self.assertAlmostEqual(e['markets']['BTTS'][0],.755*.8)
         self.assertEqual(e['calculation']['h2hCount'],1)
 
     def test_same_competition_before_six_cap_and_individual_general_fallback(self):
@@ -145,10 +174,11 @@ class RulesTests(unittest.TestCase):
             original=(root/r.FILE).read_bytes()
             manifest=reports(root);prepare(root,DAY)
             doc=(root/'futbol-yeni.html').read_text()
-            self.assertIn('Hesap detayı',doc);self.assertIn('(3 + 2) / 8 × 1',doc)
+            self.assertIn('Hesap detayı',doc);self.assertIn('(3 + 2) / 8 = %62.50',doc)
+            self.assertIn('× 0.9',doc);self.assertIn('× 0.1',doc)
             self.assertNotIn('Skor tahmini',doc);self.assertNotIn('Tam skor olasılığı',doc)
             self.assertIn('Gerçek skor',doc);self.assertIn('grid-column:1/-1!important',doc)
-            self.assertIn('data-confidence="0.625"',doc)
+            self.assertIn('data-confidence="0.6125"',doc)
             # Existing snapshot skips history access and inference entirely.
             with patch('primary_forecast.build_ledger',side_effect=AssertionError('No refreeze')):
                 forecast(root,root,DAY)
@@ -193,7 +223,7 @@ class RulesTests(unittest.TestCase):
             self.assertEqual((counts['won'],counts['lost']),(1,1))
             self.assertEqual(doc.count('market-option chosen'),2)
             self.assertIn('MS1: ✅ Tuttu<br>Alt: ❌ Yattı',doc)
-            self.assertIn('MS1 · %100.0<br>Alt · %100.0',doc)
+            self.assertIn('MS1 · %100.00<br>Alt · %100.00',doc)
             self.assertIn('data-match-outcome="partial"',doc)
             self.assertIn('1 kısmi tuttu',doc)
             self.assertIn('İsabet (maç) %0.0',doc)

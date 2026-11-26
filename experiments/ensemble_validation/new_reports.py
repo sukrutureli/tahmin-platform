@@ -49,7 +49,7 @@ def reports(root):
     rule_mode=(root/RULE_FILE).exists()
     if rule_mode:
         book=rule_verify(root);target=book['targetDate'];source=root/RULE_FILE;preview=False
-        model=root/RULE_MODEL;model_hash=sha(model);config={'version':RULE_POLICY,'first_forecast_date':'2026-11-27'};payload={}
+        model=root/RULE_MODEL;model_hash=sha(model);config={'version':book['policy'],'first_forecast_date':'2026-11-27'};payload={}
         priced=book;rule_settle(root)
     else:
         return legacy_reports(root)
@@ -119,7 +119,7 @@ def render_reports(root,book,target,source,preview,model,model_hash,config,paylo
                     caption=GROUPS[sport][market][option]
                     if market=='BTTS':caption='KG '+caption
                     if market=='OU':caption=f'{line:g} '+caption
-                    percentage=format(100*v,'.1f')+'%' if isinstance(v,(int,float)) and math.isfinite(v) else '—'
+                    percentage=format(100*v,'.2f' if rule_mode else '.1f')+'%' if isinstance(v,(int,float)) and math.isfinite(v) else '—'
                     selected=any(market==v['market'] and option==v['option'] for v in (e.get('choices',[]) if rule_mode else [c] if c else []))
                     tiles.append('<div class="market-option'+(' chosen' if selected else '')+'"><span>'+html.escape(caption)+'</span><b>'+percentage+'</b><small>'+odd+'</small></div>')
                 markets.append('<div class="market-group">'+''.join(tiles)+'</div>')
