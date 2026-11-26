@@ -18,11 +18,11 @@ console.log(JSON.stringify(out));
 '''
         out=json.loads(subprocess.run(['node','-e',harness],text=True,capture_output=True,check=True).stdout)
         self.assertEqual(out[0][:3],[True,[True,True],'partial'])
-        self.assertEqual(out[1][:3],[True,[True,False],'won'])
+        self.assertEqual(out[1][:3],[True,[True,True],'won'])
         self.assertNotIn('KG Yok',out[1][3])
-        self.assertEqual(out[2][:3],[False,[False,False],'no-choice'])
+        self.assertEqual(out[2][:3],[False,[True,True],'no-choice'])
         self.assertEqual(out[3][:3],[True,[True,True],'partial'])
-        self.assertEqual(out[4],['lost',[False,True]])
+        self.assertEqual(out[4],['lost',[True,True]])
 
     def test_no_mutation_of_frozen_markup_and_idempotence(self):
         doc='<style></style><tr data-match-outcome="partial">unchanged</tr><script>function updateSummary(){return row.dataset.matchOutcome||\'pending\';}function filter(){const below=min!==null&&Number.isFinite(min)&&!(odd>1&&odd>=min);}</script>'

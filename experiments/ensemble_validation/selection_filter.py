@@ -16,7 +16,6 @@ for(const row of rows){
 function filterChoices(row,min,pickValues){
  const view=choiceViews.get(row),items=view.items;
  const visible=items.filter(item=>(min===null||!Number.isFinite(min)||(item.price>1&&item.price>=min))&&(!pickValues.length||pickValues.includes(item.pick)));
- for(const item of items)item.tile.hidden=!visible.includes(item);
  if(view.cell)view.cell.innerHTML=items.length?visible.map(item=>item.status).join('<br>'):view.originalStatus;
  if(view.meta){
   view.meta.innerHTML='';
@@ -45,5 +44,4 @@ def upgrade_rule_html(doc):
     script=script.replace(old,'below=!filterChoices(row,min,pickValues)',1)
     script=re.sub(r'wrongPick=pickValues\.length>0&&!JSON\.parse\(row\.dataset\.picks\|\|\x27\[\]\x27\)\.some\(p=>pickValues\.includes\(p\)\)', 'wrongPick=false',script,count=1)
     script=script.replace("row.dataset.matchOutcome||'pending'","row.dataset.visibleMatchOutcome||row.dataset.matchOutcome||'pending'")
-    head=head.replace('</style>','.market-option[hidden]{display:none!important}</style>',1)
     return head+script
