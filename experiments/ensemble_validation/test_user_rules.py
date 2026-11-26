@@ -57,6 +57,28 @@ class RulesTests(unittest.TestCase):
             book['snapshotSha256']=r.signature(book);r.write(root/r.FILE,book)
             self.assertEqual(r.verify(root),book)
             self.assertEqual(r.freeze(root,DAY),book)
+    def test_distinct_market_candidates_and_single_market(self):
+        def candidate(m,p,h):return dict(market=m,confidence=p,supportHits=h,supportCount=2)
+        alt=candidate('OU',.5119,2);over=candidate('OU',.4881,0)
+        chosen,top=r.select([alt,over])
+        self.assertIs(chosen,alt);self.assertEqual(top,[alt])
+        ms=candidate('MS',.6643,2)
+        chosen,top=r.select([alt,over,ms])
+        self.assertEqual([c['market'] for c in top],['MS','OU'])
+        self.assertIs(chosen,alt) # Both 2/2: lower probability of the two markets.
+        kg=candidate('BTTS',.7,0)
+        chosen,top=r.select([alt,over,ms,kg])
+        self.assertEqual([c['market'] for c in top],['BTTS','MS'])
+        self.assertIs(chosen,kg)
+
+    def test_recency_v2_configuration_and_snapshot_remain_valid(self):
+        self.assertEqual(r.POLICY_HASHES[r.RECENCY_POLICY],'e3ca3d73701cee38ad55704f98d75c2f8138167510494895964fb660946e6104')
+        with tempfile.TemporaryDirectory() as td:
+            root=Path(td);(root/r.MODEL).write_text(r.RECENCY_MODEL_TEXT)
+            book={'policy':r.RECENCY_POLICY,'targetDate':DAY,'modelSha256':r.POLICY_HASHES[r.RECENCY_POLICY],'inputHashes':{},'systems':{}}
+            book['snapshotSha256']=r.signature(book);r.write(root/r.FILE,book)
+            self.assertEqual(r.freeze(root,DAY),book)
+
     def test_percentile_boundaries_include_whole_tied_group(self):
         es=[{'eventId':str(i),'chosen':{'confidence':p}} for i,p in enumerate([.9,.8,.8,.7,.7,.7,.6])]
         self.assertEqual(len(r.tied_prefix(es,.25)),3)

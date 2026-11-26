@@ -13,7 +13,8 @@ from priced_choices import read, write, signature, digest
 from live_history import parse_date
 
 LEGACY_POLICY = 'competition-six-80-20-v1'
-POLICY = 'competition-six-80-20-recency10-v2'
+RECENCY_POLICY = 'competition-six-80-20-recency10-v2'
+POLICY = 'competition-six-80-20-distinct-markets-v3'
 START_DATE = '2026-11-27'
 FILE = 'user-rules-before-results.json'
 MODEL = 'user-rules-model.json'
@@ -31,11 +32,13 @@ RULES = {
     'scorePrediction': False,
 }
 LEGACY_MODEL_TEXT = json.dumps(RULES, ensure_ascii=False, indent=2, allow_nan=False) + '\n'
-RULES = dict(RULES,policy=POLICY,teamPlainWeight=.9,teamRecencyWeight=.1,
+RULES = dict(RULES,policy=RECENCY_POLICY,teamPlainWeight=.9,teamRecencyWeight=.1,
              recency='Newest to oldest n..1 within each team, maximum six. Normalize within side, then pool by valid observation count; pushes have no vote.')
+RECENCY_MODEL_TEXT = json.dumps(RULES, ensure_ascii=False, indent=2, allow_nan=False) + '\n'
+RULES = dict(RULES,policy=POLICY,selection='highest probability option from each eligible market, then compare the two highest different markets by latest-match support',singleMarket='use highest probability option without contrarian comparison')
 MODEL_TEXT = json.dumps(RULES, ensure_ascii=False, indent=2, allow_nan=False) + '\n'
 MODEL_HASH = hashlib.sha256(MODEL_TEXT.encode()).hexdigest()
-POLICY_HASHES = {LEGACY_POLICY:hashlib.sha256(LEGACY_MODEL_TEXT.encode()).hexdigest(),POLICY:MODEL_HASH}
+POLICY_HASHES = {LEGACY_POLICY:hashlib.sha256(LEGACY_MODEL_TEXT.encode()).hexdigest(),RECENCY_POLICY:hashlib.sha256(RECENCY_MODEL_TEXT.encode()).hexdigest(),POLICY:MODEL_HASH}
 POLICIES = tuple(POLICY_HASHES)
 
 
@@ -72,7 +75,13 @@ def outcome(match, sport, team, market, line, invert=False):
 def select(candidates):
     """Stable market/option order breaks exact probability ties deterministically."""
     candidates, _ = remove_ambiguous(candidates)
-    top = sorted(candidates, key=lambda c: -c['confidence'])[:2]
+    top = []
+    markets = set()
+    for candidate in sorted(candidates, key=lambda c: -c['confidence']):
+        market = candidate.get('market', id(candidate))
+        if market in markets: continue
+        markets.add(market); top.append(candidate)
+        if len(top) == 2: break
     if len(top) < 2:
         return (top[0] if top else None), top
     a, b = top
@@ -222,7 +231,7 @@ def calculate(row, sport, matches, identity):
             (top[0]['supportHits'], top[0]['supportCount']) == (top[1]['supportHits'], top[1]['supportCount']):
         entry['choices'] = top
     detail['topTwo'] = top
-    detail['reason'] = ('Tek uygun aday' if len(top) == 1 else
+    detail['reason'] = ('Tek uygun pazar: en yüksek yüzde; terslik kontrolü uygulanmadı' if len(top) == 1 else
                         'Son maç desteği düşük aday; eşitlikte tümü destekliyorsa düşük yüzde, aksi halde yüksek yüzde') if chosen else 'Geçerli oranlı pazar / yeterli geçmiş yok'
     if len(top)==2 and (top[0]['supportCount']!=top[1]['supportCount'] or not top[0]['supportCount']):
         detail['reason']='Karşılaştırılabilir son maç verisi eksik / baremde iade: yüksek yüzde'
