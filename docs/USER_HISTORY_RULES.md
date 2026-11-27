@@ -1,4 +1,4 @@
-# Günlük tercih kuralı · competition-six-80-20-tournament-input-v4
+# Günlük tercih kuralı · competition-six-80-20-dedicated-tournament-v5
 
 v3 yalnız sonraki yeni günlük dondurmalarında geçerlidir; 27 Kasım v2 kaydı ve önceki politikaların hash değerleri korunur.
 
@@ -28,3 +28,7 @@ Mevcut HTTP geçmişi ve maçın kendi kaydedilmiş TeamMatchHistory rekabet lis
 ## Turnuva girdisi düzeltmesi (v4)
 
 Günlük HTTP Header yanıtındaki mevcut turnuva ID/adı TeamMatchHistory ve replay girdisinde korunur; ek HTTP isteği yoktur. Genel havuzda herhangi bir maç bulunması, kaynak listede mevcut aynı-turnuva kayıtlarının eklenmesini engellemez. Aynı maç iki kez sayılmaz. Turnuva kimliği bilinmiyorsa bunun nedeni ayrı yazılır; erişilen havuzda örnek bulunmaması gerçek dünyada turnuva geçmişi olmadığı anlamına gelmez. Genel son-altı kaynak listesi turnuvadan yalnız 4/5 maç içeriyorsa ve geniş havuzda fazlası yoksa gerçek 4/5 örnek kullanılır; altıya tamamlandığı iddia edilmez. Yeni sürüm yalnız yeni günlük dondurmalarında kullanılır; v1/v2/v3 kayıtları ve hashleri korunur.
+
+## Doğrudan Bu Turnuva listesi (v5)
+
+Genel son-altı listesini süzmek, Bu Turnuva seçiminin yerine geçmez. Nesine arayüzünün kullandığı v3 HeadToHead/{eventId}/LastMatches yanıtında TFT=2 (Bu Turnuva), FT=5 (Genel, iç/dış ayrımı yok) alınır. Takımlar Header TID değerleriyle, kayıtların turnuvası TOUR TID ile doğrulanır; her taraftan en fazla altı geçerli kayıt ayrı competitionMatchesHome/Away alanlarında saklanır. Orijinal genel listeler ve rekabet değişmez. Bu işlem günlük maç başına bir ek, mevcut hız sınırlı HTTP isteğidir; yeni workflow/otomasyon yoktur. Başarılı boş liste ile alınamayan liste farklı competitionHistoryStatus değerleriyle saklanır. Doğrudan liste varsa genel geçmişten süzülen 4/5 kaydın yerine bu liste kullanılır. v1-v4 dondurulmuş kayıtları değiştirilmez.

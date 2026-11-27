@@ -15,7 +15,8 @@ from live_history import parse_date
 LEGACY_POLICY = 'competition-six-80-20-v1'
 RECENCY_POLICY = 'competition-six-80-20-recency10-v2'
 DISTINCT_POLICY = 'competition-six-80-20-distinct-markets-v3'
-POLICY = 'competition-six-80-20-tournament-input-v4'
+INPUT_POLICY = 'competition-six-80-20-tournament-input-v4'
+POLICY = 'competition-six-80-20-dedicated-tournament-v5'
 START_DATE = '2026-11-27'
 FILE = 'user-rules-before-results.json'
 MODEL = 'user-rules-model.json'
@@ -38,10 +39,12 @@ RULES = dict(RULES,policy=RECENCY_POLICY,teamPlainWeight=.9,teamRecencyWeight=.1
 RECENCY_MODEL_TEXT = json.dumps(RULES, ensure_ascii=False, indent=2, allow_nan=False) + '\n'
 RULES = dict(RULES,policy=DISTINCT_POLICY,selection='highest probability option from each eligible market, then compare the two highest different markets by latest-match support',singleMarket='use highest probability option without contrarian comparison')
 DISTINCT_MODEL_TEXT = json.dumps(RULES, ensure_ascii=False, indent=2, allow_nan=False) + '\n'
-RULES = dict(RULES,policy=POLICY,tournamentInput='Exact current-fixture Header tournament metadata retained; supplement missing competition history from fixture-scoped rows before general fallback; no global league-name or team-name joins')
+RULES = dict(RULES,policy=INPUT_POLICY,tournamentInput='Exact current-fixture Header tournament metadata retained; supplement missing competition history from fixture-scoped rows before general fallback; no global league-name or team-name joins')
+INPUT_MODEL_TEXT = json.dumps(RULES, ensure_ascii=False, indent=2, allow_nan=False) + '\n'
+RULES = dict(RULES,policy=POLICY,dedicatedTournament='Nesine LastMatches TFT=2 FT=5; exact Header team IDs and tournament ID; maximum six per side. Successful empty history differs from unavailable collection.')
 MODEL_TEXT = json.dumps(RULES, ensure_ascii=False, indent=2, allow_nan=False) + '\n'
 MODEL_HASH = hashlib.sha256(MODEL_TEXT.encode()).hexdigest()
-POLICY_HASHES = {LEGACY_POLICY:hashlib.sha256(LEGACY_MODEL_TEXT.encode()).hexdigest(),RECENCY_POLICY:hashlib.sha256(RECENCY_MODEL_TEXT.encode()).hexdigest(),DISTINCT_POLICY:hashlib.sha256(DISTINCT_MODEL_TEXT.encode()).hexdigest(),POLICY:MODEL_HASH}
+POLICY_HASHES = {LEGACY_POLICY:hashlib.sha256(LEGACY_MODEL_TEXT.encode()).hexdigest(),RECENCY_POLICY:hashlib.sha256(RECENCY_MODEL_TEXT.encode()).hexdigest(),DISTINCT_POLICY:hashlib.sha256(DISTINCT_MODEL_TEXT.encode()).hexdigest(),INPUT_POLICY:hashlib.sha256(INPUT_MODEL_TEXT.encode()).hexdigest(),POLICY:MODEL_HASH}
 POLICIES = tuple(POLICY_HASHES)
 
 
@@ -119,7 +122,7 @@ def sources(row, sport, matches, identity):
     raw = row.get('userRuleHistory') or {}
     own_names = [raw.get('teamEv'), raw.get('teamDep')]
     if not all(isinstance(t,str) and t.strip() for t in own_names) or own_names[0] == own_names[1]:
-        return matches, identity, None
+        return matches, identity, None, {}
     identity = copy.deepcopy(identity) if identity else {
         'home': 'fixture:'+str(row['eventId'])+':home', 'away':'fixture:'+str(row['eventId'])+':away',
         'namespace':'fixture:'+str(row['eventId']), 'tournamentId':None}
@@ -134,7 +137,7 @@ def sources(row, sport, matches, identity):
                         m.get('tournamentId')==identity['tournamentId'] and m.get('tournament')}
     if identity.get('tournamentId') and isinstance(raw_name,str) and raw_name.strip():
         tournament_names={raw_name.strip()}
-    def convert(rows):
+    def convert(rows,competition=False):
         out=[]
         for m in rows or []:
             played=parse_date(m.get('matchDate'))
@@ -147,7 +150,7 @@ def sources(row, sport, matches, identity):
             out.append({'key':key,'date':played.isoformat(),'sport':sport,'namespace':identity['namespace'],
                         'home':h,'away':a,'homeScore':values[0],'awayScore':values[1],
                         'homeFinal':values[0],'awayFinal':values[1],
-                        'tournamentId':identity['tournamentId'] if len(tournament_names)==1 and m.get('tournament') in tournament_names else None})
+                        'tournamentId':identity['tournamentId'] if competition or len(tournament_names)==1 and m.get('tournament') in tournament_names else None})
         return out
     pool=list(matches)
     for prop,team in [('sonMaclarHome',identity['home']),('sonMaclarAway',identity['away'])]:
@@ -172,12 +175,19 @@ def sources(row, sport, matches, identity):
                 pool.append(m);seen.add(fp)
     # An explicit empty H2H list is authoritative; None means source list absent.
     h2h=convert(raw['rekabetGecmisi']) if raw.get('rekabetGecmisi') is not None else None
-    return pool,identity,h2h
+    dedicated={}
+    if raw.get('competitionHistoryStatus')=='available' and identity.get('tournamentId'):
+        for side,prop,team in [('home','competitionMatchesHome',identity['home']),('away','competitionMatchesAway',identity['away'])]:
+            if not isinstance(raw.get(prop),list):continue
+            values=convert(raw[prop],competition=True)
+            values={m['key']:m for m in values if team in (m['home'],m['away']) and score(m,sport,team) is not None}
+            dedicated[side]=sorted(values.values(),key=lambda m:(m['date'],m['key']),reverse=True)[:6]
+    return pool,identity,h2h,dedicated
 
 
 def calculate(row, sport, matches, identity):
-    matches,identity,dedicated_h2h=sources(row,sport,matches,identity)
-    detail = {'teamCounts': {'home': 0, 'away': 0}, 'teamScopes': {}, 'h2hCount': 0,
+    matches,identity,dedicated_h2h,dedicated_competition=sources(row,sport,matches,identity)
+    detail = {'competitionHistoryStatus':(row.get('userRuleHistory') or {}).get('competitionHistoryStatus','not-collected'), 'teamCounts': {'home': 0, 'away': 0}, 'teamScopes': {}, 'h2hCount': 0,
               'markets': {}, 'topTwo': [], 'reason': 'Yeterli geçmiş / doğrulanmış takım kimliği yok'}
     entry = {k: row.get(k) for k in ('date', 'eventId', 'name', 'time')}
     entry.update(sport=sport, markets={}, chosen=None, choices=[], calculation=detail)
@@ -197,10 +207,11 @@ def calculate(row, sport, matches, identity):
     for side, team in [('home', h), ('away', a)]:
         general = [m for m in pool if team in (m['home'], m['away']) and score(m, sport, team) is not None]
         same = [m for m in general if identity.get('tournamentId') and m.get('tournamentId') == identity['tournamentId']]
+        if side in dedicated_competition:same=dedicated_competition[side]
         chosen = (same or general)[:6]
         teams.append(chosen)
         detail['teamCounts'][side] = len(chosen)
-        detail['teamScopes'][side] = 'Bu turnuva' if same else ('Genel (turnuva kimliği doğrulanamadı)' if not identity.get('tournamentId') else 'Genel (erişilen havuzda bu turnuvadan geçerli maç yok)')
+        detail['teamScopes'][side] = ('Bu turnuva (doğrudan turnuva listesi)' if side in dedicated_competition else 'Bu turnuva') if same else ('Genel (turnuva kimliği doğrulanamadı)' if not identity.get('tournamentId') else 'Genel (erişilen havuzda bu turnuvadan geçerli maç yok)')
     hpool=sorted(dedicated_h2h,key=lambda m:(m['date'],m['key']),reverse=True) if dedicated_h2h is not None else pool
     hseen={}
     for m in hpool:
@@ -388,6 +399,8 @@ def detail_html(entry, sport):
     decision = ''.join(f'<div><b>{esc(label(sport, v["market"], v["option"]))}</b>: {pct(v["confidence"])} · son maç desteği <b>{v["supportHits"]}/{v["supportCount"]}</b></div>' for v in top)
     if d.get('skippedMarkets'):decision='<small>Kararsız pazarlar atlandı: '+esc(', '.join(d['skippedMarkets']))+'</small>'+decision
     scopes = ' · '.join(f'{"Ev" if side == "home" else "Dep"}: {scope}, {d["teamCounts"][side]} maç' for side, scope in d['teamScopes'].items())
+    if d.get('competitionHistoryStatus') in ('unavailable','not-collected'):
+        scopes+=' · Doğrudan turnuva listesi alınamadı; yalnız erişilen geçmiş kullanıldı.'
     choice = '<br>'.join(esc(label(sport,c['market'],c['option'])+' · '+pct(c['confidence'])) for c in entry.get('choices',[])) or 'Tahmin yok'
     return '<details class="calculation-detail"><summary>Hesap detayı <span aria-hidden="true">＋</span></summary><ol>'+\
            '<li><strong>Takım geçmişi</strong><small>'+esc(scopes)+'</small>'+''.join(lines)+'</li>'+\

@@ -112,6 +112,31 @@ class RulesTests(unittest.TestCase):
             book['snapshotSha256']=r.signature(book);r.write(root/r.FILE,book)
             self.assertEqual(r.freeze(root,DAY),book)
 
+    def test_dedicated_tournament_has_six_even_when_general_six_contains_cups(self):
+        def raw(team,j,league):return dict(homeTeam=team,awayTeam='Other',homeScore=2,awayScore=0,matchDate=f'{25-j} Kasım 2026',tournament=league)
+        x=row();h={'teamEv':'Home','teamDep':'Away','targetTournamentId':'709','targetTournamentName':'Premier Lig','competitionHistoryStatus':'available',
+            'sonMaclarHome':[raw('Home',0,'Cup')],'sonMaclarAway':[raw('Away',0,'Cup')],
+            'competitionMatchesHome':[raw('Home',j,'Premier Lig') for j in range(1,8)],
+            'competitionMatchesAway':[raw('Away',j,'Premier Lig') for j in range(1,8)],'rekabetGecmisi':[]}
+        x['userRuleHistory']=h
+        e=r.calculate(x,'football',[],None)
+        self.assertEqual(e['calculation']['teamCounts'],{'home':6,'away':6})
+        self.assertTrue(all('doğrudan' in v for v in e['calculation']['teamScopes'].values()))
+        # A successful empty response means general fallback; an unavailable response is recorded separately.
+        h['competitionMatchesHome']=[]
+        self.assertEqual(r.calculate(x,'football',[],None)['calculation']['teamCounts']['home'],1)
+        h['competitionHistoryStatus']='unavailable'
+        e=r.calculate(x,'football',[],None)
+        self.assertEqual(e['calculation']['competitionHistoryStatus'],'unavailable')
+        self.assertEqual(e['calculation']['teamCounts']['home'],1)
+
+    def test_v4_configuration_remains_accepted(self):
+        with tempfile.TemporaryDirectory() as td:
+            root=Path(td);(root/r.MODEL).write_text(r.INPUT_MODEL_TEXT)
+            book={'policy':r.INPUT_POLICY,'targetDate':DAY,'modelSha256':r.POLICY_HASHES[r.INPUT_POLICY],'inputHashes':{},'systems':{}}
+            book['snapshotSha256']=r.signature(book);r.write(root/r.FILE,book)
+            self.assertEqual(r.freeze(root,DAY),book)
+
     def test_percentile_boundaries_include_whole_tied_group(self):
         es=[{'eventId':str(i),'chosen':{'confidence':p}} for i,p in enumerate([.9,.8,.8,.7,.7,.7,.6])]
         self.assertEqual(len(r.tied_prefix(es,.25)),3)

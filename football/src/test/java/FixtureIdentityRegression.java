@@ -13,7 +13,41 @@ public final class FixtureIdentityRegression {
         PredictionData p = new PredictionData(home, away, new ArrayList<>(List.of("MS1")));
         p.setEventId(id); p.getStatuses().put("MS1", "pending"); return p;
     }
+    private static void verifyCompetitionHistory() throws Exception {
+        com.fasterxml.jackson.databind.ObjectMapper json = new com.fasterxml.jackson.databind.ObjectMapper();
+        com.fasterxml.jackson.databind.node.ObjectNode payload = json.createObjectNode();
+        com.fasterxml.jackson.databind.node.ObjectNode league = payload.putArray("ML").addObject();
+        league.put("TFT", 2);
+        com.fasterxml.jackson.databind.node.ObjectNode group = league.putArray("TT").addObject();
+        group.put("FT", 5);
+        com.fasterxml.jackson.databind.node.ArrayNode teams = group.putArray("TMS");
+        // Provider team order is deliberately reversed; bind by Header TID.
+        for (int id : new int[] {2, 1}) {
+            com.fasterxml.jackson.databind.node.ObjectNode team = teams.addObject(); team.put("TID", id);
+            com.fasterxml.jackson.databind.node.ArrayNode matches = team.putArray("ML");
+            for (int i = 0; i < 9; i++) {
+                com.fasterxml.jackson.databind.node.ObjectNode row = matches.addObject();
+                row.put("POFMD", (25-i) + " Kasım 2026");
+                row.putObject("HT").put("N", id == 1 ? "Home" : "Away"); row.putObject("AT").put("N", "Other");
+                row.putObject("LG").put("TID", i == 0 ? 999 : 709).put("N", i == 0 ? "Cup" : "Premier Lig");
+                com.fasterxml.jackson.databind.node.ObjectNode score = row.putArray("SC").addObject();
+                score.put("OBI", 99).put("HTS", id == 1 ? 2 : 1).put("ATS", 0);
+            }
+        }
+        TeamMatchHistory history = new TeamMatchHistory(); history.setTargetTournamentId("709");
+        com.fasterxml.jackson.databind.JsonNode header = json.readTree("{\"HT\":[{\"TID\":1}],\"AT\":[{\"TID\":2}]}");
+        java.lang.reflect.Method method = com.example.scraper.MatchScraper.class.getDeclaredMethod("appendCompetitionHistory", TeamMatchHistory.class,
+                com.fasterxml.jackson.databind.JsonNode.class, com.fasterxml.jackson.databind.JsonNode.class, String.class);
+        method.setAccessible(true); method.invoke(new com.example.scraper.MatchScraper(), history, payload, header, "test");
+        check("available".equals(history.getCompetitionHistoryStatus()), "dedicated tournament source available");
+        check(history.getCompetitionMatchesHome().size() == 6 && history.getCompetitionMatchesAway().size() == 6, "six per side after excluding other tournament");
+        check("Home".equals(history.getCompetitionMatchesHome().get(0).getHomeTeam()), "home bound by provider ID");
+        check("Away".equals(history.getCompetitionMatchesAway().get(0).getHomeTeam()), "away bound by provider ID");
+        check(history.getSonMaclarHome() == null, "general source unchanged");
+    }
+
     public static void main(String[] args) throws Exception {
+        verifyCompetitionHistory();
         TeamMatchHistory metadata = new TeamMatchHistory();
         metadata.setTargetTournamentId("709"); metadata.setTargetTournamentName("Premier Lig");
         com.fasterxml.jackson.databind.ObjectMapper metadataJson = new com.fasterxml.jackson.databind.ObjectMapper();

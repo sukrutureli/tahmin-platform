@@ -404,6 +404,14 @@ private int asInt(Object value, int defaultValue) {
                 if (teams.size() > 0) appendMatches(history, teams.get(0).path("ML"), "son-maclari", 1, summaryUrl);
                 if (teams.size() > 1) appendMatches(history, teams.get(1).path("ML"), "son-maclari", 2, summaryUrl);
             }
+            history.setCompetitionHistoryStatus("unavailable");
+            try {
+                // The site's "Bu Turnuva" combobox uses LastMatches TFT=2, FT=5.
+                appendCompetitionHistory(history, HistoryApiClient.get(id, "LastMatches"), header, summaryUrl);
+            } catch (java.io.IOException unavailable) {
+                // Keep the general/H2H response; failed collection is not evidence of zero league history.
+                System.out.println("⚠️ " + id + " turnuva geçmişi alınamadı");
+            }
             System.out.println("✅ " + home + " - " + away + ": "
                     + history.getRekabetGecmisi().size() + " rekabet, "
                     + history.getSonMaclarHome().size() + "+" + history.getSonMaclarAway().size() + " son maç (HTTP)");
@@ -413,6 +421,31 @@ private int asInt(Object value, int defaultValue) {
             if (e instanceof InterruptedException) Thread.currentThread().interrupt();
             if (e instanceof HistoryApiClient.RateLimitException) throw (HistoryApiClient.RateLimitException) e;
             return null;
+        }
+    }
+
+    private void appendCompetitionHistory(TeamMatchHistory history, com.fasterxml.jackson.databind.JsonNode payload,
+            com.fasterxml.jackson.databind.JsonNode header, String summaryUrl) {
+        if (history.getTargetTournamentId() == null || !history.getTargetTournamentId().matches("[1-9][0-9]*")) return;
+        for (com.fasterxml.jackson.databind.JsonNode league : payload.path("ML")) {
+            if (league.path("TFT").asInt(-1) != 2) continue;
+            for (com.fasterxml.jackson.databind.JsonNode group : league.path("TT")) {
+                if (group.path("FT").asInt(-1) != 5) continue;
+                com.fasterxml.jackson.databind.JsonNode homeRows = null, awayRows = null;
+                int homeId = header.path("HT").path(0).path("TID").asInt(-1);
+                int awayId = header.path("AT").path(0).path("TID").asInt(-1);
+                for (com.fasterxml.jackson.databind.JsonNode team : group.path("TMS")) {
+                    if (homeId > 0 && team.path("TID").asInt(-2) == homeId) homeRows = team.path("ML");
+                    if (awayId > 0 && team.path("TID").asInt(-2) == awayId) awayRows = team.path("ML");
+                }
+                if (homeRows == null || awayRows == null || !homeRows.isArray() || !awayRows.isArray()) return;
+                history.setCompetitionMatchesHome(new java.util.ArrayList<>());
+                history.setCompetitionMatchesAway(new java.util.ArrayList<>());
+                appendMatches(history, homeRows, "bu-turnuva", 3, summaryUrl);
+                appendMatches(history, awayRows, "bu-turnuva", 4, summaryUrl);
+                history.setCompetitionHistoryStatus("available");
+                return;
+            }
         }
     }
 
@@ -434,7 +467,12 @@ private int asInt(Object value, int defaultValue) {
 
     private void appendMatches(TeamMatchHistory history, com.fasterxml.jackson.databind.JsonNode matches,
             String type, int side, String summaryUrl) {
+        int added = 0;
         for (com.fasterxml.jackson.databind.JsonNode row : matches) {
+            if (side >= 3) {
+                if (added >= 6) break;
+                if (!history.getTargetTournamentId().equals(row.path("LG").path("TID").asText(""))) continue;
+            }
             int[] score = finalScore(row.path("SC"));
             if (score == null) continue;
             String homeTeam = teamName(row.path("HT"));
@@ -444,7 +482,10 @@ private int asInt(Object value, int defaultValue) {
             String league = row.path("LG").path("N").asText("-");
             MatchResult match = new MatchResult(homeTeam, awayTeam, score[0], score[1], date, league, type, summaryUrl);
             if (side == 0) history.addRekabetGecmisiMatch(match);
+            else if (side == 3) history.getCompetitionMatchesHome().add(match);
+            else if (side == 4) history.getCompetitionMatchesAway().add(match);
             else history.addSonMacMatch(match, side);
+            added++;
         }
     }
 
