@@ -14,6 +14,13 @@ public final class FixtureIdentityRegression {
         p.setEventId(id); p.getStatuses().put("MS1", "pending"); return p;
     }
     public static void main(String[] args) throws Exception {
+        TeamMatchHistory metadata = new TeamMatchHistory();
+        metadata.setTargetTournamentId("709"); metadata.setTargetTournamentName("Premier Lig");
+        com.fasterxml.jackson.databind.ObjectMapper metadataJson = new com.fasterxml.jackson.databind.ObjectMapper();
+        // Getters unrelated to metadata need populated lists in legacy beans; deserialize the focused projection.
+        TeamMatchHistory restored = metadataJson.readValue("{\"targetTournamentId\":\"709\",\"targetTournamentName\":\"Premier Lig\"}", TeamMatchHistory.class);
+        check("709".equals(restored.getTargetTournamentId()) && "Premier Lig".equals(restored.getTargetTournamentName()), "fixture tournament metadata survives JSON input");
+
         check("123".equals(FixtureIdentity.eventId("https://istatistik.nesine.com/p1/123/ozet?x=1")), "p1 id");
         check("123".equals(FixtureIdentity.eventId("https://istatistik.nesine.com/123")), "normal id");
         check(FixtureIdentity.eventId("https://other.com/123/ozet") == null, "wrong host");

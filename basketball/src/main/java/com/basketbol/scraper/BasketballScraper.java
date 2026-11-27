@@ -324,6 +324,8 @@ private double asDouble(Object value) {
                 throw new java.io.IOException("Team names missing for match " + id);
             }
             TeamMatchHistory history = new TeamMatchHistory(home + " - " + away, home, away, detailUrl, odds);
+            history.setTargetTournamentId(header.path("TOUR").path("TID").asText(""));
+            history.setTargetTournamentName(header.path("TOUR").path("N").asText(""));
             com.fasterxml.jackson.databind.JsonNode summary = HistoryApiClient.get(id, "Summary");
             String summaryUrl = detailUrl.replaceAll("/+$", "") + "/ozet";
             appendHistory(history, selectGroup(summary.path("SCH"), 1), "rekabet-gecmisi", 0, summaryUrl);

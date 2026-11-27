@@ -79,6 +79,39 @@ class RulesTests(unittest.TestCase):
             book['snapshotSha256']=r.signature(book);r.write(root/r.FILE,book)
             self.assertEqual(r.freeze(root,DAY),book)
 
+    def test_fixture_tournament_metadata_and_missing_competition_supplement(self):
+        def raw(team,day,league,goals=(2,0)):
+            return dict(homeTeam=team,awayTeam='Other',homeScore=goals[0],awayScore=goals[1],matchDate=day,tournament=league,status='finished')
+        x=row();x['userRuleHistory']={'teamEv':'Home','teamDep':'Away','targetTournamentId':'709','targetTournamentName':'Premier Lig',
+            'sonMaclarHome':[raw('Home','25 Kasım 2026','Cup'),raw('Home','20 Kasım 2026','Premier Lig')],
+            'sonMaclarAway':[raw('Away','22 Kasım 2026','Premier Lig'),raw('Away','21 Kasım 2026','Premier Lig')], 'rekabetGecmisi':[]}
+        e=r.calculate(x,'football',[],None)
+        self.assertEqual(e['calculation']['teamCounts'],{'home':1,'away':2})
+        self.assertEqual(set(e['calculation']['teamScopes'].values()),{'Bu turnuva'})
+        # General wide-history presence must not suppress fixture competition data.
+        general=[match('h','n:1',1,3,'2026-11-25',tournament='99'),match('a','n:2',1,3,'2026-11-25',tournament='99')]
+        e=r.calculate(x,'football',general,IDENT)
+        self.assertEqual(e['calculation']['teamCounts'],{'home':1,'away':2})
+        # The same match obtained by two routes has only one vote, even without a league ID.
+        dup=match('duplicate','n:1',2,0,'2026-11-20',tournament=None)
+        e=r.calculate(x,'football',general+[dup],IDENT)
+        self.assertEqual(e['calculation']['teamCounts']['home'],1)
+        self.assertEqual(e['calculation']['teamScopes']['home'],'Bu turnuva')
+        # Current-day and future history never enter the sample.
+        x['userRuleHistory']['sonMaclarHome'] += [raw('Home','27 Kasım 2026','Premier Lig'),raw('Home','28 Kasım 2026','Premier Lig')]
+        self.assertEqual(r.calculate(x,'football',[],None)['calculation']['teamCounts']['home'],1)
+        # Without verified fixture tournament metadata, do not infer competition from opponents/H2H.
+        x['userRuleHistory'].pop('targetTournamentId');x['userRuleHistory'].pop('targetTournamentName')
+        self.assertIn('kimliği doğrulanamadı',r.calculate(x,'football',[],None)['calculation']['teamScopes']['home'])
+
+    def test_v3_snapshot_hash_and_freeze_still_valid(self):
+        self.assertEqual(r.POLICY_HASHES[r.DISTINCT_POLICY],'f632c146450982cb3c4e7b25a97dc0c1049135f740bcdebc4331a697485b3520')
+        with tempfile.TemporaryDirectory() as td:
+            root=Path(td);(root/r.MODEL).write_text(r.DISTINCT_MODEL_TEXT)
+            book={'policy':r.DISTINCT_POLICY,'targetDate':DAY,'modelSha256':r.POLICY_HASHES[r.DISTINCT_POLICY],'inputHashes':{},'systems':{}}
+            book['snapshotSha256']=r.signature(book);r.write(root/r.FILE,book)
+            self.assertEqual(r.freeze(root,DAY),book)
+
     def test_percentile_boundaries_include_whole_tied_group(self):
         es=[{'eventId':str(i),'chosen':{'confidence':p}} for i,p in enumerate([.9,.8,.8,.7,.7,.7,.6])]
         self.assertEqual(len(r.tied_prefix(es,.25)),3)

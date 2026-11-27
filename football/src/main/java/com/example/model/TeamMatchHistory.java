@@ -12,6 +12,8 @@ public class TeamMatchHistory {
 	private String teamEv;
 	private String teamDep;
 	private String originalMatchUrl;
+	private String targetTournamentId;
+	private String targetTournamentName;
 	private List<MatchResult> rekabetGecmisi;
 	private List<MatchResult> sonMaclarHome;
 	private List<MatchResult> sonMaclarAway;
@@ -49,6 +51,11 @@ public class TeamMatchHistory {
 	public String getTeamName() {
 		return teamName;
 	}
+
+	public String getTargetTournamentId() { return targetTournamentId; }
+	public void setTargetTournamentId(String value) { targetTournamentId = value; }
+	public String getTargetTournamentName() { return targetTournamentName; }
+	public void setTargetTournamentName(String value) { targetTournamentName = value; }
 
 	public String getOriginalMatchUrl() {
 		return originalMatchUrl;

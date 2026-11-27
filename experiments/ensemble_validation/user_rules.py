@@ -14,7 +14,8 @@ from live_history import parse_date
 
 LEGACY_POLICY = 'competition-six-80-20-v1'
 RECENCY_POLICY = 'competition-six-80-20-recency10-v2'
-POLICY = 'competition-six-80-20-distinct-markets-v3'
+DISTINCT_POLICY = 'competition-six-80-20-distinct-markets-v3'
+POLICY = 'competition-six-80-20-tournament-input-v4'
 START_DATE = '2026-11-27'
 FILE = 'user-rules-before-results.json'
 MODEL = 'user-rules-model.json'
@@ -35,10 +36,12 @@ LEGACY_MODEL_TEXT = json.dumps(RULES, ensure_ascii=False, indent=2, allow_nan=Fa
 RULES = dict(RULES,policy=RECENCY_POLICY,teamPlainWeight=.9,teamRecencyWeight=.1,
              recency='Newest to oldest n..1 within each team, maximum six. Normalize within side, then pool by valid observation count; pushes have no vote.')
 RECENCY_MODEL_TEXT = json.dumps(RULES, ensure_ascii=False, indent=2, allow_nan=False) + '\n'
-RULES = dict(RULES,policy=POLICY,selection='highest probability option from each eligible market, then compare the two highest different markets by latest-match support',singleMarket='use highest probability option without contrarian comparison')
+RULES = dict(RULES,policy=DISTINCT_POLICY,selection='highest probability option from each eligible market, then compare the two highest different markets by latest-match support',singleMarket='use highest probability option without contrarian comparison')
+DISTINCT_MODEL_TEXT = json.dumps(RULES, ensure_ascii=False, indent=2, allow_nan=False) + '\n'
+RULES = dict(RULES,policy=POLICY,tournamentInput='Exact current-fixture Header tournament metadata retained; supplement missing competition history from fixture-scoped rows before general fallback; no global league-name or team-name joins')
 MODEL_TEXT = json.dumps(RULES, ensure_ascii=False, indent=2, allow_nan=False) + '\n'
 MODEL_HASH = hashlib.sha256(MODEL_TEXT.encode()).hexdigest()
-POLICY_HASHES = {LEGACY_POLICY:hashlib.sha256(LEGACY_MODEL_TEXT.encode()).hexdigest(),RECENCY_POLICY:hashlib.sha256(RECENCY_MODEL_TEXT.encode()).hexdigest(),POLICY:MODEL_HASH}
+POLICY_HASHES = {LEGACY_POLICY:hashlib.sha256(LEGACY_MODEL_TEXT.encode()).hexdigest(),RECENCY_POLICY:hashlib.sha256(RECENCY_MODEL_TEXT.encode()).hexdigest(),DISTINCT_POLICY:hashlib.sha256(DISTINCT_MODEL_TEXT.encode()).hexdigest(),POLICY:MODEL_HASH}
 POLICIES = tuple(POLICY_HASHES)
 
 
@@ -120,10 +123,17 @@ def sources(row, sport, matches, identity):
     identity = copy.deepcopy(identity) if identity else {
         'home': 'fixture:'+str(row['eventId'])+':home', 'away':'fixture:'+str(row['eventId'])+':away',
         'namespace':'fixture:'+str(row['eventId']), 'tournamentId':None}
+    raw_id=str(raw.get('targetTournamentId') or '')
+    raw_name=raw.get('targetTournamentName')
+    # Header metadata belongs to this exact fixture. Never equate provider IDs.
+    if not identity.get('tournamentId') and raw_id.isdigit() and int(raw_id)>0:
+        identity['tournamentId']='fixture-tournament:'+raw_id
     names = dict(zip(own_names, (identity['home'], identity['away'])))
     tournament_names = {m.get('tournament') for m in matches if identity.get('tournamentId') and
                         m.get('sport')==sport and m.get('namespace')==identity['namespace'] and
                         m.get('tournamentId')==identity['tournamentId'] and m.get('tournament')}
+    if identity.get('tournamentId') and isinstance(raw_name,str) and raw_name.strip():
+        tournament_names={raw_name.strip()}
     def convert(rows):
         out=[]
         for m in rows or []:
@@ -141,8 +151,25 @@ def sources(row, sport, matches, identity):
         return out
     pool=list(matches)
     for prop,team in [('sonMaclarHome',identity['home']),('sonMaclarAway',identity['away'])]:
-        if not any(m.get('sport')==sport and m.get('date','9999')<row['date'] and team in (m['home'],m['away']) and score(m,sport,team) is not None for m in pool):
-            pool.extend(m for m in convert(raw.get(prop)) if team in (m['home'],m['away']))
+        general=[m for m in pool if m.get('sport')==sport and m.get('namespace')==identity['namespace'] and m.get('date','9999')<row['date'] and team in (m['home'],m['away']) and score(m,sport,team) is not None]
+        same=[m for m in general if identity.get('tournamentId') and m.get('tournamentId')==identity['tournamentId']]
+        incoming=[m for m in convert(raw.get(prop)) if team in (m['home'],m['away']) and score(m,sport,team) is not None]
+        # Existing general rows must not suppress available competition rows.
+        if not general:pool.extend(incoming)
+        elif len(same)<6:
+            # Cross-source duplicates: same team, day, venue and final score.
+            def fingerprint(m):return (m['date'],m['home']==team,tuple(score(m,sport,team)))
+            seen={fingerprint(m) for m in general}
+            for m in incoming:
+                if not identity.get('tournamentId') or m.get('tournamentId')!=identity['tournamentId']:continue
+                fp=fingerprint(m)
+                if fp in seen:
+                    # Add classification to the matching existing record without a second vote.
+                    for j,old in enumerate(pool):
+                        if old in general and fingerprint(old)==fp and not old.get('tournamentId'):
+                            pool[j]=dict(old,tournamentId=identity['tournamentId'])
+                    continue
+                pool.append(m);seen.add(fp)
     # An explicit empty H2H list is authoritative; None means source list absent.
     h2h=convert(raw['rekabetGecmisi']) if raw.get('rekabetGecmisi') is not None else None
     return pool,identity,h2h
@@ -173,7 +200,7 @@ def calculate(row, sport, matches, identity):
         chosen = (same or general)[:6]
         teams.append(chosen)
         detail['teamCounts'][side] = len(chosen)
-        detail['teamScopes'][side] = 'Bu turnuva' if same else 'Genel (turnuva geçmişi yok / kimliği eksik)'
+        detail['teamScopes'][side] = 'Bu turnuva' if same else ('Genel (turnuva kimliği doğrulanamadı)' if not identity.get('tournamentId') else 'Genel (erişilen havuzda bu turnuvadan geçerli maç yok)')
     hpool=sorted(dedicated_h2h,key=lambda m:(m['date'],m['key']),reverse=True) if dedicated_h2h is not None else pool
     hseen={}
     for m in hpool:

@@ -1,4 +1,4 @@
-# Günlük tercih kuralı · competition-six-80-20-distinct-markets-v3
+# Günlük tercih kuralı · competition-six-80-20-tournament-input-v4
 
 v3 yalnız sonraki yeni günlük dondurmalarında geçerlidir; 27 Kasım v2 kaydı ve önceki politikaların hash değerleri korunur.
 
@@ -24,3 +24,7 @@ v3 yalnız sonraki yeni günlük dondurmalarında geçerlidir; 27 Kasım v2 kayd
 ## Veri sınırları
 
 Mevcut HTTP geçmişi ve maçın kendi kaydedilmiş TeamMatchHistory rekabet listesi kullanılır. Bir yıllık havuzda tesadüfen rastlanan rekabetler, varsa doğrudan rekabet listesinin yerine geçmez. Geçmiş tarih ve kimlik doğrulaması korunur; başlangıç saati olmayan aynı günkü geçmiş maçlar dahil edilmez. Havuzda bulunmayan eski maçların mevcut olduğu varsayılmaz. İki takımın da hiç geçerli geçmişi yoksa veya bir tarafın genel geçmişi de yoksa tahmin üretilmez.
+
+## Turnuva girdisi düzeltmesi (v4)
+
+Günlük HTTP Header yanıtındaki mevcut turnuva ID/adı TeamMatchHistory ve replay girdisinde korunur; ek HTTP isteği yoktur. Genel havuzda herhangi bir maç bulunması, kaynak listede mevcut aynı-turnuva kayıtlarının eklenmesini engellemez. Aynı maç iki kez sayılmaz. Turnuva kimliği bilinmiyorsa bunun nedeni ayrı yazılır; erişilen havuzda örnek bulunmaması gerçek dünyada turnuva geçmişi olmadığı anlamına gelmez. Genel son-altı kaynak listesi turnuvadan yalnız 4/5 maç içeriyorsa ve geniş havuzda fazlası yoksa gerçek 4/5 örnek kullanılır; altıya tamamlandığı iddia edilmez. Yeni sürüm yalnız yeni günlük dondurmalarında kullanılır; v1/v2/v3 kayıtları ve hashleri korunur.

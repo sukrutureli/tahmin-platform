@@ -188,7 +188,7 @@ def assemble(sources,reference,output,holdout,live_history=None):
                                         'collectedAt':collected.get('collectedAt') if collected else None,
                                         'historyBeforeKickoff':collected.get('beforeKickoff',False) if collected else None}}
    records[sport].append({'date':d,'eventId':eid,'name':info['name'],'time':info['time'],
-                         'userRuleHistory':{k:copy.deepcopy(h.get(k)) for k in ('teamEv','teamDep','rekabetGecmisi','sonMaclarHome','sonMaclarAway')},
+                         'userRuleHistory':{k:copy.deepcopy(h.get(k)) for k in ('teamEv','teamDep','targetTournamentId','targetTournamentName','rekabetGecmisi','sonMaclarHome','sonMaclarAway')},
                          'role':'holdout' if d==holdout else 'training','odds':info['odds'],
                          'published':published,'realScore':real.get(info['name']),'wideAvailable':wide_ok,'variants':variants})
  for sport,rows in records.items():dump(output/(sport+'-inputs.json'),rows)
