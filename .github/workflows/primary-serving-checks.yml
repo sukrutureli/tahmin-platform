@@ -12,6 +12,8 @@ on:
       - experiments/ensemble_validation/user_rules.py
       - experiments/ensemble_validation/test_user_rules.py
       - experiments/ensemble_validation/new_reports.py
+      - experiments/ensemble_validation/selection_filter.py
+      - experiments/ensemble_validation/test_selection_filter.py
       - scripts/primary_control.py
       - .github/workflows/ensemble-market-validation.yml
       - .github/workflows/primary-serving-checks.yml
