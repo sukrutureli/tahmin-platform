@@ -32,6 +32,7 @@ public final class FixtureIdentityRegression {
                 row.putObject("LG").put("TID", i == 0 ? 999 : 709).put("N", i == 0 ? "Cup" : "Premier Lig");
                 com.fasterxml.jackson.databind.node.ObjectNode score = row.putArray("SC").addObject();
                 score.put("OBI", 45).put("HTS", id == 1 ? 2 : 1).put("ATS", 0);
+                ((com.fasterxml.jackson.databind.node.ArrayNode)row.path("SC")).addObject().put("OBI",1000).put("HTS",99).put("ATS",90);
             }
         }
         TeamMatchHistory history = new TeamMatchHistory(); history.setTargetTournamentId("709");
@@ -43,6 +44,7 @@ public final class FixtureIdentityRegression {
         check(history.getCompetitionMatchesHome().size() == 6 && history.getCompetitionMatchesAway().size() == 6, "six per side after excluding other tournament");
         check("Home".equals(history.getCompetitionMatchesHome().get(0).getHomeTeam()), "home bound by provider ID");
         check("Away".equals(history.getCompetitionMatchesAway().get(0).getHomeTeam()), "away bound by provider ID");
+        check(history.getCompetitionMatchesHome().get(0).getHomeScore() == 99, "dedicated tournament history includes overtime final");
         check(history.getSonMaclarHome() == null, "general source unchanged");
     }
 

@@ -405,6 +405,12 @@ private double asDouble(Object value) {
                 if (!history.getTargetTournamentId().equals(row.path("LG").path("TID").asText(""))) continue;
             }
             int[] score = finalScore(row.path("SC"));
+            // Dedicated rules history uses the completed final including overtime.
+            // The legacy general list keeps its existing regulation-score contract.
+            if (side >= 3) for (com.fasterxml.jackson.databind.JsonNode value : row.path("SC")) {
+                if (value.path("OBI").asInt(-1) == 1000 && value.path("HTS").canConvertToInt() && value.path("ATS").canConvertToInt())
+                    score = new int[] {value.path("HTS").asInt(), value.path("ATS").asInt()};
+            }
             if (score == null) continue;
             String homeTeam = teamName(row.path("HT"));
             String awayTeam = teamName(row.path("AT"));
